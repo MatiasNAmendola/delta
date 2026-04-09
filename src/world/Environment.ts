@@ -1,12 +1,11 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
-import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
+import { SkyMaterial } from "@babylonjs/materials/sky/skyMaterial";
 import {
   WORLD_SIZE,
   WATER_LEVEL,
@@ -129,161 +128,30 @@ export class Environment {
   }
 
   private createSkybox(): void {
-    // --- Gradient sky dome with vertex colors ---
-    const sky = MeshBuilder.CreateSphere(
-      "sky",
-      { diameter: WORLD_SIZE * 2.5, segments: 16 },
-      this.scene
-    );
-    // Apply vertex colors: blue at top → warm white at horizon
-    const positions = sky.getVerticesData("position");
-    if (positions) {
-      const colors: number[] = [];
-      const radius = WORLD_SIZE * 1.25;
-      for (let i = 0; i < positions.length; i += 3) {
-        const y = positions[i + 1];
-        const t = Math.max(0, y / radius); // 0 = horizon, 1 = zenith
-        // Zenith: deep blue (0.3, 0.55, 0.9)
-        // Horizon: warm haze (0.85, 0.82, 0.75)
-        const r = 0.85 - t * 0.55;
-        const g = 0.82 - t * 0.27;
-        const b = 0.75 + t * 0.15;
-        colors.push(r, g, b, 1);
-      }
-      sky.setVerticesData("color", colors);
-    }
-    const skyMat = new StandardMaterial("skyMat", this.scene);
+    // --- SkyMaterial: physically-based atmospheric scattering ---
+    const skybox = MeshBuilder.CreateBox("sky", { size: WORLD_SIZE * 2.5 }, this.scene);
+    const skyMat = new SkyMaterial("skyMat", this.scene);
     skyMat.backFaceCulling = false;
-    skyMat.emissiveColor = Color3.White();
-    skyMat.diffuseColor = Color3.Black();
-    skyMat.specularColor = Color3.Black();
-    skyMat.disableLighting = true;
-    sky.material = skyMat;
-    sky.infiniteDistance = true;
-    sky.renderingGroupId = 0;
 
-    // --- Sun glow disk ---
-    const sunDir = new Vector3(-0.5, -1, 0.5).normalize();
-    const sunPos = sunDir.scale(-WORLD_SIZE * 1.1);
-    const sun = MeshBuilder.CreateDisc("sun", { radius: 40, tessellation: 16 }, this.scene);
-    const sunMat = new StandardMaterial("sunMat", this.scene);
-    sunMat.emissiveColor = new Color3(1.0, 0.95, 0.7);
-    sunMat.diffuseColor = Color3.Black();
-    sunMat.specularColor = Color3.Black();
-    sunMat.disableLighting = true;
-    sunMat.alpha = 0.9;
-    sunMat.backFaceCulling = false;
-    sun.material = sunMat;
-    sun.position = sunPos;
-    sun.billboardMode = Mesh.BILLBOARDMODE_ALL;
-    sun.infiniteDistance = true;
+    // Atmospheric scattering parameters
+    skyMat.turbidity = 10;          // haze/particles in atmosphere (higher = hazier)
+    skyMat.luminance = 1.0;         // overall sky brightness
+    skyMat.rayleigh = 2;            // Rayleigh scattering (blue sky)
+    skyMat.mieCoefficient = 0.005;  // Mie scattering (sun halo size)
+    skyMat.mieDirectionalG = 0.8;   // Mie directionality (0.8 = forward scatter)
 
-    // Sun halo (larger, fainter)
-    const halo = MeshBuilder.CreateDisc("sunHalo", { radius: 80, tessellation: 16 }, this.scene);
-    const haloMat = new StandardMaterial("haloMat", this.scene);
-    haloMat.emissiveColor = new Color3(1.0, 0.9, 0.6);
-    haloMat.diffuseColor = Color3.Black();
-    haloMat.specularColor = Color3.Black();
-    haloMat.disableLighting = true;
-    haloMat.alpha = 0.2;
-    haloMat.backFaceCulling = false;
-    halo.material = haloMat;
-    halo.position = sunPos;
-    halo.billboardMode = Mesh.BILLBOARDMODE_ALL;
-    halo.infiniteDistance = true;
+    // Sun position — late morning, Delta de Tigre
+    skyMat.useSunPosition = true;
+    skyMat.sunPosition = new Vector3(-50, 40, 30);
 
-    // --- Procedural clouds ---
-    this.createClouds();
+    skybox.material = skyMat;
+    skybox.infiniteDistance = true;
 
-    // Set clear color
+    // Scene atmosphere
     this.scene.clearColor = new Color4(0.53, 0.81, 0.92, 1);
-    // Fog for atmosphere
     this.scene.fogMode = Scene.FOGMODE_EXP2;
     this.scene.fogDensity = 0.0015;
     this.scene.fogColor = new Color3(0.7, 0.78, 0.82);
-  }
-
-  private createClouds(): void {
-    // Create a cloud texture procedurally
-    const texSize = 128;
-    const cloudTex = new DynamicTexture("cloudTex", texSize, this.scene, false);
-    const ctx = cloudTex.getContext();
-    const hash = (x: number, y: number): number => {
-      let h = (x * 374761393 + y * 668265263 + 1013904223) | 0;
-      h = ((h >> 13) ^ h) | 0;
-      h = (h * (h * h * 15731 + 789221) + 1376312589) | 0;
-      return ((h >> 16) & 0x7fff) / 0x7fff;
-    };
-    const smoothNoise = (px: number, py: number, period: number) => {
-      const ix = ((Math.floor(px) % period) + period) % period;
-      const iy = ((Math.floor(py) % period) + period) % period;
-      const fx = px - Math.floor(px);
-      const fy = py - Math.floor(py);
-      const cx = (1 - Math.cos(fx * Math.PI)) * 0.5;
-      const cy = (1 - Math.cos(fy * Math.PI)) * 0.5;
-      const ix1 = (ix + 1) % period;
-      const iy1 = (iy + 1) % period;
-      return (
-        (hash(ix, iy) * (1 - cx) + hash(ix1, iy) * cx) * (1 - cy) +
-        (hash(ix, iy1) * (1 - cx) + hash(ix1, iy1) * cx) * cy
-      );
-    };
-    const fbm = (px: number, py: number) => {
-      let v = 0, a = 1, f = 1, m = 0;
-      for (let o = 0; o < 4; o++) {
-        const p = Math.max(1, Math.floor(4 * f));
-        v += smoothNoise(px * f, py * f, p) * a;
-        m += a; a *= 0.5; f *= 2;
-      }
-      return v / m;
-    };
-    // Paint cloud texture
-    const center = texSize / 2;
-    for (let y = 0; y < texSize; y++) {
-      for (let x = 0; x < texSize; x++) {
-        const dx = (x - center) / center;
-        const dy = (y - center) / center;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const radial = Math.max(0, 1 - dist * 1.2);
-        const n = fbm((x / texSize) * 5, (y / texSize) * 5);
-        const cloud = Math.max(0, radial * n - 0.15) * 3;
-        const alpha = Math.min(1, cloud);
-        const bright = 245 + Math.floor(n * 10);
-        ctx.fillStyle = `rgba(${bright},${bright},${bright - 5},${alpha})`;
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
-    cloudTex.update(true);
-    cloudTex.hasAlpha = true;
-
-    const cloudMat = new StandardMaterial("cloudMat", this.scene);
-    cloudMat.diffuseTexture = cloudTex;
-    cloudMat.emissiveColor = new Color3(0.9, 0.9, 0.88);
-    cloudMat.specularColor = Color3.Black();
-    cloudMat.disableLighting = true;
-    cloudMat.alpha = 0.7;
-    cloudMat.backFaceCulling = false;
-
-    // Place cloud billboard planes at various heights and positions
-    const rng = seededRandom(555);
-    const cloudCount = 25;
-    for (let i = 0; i < cloudCount; i++) {
-      const cx = (rng() - 0.5) * WORLD_SIZE * 1.5;
-      const cz = (rng() - 0.5) * WORLD_SIZE * 1.5;
-      const cy = 60 + rng() * 80; // height 60-140
-      const w = 40 + rng() * 80;  // width 40-120
-      const h = 15 + rng() * 25;  // height 15-40
-
-      const cloud = MeshBuilder.CreatePlane(
-        `cloud_${i}`,
-        { width: w, height: h },
-        this.scene
-      );
-      cloud.material = cloudMat;
-      cloud.position.set(cx, cy, cz);
-      cloud.rotation.x = Math.PI / 2; // horizontal
-      cloud.rotation.y = rng() * Math.PI; // random rotation for variety
-    }
   }
 
   // Tree type 0: Weeping willow — procedural branching with drooping shape
