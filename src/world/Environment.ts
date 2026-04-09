@@ -38,16 +38,92 @@ export class Environment {
   }
 
   private createGround(): void {
-    // Main ground plane (islands/land)
+    // Main ground with subdivisions for height variation
+    const subdivisions = 100;
     const ground = MeshBuilder.CreateGround(
       "ground",
-      { width: WORLD_SIZE, height: WORLD_SIZE, subdivisions: 1 },
+      { width: WORLD_SIZE, height: WORLD_SIZE, subdivisions },
       this.scene
     );
     const groundMat = this.createMat("groundMat", COLORS.grass);
     ground.material = groundMat;
     ground.position.y = WATER_LEVEL - 0.2;
     ground.receiveShadows = true;
+
+    // Vertex displacement: gentle hills using multi-octave noise
+    const positions = ground.getVerticesData("position");
+    if (positions) {
+      const hash = (x: number, y: number): number => {
+        let h = (x * 374761393 + y * 668265263 + 1013904223) | 0;
+        h = ((h >> 13) ^ h) | 0;
+        h = (h * (h * h * 15731 + 789221) + 1376312589) | 0;
+        return ((h >> 16) & 0x7fff) / 0x7fff;
+      };
+      const smoothNoise = (x: number, y: number, period: number): number => {
+        const ix = ((Math.floor(x) % period) + period) % period;
+        const iy = ((Math.floor(y) % period) + period) % period;
+        const fx = x - Math.floor(x);
+        const fy = y - Math.floor(y);
+        const cx = (1 - Math.cos(fx * Math.PI)) * 0.5;
+        const cy = (1 - Math.cos(fy * Math.PI)) * 0.5;
+        const ix1 = (ix + 1) % period;
+        const iy1 = (iy + 1) % period;
+        return (
+          (hash(ix, iy) * (1 - cx) + hash(ix1, iy) * cx) * (1 - cy) +
+          (hash(ix, iy1) * (1 - cx) + hash(ix1, iy1) * cx) * cy
+        );
+      };
+      const hillNoise = (wx: number, wz: number): number => {
+        let val = 0, amp = 1, freq = 0.008, maxVal = 0;
+        for (let oct = 0; oct < 4; oct++) {
+          const period = Math.max(1, Math.floor(50 * (1 / (freq / 0.008))));
+          val += smoothNoise(wx * freq * 50, wz * freq * 50, period) * amp;
+          maxVal += amp;
+          amp *= 0.45;
+          freq *= 2.2;
+        }
+        return val / maxVal;
+      };
+
+      const half = WORLD_SIZE / 2;
+      for (let i = 0; i < positions.length; i += 3) {
+        const wx = positions[i];
+        const wz = positions[i + 2];
+
+        // Check distance to nearest river to suppress hills near water
+        let minRiverDist = Infinity;
+        for (const river of RIVER_MAP) {
+          const samples = river.points.length * 3;
+          for (let s = 0; s <= samples; s++) {
+            const t = s / samples;
+            const totalSeg = river.points.length - 1;
+            const segT = t * totalSeg;
+            const seg = Math.min(Math.floor(segT), totalSeg - 1);
+            const lt = segT - seg;
+            const p1 = river.points[seg];
+            const p2 = river.points[Math.min(river.points.length - 1, seg + 1)];
+            const rx = p1[0] + (p2[0] - p1[0]) * lt;
+            const rz = p1[1] + (p2[1] - p1[1]) * lt;
+            const dx = wx - rx;
+            const dz = wz - rz;
+            const d = Math.sqrt(dx * dx + dz * dz) - river.width / 2;
+            if (d < minRiverDist) minRiverDist = d;
+          }
+        }
+
+        // Height: hills that taper to 0 near rivers
+        const riverFade = Math.max(0, Math.min(1, (minRiverDist - 5) / 25));
+        const edgeFade = 1 - Math.max(
+          Math.abs(wx) / half,
+          Math.abs(wz) / half
+        );
+        const noise = hillNoise(wx, wz);
+        const height = noise * 6.0 * riverFade * Math.max(0, edgeFade);
+        positions[i + 1] = height;
+      }
+      ground.setVerticesData("position", positions);
+      ground.createNormals(true);
+    }
   }
 
   private createSkybox(): void {
