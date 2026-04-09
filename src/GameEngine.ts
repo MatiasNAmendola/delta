@@ -46,16 +46,18 @@ export class GameEngine {
   private nearDock: string | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
+    // Adapt canvas to device pixel ratio for crisp rendering
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+
     this.engine = new Engine(canvas, true, {
-      preserveDrawingBuffer: true,
+      preserveDrawingBuffer: false,
       stencil: true,
       antialias: true,
+      adaptToDeviceRatio: true,
     });
 
-    // Optimize for mobile
-    this.engine.setHardwareScalingLevel(
-      window.devicePixelRatio > 2 ? 2 : 1 / window.devicePixelRatio
-    );
+    // 1/dpr = native device resolution, capped at 2.5x to avoid GPU overload
+    this.engine.setHardwareScalingLevel(1 / dpr);
 
     this.init();
   }
