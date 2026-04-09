@@ -412,9 +412,9 @@ export class WaterSystem {
   /** Get wave height at a position for boat bobbing */
   public getWaveHeight(x: number, z: number, time: number): number {
     return (
-      Math.sin(x * 0.1 + time * 1.5) * 0.15 +
-      Math.sin(z * 0.08 + time * 1.2) * 0.1 +
-      Math.sin((x + z) * 0.05 + time * 0.8) * 0.08
+      Math.sin(x * 0.1 + time * 1.5) * 0.04 +
+      Math.sin(z * 0.08 + time * 1.2) * 0.03 +
+      Math.sin((x + z) * 0.05 + time * 0.8) * 0.02
     );
   }
 }
