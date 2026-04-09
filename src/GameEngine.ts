@@ -123,7 +123,7 @@ export class GameEngine {
     // UI
     this.ui = new GameUI(this.scene);
     this.ui.onPlayClick(() => this.startGame());
-    this.ui.onWeatherChange((preset) => this.weatherSystem.setWeather(preset));
+    this.ui.onWeatherChange((preset) => this.weatherSystem.setWeather(preset as any));
 
     this.updateLoadingBar(100, "¡Listo!");
 

@@ -46,19 +46,12 @@ function getLeafTexture(scene: Scene): DynamicTexture {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(angle);
+    ctx.scale(1, h / w); // squash circle into ellipse
     ctx.beginPath();
-    ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.arc(0, 0, w / 2, 0, Math.PI * 2);
+    ctx.restore(); // restore before fill so stroke isn't scaled
     ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
     ctx.fill();
-
-    // Darker vein line
-    ctx.beginPath();
-    ctx.moveTo(-w / 2 + 2, 0);
-    ctx.lineTo(w / 2 - 2, 0);
-    ctx.strokeStyle = `rgba(${Math.floor(r * 0.6)}, ${Math.floor(g * 0.6)}, ${Math.floor(b * 0.6)}, 0.5)`;
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-    ctx.restore();
   }
 
   tex.update(true);
