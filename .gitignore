@@ -4,3 +4,6 @@ dist/
 *.local
 .DS_Store
 resources/
+tests/screenshots/
+test-results/
+playwright-report/
