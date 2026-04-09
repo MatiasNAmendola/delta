@@ -54,14 +54,14 @@ export class GameEngine {
   private nearDock: string | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
-    // Cap pixel ratio for mobile performance (2 is plenty on high-DPI screens)
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: dpr <= 1.5,   // disable AA on high-DPI (pixels already tiny)
-      alpha: true,
-      stencil: true,
+      antialias: !isMobile && dpr <= 1.5,
+      alpha: false,      // opaque = faster compositing
+      stencil: false,    // save GPU memory
       powerPreference: "high-performance",
     });
 
@@ -70,12 +70,13 @@ export class GameEngine {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
 
-    // Enable shadow maps with soft shadows
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Shadows: desktop only (per research: biggest mobile perf killer)
+    if (!isMobile) {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
 
     this.clock = new THREE.Clock();
-
     this.init();
   }
 
@@ -108,48 +109,64 @@ export class GameEngine {
     // Give the browser a frame to update the button text
     await new Promise(r => setTimeout(r, 50));
 
-    // Now create Three.js scene
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const yield_ = () => new Promise<void>(r => setTimeout(r, 16)); // 1 full frame
+
+    // Scene + Camera (mobile optimized: shorter far plane + fog)
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 800);
+    const farPlane = isMobile ? 400 : 800;
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, farPlane);
     this.camera.position.set(0, CAMERA_HEIGHT, -CAMERA_DISTANCE);
     this.camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-    // Basic lights
-    this.scene.add(new THREE.AmbientLight(0x8899aa, 0.6));
+    // Mobile: lower pixel ratio
+    if (isMobile) this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+
+    // Lights
+    this.scene.add(new THREE.AmbientLight(0x8899aa, 0.8));
     const sun = new THREE.DirectionalLight(0xffffff, 1.0);
     sun.position.set(100, 150, 50);
     this.scene.add(sun);
 
-    debug("Scene created");
-    await new Promise(r => setTimeout(r, 10));
+    // Fog to hide far plane cutoff
+    this.scene.fog = new THREE.FogExp2(0x87ceeb, isMobile ? 0.003 : 0.001);
+    this.scene.background = new THREE.Color(0x87ceeb);
 
-    // Load world systems one by one with yields
+    debug("scene OK");
+    await yield_();
+
+    // Weather (optional — has sky, better lights)
     try { this.weatherSystem = new WeatherSystem(this.scene); debug("weather OK"); } catch (e) { debug("weather: " + e); }
-    await new Promise(r => setTimeout(r, 10));
+    await yield_();
 
-    try { this.waterSystem = new WaterSystem(this.scene); debug("water OK"); } catch (e) { debug("water: " + e); }
-    await new Promise(r => setTimeout(r, 10));
+    // Water (ESSENTIAL — this is a boat game)
+    try { this.waterSystem = new WaterSystem(this.scene); debug("water OK"); } catch (e) { debug("WATER FAIL: " + e); }
+    await yield_();
 
-    try { this.environment = new Environment(this.scene, this.waterSystem); debug("env OK"); } catch (e) { debug("env: " + e); }
-    await new Promise(r => setTimeout(r, 10));
+    // Environment: terrain + trees + houses + docks (ESSENTIAL)
+    try { this.environment = new Environment(this.scene, this.waterSystem); debug("env OK"); } catch (e) { debug("ENV FAIL: " + e); }
+    await yield_();
 
+    // Boat (ESSENTIAL)
     try {
       const startDock = DOCK_LOCATIONS[0];
       this.boat = new LanchaColectiva(this.scene, startDock.x + 5, startDock.z);
       this.scene.add(this.boat.rootNode);
       debug("boat OK");
-    } catch (e) { debug("boat: " + e); }
-    await new Promise(r => setTimeout(r, 10));
+    } catch (e) { debug("BOAT FAIL: " + e); }
+    await yield_();
 
+    // Controls (ESSENTIAL)
+    try { this.controls = new MobileControls(this.canvas); debug("controls OK"); } catch (e) { debug("controls: " + e); }
+
+    // Wake effect (lightweight)
     try { this.wakeEffect = new WakeEffect(this.scene); } catch (e) { debug("wake: " + e); }
-    try { this.controls = new MobileControls(this.canvas); } catch (e) { debug("controls: " + e); }
 
-    // Skip heavy optional systems on mobile
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    // Optional heavy systems — desktop only
     if (!isMobile) {
-      await new Promise(r => setTimeout(r, 10));
-      try { this.grassSystem = new GrassSystem(this.scene, this.waterSystem); } catch (e) { /* skip */ }
-      try { this.forestSystem = new ForestSystem(this.scene, this.waterSystem); } catch (e) { /* skip */ }
+      await yield_();
+      try { this.grassSystem = new GrassSystem(this.scene, this.waterSystem); debug("grass OK"); } catch (e) { /* skip */ }
+      try { this.forestSystem = new ForestSystem(this.scene, this.waterSystem); debug("forest OK"); } catch (e) { /* skip */ }
       try { this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer); } catch (e) { /* skip */ }
       try { this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera); } catch (e) { /* skip */ }
     }
