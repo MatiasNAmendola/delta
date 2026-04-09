@@ -187,7 +187,7 @@ function ceiboOptions(seed: number): EzTreeOptionsLike {
       twist: { 0: 0.3, 1: 0.2, 2: 0.1, 3: 0 },
     },
     leaves: {
-      type: LeafType.Oak,
+      type: LeafTypeOak,
       billboard: Billboard.Double,
       angle: 40,
       count: 10,
@@ -296,7 +296,7 @@ function casuarinaOptions(seed: number): EzTreeOptionsLike {
       twist: { 0: 0.05, 1: 0, 2: 0, 3: 0 },
     },
     leaves: {
-      type: LeafType.Pine,
+      type: LeafTypePine,
       billboard: Billboard.Double,
       angle: 20,
       count: 14,
