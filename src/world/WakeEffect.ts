@@ -14,10 +14,10 @@ import { WATER_LEVEL } from "../utils/constants";
 const KELVIN_ANGLE = Math.asin(1 / 3);
 
 /** Max trail points per ribbon side */
-const TRAIL_LENGTH = 90;
+const TRAIL_LENGTH = 40;
 
 /** Max lifetime for trail points (seconds) */
-const TRAIL_MAX_AGE = 7.0;
+const TRAIL_MAX_AGE = 4.0;
 
 interface TrailPoint {
   x: number;
@@ -487,11 +487,11 @@ export class WakeEffect {
     // Stern foam: massive at speed (the dense white churning at the back)
     if (absSpeed > 0.03) {
       const intensity = absSpeed / 0.35; // normalized to max speed
-      this.sternFoamParticles.emitRate = Math.floor(intensity * 800);
-      this.sternFoamParticles.minEmitPower = 0.5 + intensity * 2.0;
-      this.sternFoamParticles.maxEmitPower = 1.0 + intensity * 4.0;
-      this.sternFoamParticles.minSize = 0.6 + intensity * 1.5;
-      this.sternFoamParticles.maxSize = 2.0 + intensity * 3.0;
+      this.sternFoamParticles.emitRate = Math.floor(intensity * 300);
+      this.sternFoamParticles.minEmitPower = 0.3 + intensity * 1.0;
+      this.sternFoamParticles.maxEmitPower = 0.6 + intensity * 2.0;
+      this.sternFoamParticles.minSize = 0.3 + intensity * 0.5;
+      this.sternFoamParticles.maxSize = 0.8 + intensity * 1.0;
     } else {
       this.sternFoamParticles.emitRate = 0;
     }
@@ -499,11 +499,11 @@ export class WakeEffect {
     // Brown churned water: even more particles, wider spread
     if (absSpeed > 0.03) {
       const intensity = absSpeed / 0.35;
-      this.churnParticles.emitRate = Math.floor(intensity * 400);
-      this.churnParticles.minEmitPower = 0.3 + intensity * 1.0;
-      this.churnParticles.maxEmitPower = 1.0 + intensity * 2.5;
-      this.churnParticles.minSize = 1.0 + intensity * 2.0;
-      this.churnParticles.maxSize = 3.5 + intensity * 4.0;
+      this.churnParticles.emitRate = Math.floor(intensity * 150);
+      this.churnParticles.minEmitPower = 0.2 + intensity * 0.5;
+      this.churnParticles.maxEmitPower = 0.5 + intensity * 1.2;
+      this.churnParticles.minSize = 0.4 + intensity * 0.6;
+      this.churnParticles.maxSize = 1.0 + intensity * 1.2;
     } else {
       this.churnParticles.emitRate = 0;
     }
@@ -571,8 +571,8 @@ export class WakeEffect {
       const p = trail[i];
       const ageFactor = 1 - p.age / TRAIL_MAX_AGE;
       // Wake width grows with speed and age (waves spread as they travel)
-      const baseWidth = 0.5 + p.speed * 8.0;
-      const ageSpread = 1 + p.age * 0.8;
+      const baseWidth = 0.3 + p.speed * 2.5;
+      const ageSpread = 1 + p.age * 0.3;
       const width = baseWidth * ageSpread * ageFactor;
 
       let dx = 0, dz = 0;
@@ -639,7 +639,7 @@ export class WakeEffect {
       const p = trail[i];
       const ageFactor = 1 - p.age / TRAIL_MAX_AGE;
       // Center ribbon: wide — the churned brown water
-      const halfWidth = (1.5 + p.speed * 6.0) * ageFactor * (1 + p.age * 0.3);
+      const halfWidth = (0.8 + p.speed * 2.0) * ageFactor * (1 + p.age * 0.15);
 
       let dx = 0, dz = 0;
       if (i < trail.length - 1) {
@@ -687,8 +687,8 @@ export class WakeEffect {
     const ring = MeshBuilder.CreateTorus(
       "ripple",
       {
-        diameter: 2.0 + speed * 4,
-        thickness: 0.1 + speed * 0.15,
+        diameter: 1.0 + speed * 2,
+        thickness: 0.06 + speed * 0.08,
         tessellation: 24,
       },
       this.scene
@@ -699,7 +699,7 @@ export class WakeEffect {
     ring.material = mat;
     ring.position.set(x, WATER_LEVEL + 0.08, z);
 
-    const maxLife = 2.5 + speed * 3;
+    const maxLife = 1.5 + speed * 2;
     this.ripples.push({ mesh: ring, life: maxLife, maxLife });
   }
 
