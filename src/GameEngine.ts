@@ -117,6 +117,9 @@ export class GameEngine {
     // Wake effect
     this.wakeEffect = new WakeEffect(this.scene);
 
+    // Add all scene meshes to water reflection/refraction
+    this.waterSystem.addSceneToRenderList();
+
     this.updateLoadingBar(85, "Configurando controles...");
 
     // Controls

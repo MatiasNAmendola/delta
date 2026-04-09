@@ -4,9 +4,10 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
+import { WaterMaterial } from "@babylonjs/materials/water/waterMaterial";
 import {
   RIVER_MAP,
   WATER_LEVEL,
@@ -19,13 +20,18 @@ import { getPointOnPath, hexToColor3 } from "../utils/helpers";
 export class WaterSystem {
   private scene: Scene;
   private waterMeshes: Mesh[] = [];
+  private waterMaterial: WaterMaterial | null = null;
   private time = 0;
   private riverCollisionMap: boolean[][] = [];
   private mapResolution = 400;
 
+  // Meshes to add to the water render list (reflection/refraction)
+  private renderListMeshes: Mesh[] = [];
+
   constructor(scene: Scene) {
     this.scene = scene;
     this.buildCollisionMap();
+    this.createBumpTexture();
     this.createRiverMeshes();
     this.createRiverBed();
   }
@@ -75,38 +81,85 @@ export class WaterSystem {
     return this.riverCollisionMap[gx][gz];
   }
 
-  private createWaterTexture(): DynamicTexture {
-    const tex = new DynamicTexture("waterTex", 256, this.scene, false);
+  /** Create a procedural bump/normal map texture for the water */
+  private createBumpTexture(): DynamicTexture {
+    const size = 512;
+    const tex = new DynamicTexture("waterBump", size, this.scene, true);
     const ctx = tex.getContext();
-    // Create a simple procedural water texture
-    for (let y = 0; y < 256; y++) {
-      for (let x = 0; x < 256; x++) {
-        const noise =
-          Math.sin(x * 0.1) * Math.cos(y * 0.1) * 20 +
-          Math.sin(x * 0.05 + y * 0.03) * 15;
-        const r = 30 + noise;
-        const g = 90 + noise * 1.5;
-        const b = 70 + noise;
-        ctx.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
+
+    // Generate a tileable bump-map pattern
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const nx = x / size;
+        const ny = y / size;
+
+        // Layered sine waves to simulate water normal perturbation
+        const wave1 = Math.sin(nx * 20 + ny * 10) * 0.3;
+        const wave2 = Math.sin(nx * 35 - ny * 25) * 0.2;
+        const wave3 = Math.sin(nx * 8 + ny * 40) * 0.15;
+        const wave4 = Math.sin((nx + ny) * 50) * 0.1;
+        const combined = (wave1 + wave2 + wave3 + wave4 + 0.75) * 0.5;
+
+        const val = Math.floor(Math.max(0, Math.min(255, combined * 255)));
+        ctx.fillStyle = `rgb(${val},${val},255)`;
         ctx.fillRect(x, y, 1, 1);
       }
     }
     tex.update();
+    tex.wrapU = Texture.WRAP_ADDRESSMODE;
+    tex.wrapV = Texture.WRAP_ADDRESSMODE;
     return tex;
   }
 
   private createRiverMeshes(): void {
-    const waterTex = this.createWaterTexture();
-    waterTex.uScale = 8;
-    waterTex.vScale = 8;
+    // Create the WaterMaterial (with smaller render targets for mobile perf)
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || "ontouchstart" in window;
+    const rtSize = isMobile ? 256 : 512;
 
+    this.waterMaterial = new WaterMaterial(
+      "waterMaterial",
+      this.scene,
+      new Vector2(rtSize, rtSize)
+    );
+
+    // Bump texture for wave normals
+    this.waterMaterial.bumpTexture = this.createBumpTexture();
+    this.waterMaterial.bumpHeight = 0.4;
+    this.waterMaterial.bumpSuperimpose = true;
+    this.waterMaterial.bumpAffectsReflection = true;
+
+    // Wave properties - Delta river style (gentle muddy water)
+    this.waterMaterial.windForce = 8;
+    this.waterMaterial.windDirection = new Vector2(0.5, 0.8);
+    this.waterMaterial.waveHeight = 0.3;
+    this.waterMaterial.waveLength = 0.3;
+    this.waterMaterial.waveSpeed = 30;
+    this.waterMaterial.waveCount = 3;
+
+    // Water colors - murky Delta brown-green
+    this.waterMaterial.waterColor = new Color3(0.15, 0.28, 0.18);
+    this.waterMaterial.waterColor2 = new Color3(0.1, 0.2, 0.12);
+    this.waterMaterial.colorBlendFactor = 0.4;
+    this.waterMaterial.colorBlendFactor2 = 0.3;
+
+    // Fresnel for realistic reflection angle
+    this.waterMaterial.fresnelSeparate = true;
+
+    // Specular
+    this.waterMaterial.specularColor = new Color3(0.2, 0.2, 0.15);
+    this.waterMaterial.specularPower = 64;
+
+    // Use world coordinates so all river strips share the same wave pattern
+    this.waterMaterial.useWorldCoordinatesForWaveDeformation = true;
+
+    // Create river strip meshes using the shared WaterMaterial
     for (const river of RIVER_MAP) {
-      const mesh = this.createRiverStrip(river, waterTex);
+      const mesh = this.createRiverStrip(river);
       this.waterMeshes.push(mesh);
     }
   }
 
-  private createRiverStrip(river: RiverSegment, texture: DynamicTexture): Mesh {
+  private createRiverStrip(river: RiverSegment): Mesh {
     const samples = river.points.length * 8;
     const positions: number[] = [];
     const indices: number[] = [];
@@ -117,7 +170,6 @@ export class WaterSystem {
       const t = i / samples;
       const [x, z] = getPointOnPath(river.points, t);
 
-      // Get direction for perpendicular
       const t2 = Math.min(1, t + 0.01);
       const [x2, z2] = getPointOnPath(river.points, t2);
       const dx = x2 - x;
@@ -153,18 +205,34 @@ export class WaterSystem {
     vertexData.uvs = uvs;
     vertexData.applyToMesh(mesh);
 
-    const mat = new StandardMaterial("waterMat_" + river.name, this.scene);
-    mat.diffuseTexture = texture;
-    mat.specularColor = new Color3(0.3, 0.4, 0.35);
-    mat.alpha = 0.85;
-    mat.backFaceCulling = false;
-    mesh.material = mat;
+    // Apply the shared WaterMaterial
+    mesh.material = this.waterMaterial;
 
     return mesh;
   }
 
+  /** Add a mesh to the water's reflection/refraction render list */
+  public addToRenderList(mesh: Mesh): void {
+    this.renderListMeshes.push(mesh);
+    if (this.waterMaterial) {
+      this.waterMaterial.addToRenderList(mesh);
+    }
+  }
+
+  /** Add all scene meshes to the water render list (call after environment is built) */
+  public addSceneToRenderList(): void {
+    if (!this.waterMaterial) return;
+
+    for (const mesh of this.scene.meshes) {
+      // Don't add water meshes to their own render list
+      if (mesh.material === this.waterMaterial) continue;
+      // Don't add riverbed meshes
+      if (mesh.name.startsWith("riverbed_")) continue;
+      this.waterMaterial.addToRenderList(mesh);
+    }
+  }
+
   private createRiverBed(): void {
-    // Create darker riverbed slightly below water
     for (const river of RIVER_MAP) {
       const samples = river.points.length * 6;
       const positions: number[] = [];
@@ -218,15 +286,7 @@ export class WaterSystem {
 
   public update(deltaTime: number): void {
     this.time += deltaTime;
-    // Animate water UV offset for flowing effect
-    for (const mesh of this.waterMeshes) {
-      const mat = mesh.material as StandardMaterial;
-      if (mat.diffuseTexture) {
-        (mat.diffuseTexture as Texture).vOffset = this.time * 0.02;
-        (mat.diffuseTexture as Texture).uOffset =
-          Math.sin(this.time * 0.3) * 0.02;
-      }
-    }
+    // WaterMaterial handles its own animation internally - no manual update needed
   }
 
   /** Get wave height at a position for boat bobbing */
