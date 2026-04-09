@@ -86,29 +86,76 @@ export class GameEngine {
   }
 
   private init(): void {
-    this.scene = new THREE.Scene();
+    // === ONLY create UI — zero rendering, zero GPU work ===
+    this.ui = new GameUI();
+    this.ui.onPlayClick(() => this.onJugarPressed());
+    this.ui.onWeatherChange((preset) => this.weatherSystem?.setWeather(preset as any));
 
-    // Camera
+    // Hide loading screen immediately — we don't need it until world loads
+    const loading = document.getElementById("loadingScreen");
+    if (loading) loading.remove();
+  }
+
+  /** Called when JUGAR is tapped — builds the entire world then starts the game */
+  private async onJugarPressed(): Promise<void> {
+    const debug = (window as any).__debugLog || console.log;
+    debug("JUGAR pressed! Loading world...");
+
+    // Show loading state on button
+    const btn = document.getElementById("playBtn");
+    if (btn) { btn.textContent = "⏳ Cargando..."; btn.style.pointerEvents = "none"; }
+
+    // Give the browser a frame to update the button text
+    await new Promise(r => setTimeout(r, 50));
+
+    // Now create Three.js scene
+    this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 800);
     this.camera.position.set(0, CAMERA_HEIGHT, -CAMERA_DISTANCE);
     this.camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-    // Basic lights so scene is never black
+    // Basic lights
     this.scene.add(new THREE.AmbientLight(0x8899aa, 0.6));
     const sun = new THREE.DirectionalLight(0xffffff, 1.0);
     sun.position.set(100, 150, 50);
     this.scene.add(sun);
 
-    // === UI + Controls FIRST (so the page is interactive immediately) ===
-    this.controls = new MobileControls(this.canvas);
-    this.randomizeDockPassengers();
-    this.ui = new GameUI();
-    this.ui.onPlayClick(() => this.startGame());
-    this.ui.onWeatherChange((preset) => this.weatherSystem?.setWeather(preset as any));
+    debug("Scene created");
+    await new Promise(r => setTimeout(r, 10));
 
-    // Start render loop immediately (renders empty scene until world loads)
-    this.clock.start();
-    this.animate();
+    // Load world systems one by one with yields
+    try { this.weatherSystem = new WeatherSystem(this.scene); debug("weather OK"); } catch (e) { debug("weather: " + e); }
+    await new Promise(r => setTimeout(r, 10));
+
+    try { this.waterSystem = new WaterSystem(this.scene); debug("water OK"); } catch (e) { debug("water: " + e); }
+    await new Promise(r => setTimeout(r, 10));
+
+    try { this.environment = new Environment(this.scene, this.waterSystem); debug("env OK"); } catch (e) { debug("env: " + e); }
+    await new Promise(r => setTimeout(r, 10));
+
+    try {
+      const startDock = DOCK_LOCATIONS[0];
+      this.boat = new LanchaColectiva(this.scene, startDock.x + 5, startDock.z);
+      this.scene.add(this.boat.rootNode);
+      debug("boat OK");
+    } catch (e) { debug("boat: " + e); }
+    await new Promise(r => setTimeout(r, 10));
+
+    try { this.wakeEffect = new WakeEffect(this.scene); } catch (e) { debug("wake: " + e); }
+    try { this.controls = new MobileControls(this.canvas); } catch (e) { debug("controls: " + e); }
+
+    // Skip heavy optional systems on mobile
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (!isMobile) {
+      await new Promise(r => setTimeout(r, 10));
+      try { this.grassSystem = new GrassSystem(this.scene, this.waterSystem); } catch (e) { /* skip */ }
+      try { this.forestSystem = new ForestSystem(this.scene, this.waterSystem); } catch (e) { /* skip */ }
+      try { this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer); } catch (e) { /* skip */ }
+      try { this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera); } catch (e) { /* skip */ }
+    }
+
+    this.randomizeDockPassengers();
+    debug("World loaded! Starting game...");
 
     // Handle resize
     window.addEventListener("resize", () => {
@@ -118,67 +165,14 @@ export class GameEngine {
       this.postProcessing?.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // === Load world asynchronously so the page never freezes ===
-    this.loadWorldAsync();
+    // NOW start the game and render loop
+    this.startGame();
+    this.clock.start();
+    this.animate();
   }
 
   /** Load all world systems in steps, yielding between each to keep the page responsive */
-  private async loadWorldAsync(): Promise<void> {
-    const step = (ms = 0) => new Promise<void>(r => setTimeout(r, ms));
-
-    this.updateLoadingBar(20, "Preparando clima...");
-    await step();
-    try { this.weatherSystem = new WeatherSystem(this.scene); } catch (e) { console.warn("Weather:", e); }
-    try { this.weatherSystem?.initEnvironmentMap(this.renderer); } catch (e) { /* skip */ }
-
-    this.updateLoadingBar(30, "Generando ríos...");
-    await step();
-    try { this.waterSystem = new WaterSystem(this.scene); } catch (e) { console.warn("Water:", e); }
-
-    this.updateLoadingBar(50, "Construyendo terreno...");
-    await step(10); // longer yield — terrain is heavy
-    try { this.environment = new Environment(this.scene, this.waterSystem); } catch (e) { console.warn("Environment:", e); }
-
-    this.updateLoadingBar(70, "Preparando lancha...");
-    await step();
-    try {
-      const startDock = DOCK_LOCATIONS[0];
-      this.boat = new LanchaColectiva(this.scene, startDock.x + 5, startDock.z);
-      this.scene.add(this.boat.rootNode);
-    } catch (e) { console.warn("Boat:", e); }
-
-    this.updateLoadingBar(80, "Vegetación...");
-    await step();
-    try { this.wakeEffect = new WakeEffect(this.scene); } catch (e) { console.warn("Wake:", e); }
-    await step();
-    try { this.grassSystem = new GrassSystem(this.scene, this.waterSystem); } catch (e) { console.warn("Grass:", e); }
-    await step();
-    try { this.forestSystem = new ForestSystem(this.scene, this.waterSystem); } catch (e) { console.warn("Forest:", e); }
-
-    this.updateLoadingBar(90, "Efectos...");
-    await step();
-    try { this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer); } catch (e) { console.warn("Atmosphere:", e); }
-    try { this.enableSceneShadows(); } catch (e) { /* skip */ }
-    try { this.waterSystem?.addSceneToRenderList(); } catch (e) { /* skip */ }
-
-    await step();
-    try { this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera); } catch (e) { console.warn("PostProcess:", e); }
-    try {
-      this.perfOptimizer = new PerformanceOptimizer(this.renderer, this.scene, this.camera);
-      this.perfOptimizer.onChange((s: QualitySettings) => this.applyQualitySettings(s));
-    } catch (e) { console.warn("PerfOpt:", e); }
-
-    this.updateLoadingBar(100, "¡Listo!");
-
-    // Hide loading screen
-    setTimeout(() => {
-      const loading = document.getElementById("loadingScreen");
-      if (loading) {
-        loading.style.opacity = "0";
-        setTimeout(() => loading.remove(), 500);
-      }
-    }, 500);
-  }
+  // loadWorldAsync removed — world is now loaded in onJugarPressed()
 
   /**
    * Walk the scene graph and enable castShadow / receiveShadow on relevant objects.
