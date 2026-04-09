@@ -5,9 +5,9 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
-import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
+import { TerrainMaterial } from "@babylonjs/materials/terrain/terrainMaterial";
 import {
   WORLD_SIZE,
   WATER_LEVEL,
@@ -96,12 +96,74 @@ export class Environment {
     // Displace vertices for terrain elevation
     this.displaceTerrainVertices(ground, waterSystem);
 
-    // Create procedural terrain material with grass/dirt/sand splatmap
-    const groundMat = new StandardMaterial("groundMat", this.scene);
-    groundMat.diffuseTexture = this.createTerrainSplatTexture(waterSystem);
-    groundMat.specularColor = new Color3(0.05, 0.05, 0.05);
-    groundMat.specularPower = 4;
-    ground.material = groundMat;
+    // TerrainMaterial: splatmap (low-res, controls blending) + tiling detail textures (high-res)
+    try {
+      const terrainMat = new TerrainMaterial("terrainMat", this.scene);
+
+      // Splatmap: R=grass, G=dirt, B=sand — 512px is enough for zone blending
+      terrainMat.mixTexture = this.createSplatmap(waterSystem);
+
+      // Grass detail (R channel) — tiling 256x256 texture repeated across terrain
+      const grassTex = this.createProceduralDetail("grass", [
+        [0.28, 0.52, 0.14], [0.22, 0.45, 0.10], [0.35, 0.58, 0.18], [0.20, 0.40, 0.08]
+      ]);
+      grassTex.uScale = grassTex.vScale = 80;
+      terrainMat.diffuseTexture1 = grassTex;
+
+      // Dirt detail (G channel)
+      const dirtTex = this.createProceduralDetail("dirt", [
+        [0.47, 0.36, 0.20], [0.40, 0.30, 0.16], [0.52, 0.40, 0.24], [0.44, 0.33, 0.18]
+      ]);
+      dirtTex.uScale = dirtTex.vScale = 80;
+      terrainMat.diffuseTexture2 = dirtTex;
+
+      // Sand detail (B channel)
+      const sandTex = this.createProceduralDetail("sand", [
+        [0.72, 0.62, 0.38], [0.68, 0.58, 0.34], [0.76, 0.66, 0.42], [0.65, 0.55, 0.30]
+      ]);
+      sandTex.uScale = sandTex.vScale = 80;
+      terrainMat.diffuseTexture3 = sandTex;
+
+      terrainMat.specularColor = new Color3(0.05, 0.05, 0.05);
+      terrainMat.specularPower = 4;
+      ground.material = terrainMat;
+    } catch (e) {
+      console.warn("TerrainMaterial failed, using fallback:", e);
+      const fallback = new StandardMaterial("groundFallback", this.scene);
+      fallback.diffuseColor = hexToColor3(COLORS.grass);
+      fallback.specularColor = new Color3(0.05, 0.05, 0.05);
+      ground.material = fallback;
+    }
+  }
+
+  /** Create a 256x256 tiling procedural detail texture for terrain */
+  private createProceduralDetail(name: string, palette: number[][]): DynamicTexture {
+    const size = 256;
+    const tex = new DynamicTexture(`detail_${name}`, size, this.scene, true);
+    const ctx = tex.getContext();
+
+    for (let py = 0; py < size; py++) {
+      for (let px = 0; px < size; px++) {
+        // Multi-frequency noise for natural detail
+        const n1 = this.noise2D(px * 0.08, py * 0.08, 101);
+        const n2 = this.noise2D(px * 0.2, py * 0.2, 202);
+        const n3 = this.noise2D(px * 0.5, py * 0.5, 303);
+
+        // Pick color from palette based on noise
+        const idx = Math.floor(n1 * palette.length) % palette.length;
+        const base = palette[idx];
+        const variation = (n2 - 0.5) * 0.1 + (n3 - 0.5) * 0.06;
+
+        const r = Math.max(0, Math.min(1, base[0] + variation));
+        const g = Math.max(0, Math.min(1, base[1] + variation));
+        const b = Math.max(0, Math.min(1, base[2] + variation * 0.5));
+
+        ctx.fillStyle = `rgb(${Math.floor(r * 255)},${Math.floor(g * 255)},${Math.floor(b * 255)})`;
+        ctx.fillRect(px, py, 1, 1);
+      }
+    }
+    tex.update();
+    return tex;
   }
 
   /** Displace terrain vertices — raise land, drop water areas */
@@ -148,16 +210,15 @@ export class Environment {
     ground.createNormals(true);
   }
 
-  /** Create a large procedural texture that blends grass, dirt, and sand based on position */
-  private createTerrainSplatTexture(waterSystem: WaterSystem): DynamicTexture {
-    const size = 1024;
-    const tex = new DynamicTexture("terrainTex", size, this.scene, true);
+  /** Create splatmap for TerrainMaterial: R=grass, G=dirt, B=sand */
+  private createSplatmap(waterSystem: WaterSystem): DynamicTexture {
+    const size = 512;
+    const tex = new DynamicTexture("splatmap", size, this.scene, false);
     const ctx = tex.getContext();
 
     const half = WORLD_SIZE / 2;
     for (let py = 0; py < size; py++) {
       for (let px = 0; px < size; px++) {
-        // Map pixel to world coordinates
         const worldX = (px / size) * WORLD_SIZE - half;
         const worldZ = (py / size) * WORLD_SIZE - half;
 
@@ -180,60 +241,32 @@ export class Environment {
           }
         }
 
-        // Noise for natural variation
-        const n1 = this.noise2D(worldX * 0.05, worldZ * 0.05, 7);
-        const n2 = this.noise2D(worldX * 0.12, worldZ * 0.12, 13);
-        const n3 = this.noise2D(worldX * 0.3, worldZ * 0.3, 31);
-        const detail = n3 * 0.15;
+        // Noise for organic transitions
+        const n1 = this.noise2D(worldX * 0.04, worldZ * 0.04, 7);
+        const noisyDist = nearWaterDist + (n1 - 0.5) * 8;
 
-        let r: number, g: number, b: number;
+        // Blend weights: R=grass, G=dirt, B=sand
+        let rGrass = 0, gDirt = 0, bSand = 0;
 
-        if (inWater) {
-          // Muddy riverbed
-          r = 0.28 + detail; g = 0.22 + detail; b = 0.12;
-        } else if (nearWaterDist < 5) {
-          // Sandy/muddy bank right at waterline
-          const t = nearWaterDist / 5;
-          // Sand color -> dirt transition
-          r = 0.72 - t * 0.25 + n2 * 0.08;
-          g = 0.60 - t * 0.18 + n2 * 0.06;
-          b = 0.35 - t * 0.10 + n2 * 0.04;
-        } else if (nearWaterDist < 15) {
-          // Dirt/earth transition zone
-          const t = (nearWaterDist - 5) / 10;
+        if (inWater || noisyDist < 3) {
+          // At waterline: sand
+          bSand = 1;
+        } else if (noisyDist < 8) {
+          // Sand -> dirt transition
+          const t = (noisyDist - 3) / 5;
+          bSand = 1 - t;
+          gDirt = t;
+        } else if (noisyDist < 18) {
           // Dirt -> grass transition
-          const dirtR = 0.47 + n1 * 0.08;
-          const dirtG = 0.38 + n1 * 0.06;
-          const dirtB = 0.20 + n1 * 0.04;
-          const grassR = 0.28 + n1 * 0.1 + n2 * 0.05;
-          const grassG = 0.52 + n1 * 0.12 + n2 * 0.06;
-          const grassB = 0.15 + n1 * 0.04;
-          r = dirtR + (grassR - dirtR) * t + detail;
-          g = dirtG + (grassG - dirtG) * t + detail;
-          b = dirtB + (grassB - dirtB) * t + detail;
+          const t = (noisyDist - 8) / 10;
+          gDirt = 1 - t;
+          rGrass = t;
         } else {
-          // Full grass with variation
-          const grassVar = this.fbm(worldX * 0.015, worldZ * 0.015, 3, 77);
-          r = 0.25 + grassVar * 0.15 + n2 * 0.06 + detail;
-          g = 0.48 + grassVar * 0.18 + n2 * 0.08 + detail;
-          b = 0.12 + grassVar * 0.05 + detail;
-
-          // Occasional dark patches (shade under trees / denser grass)
-          if (n1 > 0.65) {
-            r *= 0.75; g *= 0.85; b *= 0.7;
-          }
-          // Occasional lighter patches (dry grass)
-          if (n2 > 0.72) {
-            r += 0.12; g += 0.08; b += 0.04;
-          }
+          // Full grass
+          rGrass = 1;
         }
 
-        // Clamp
-        r = Math.max(0, Math.min(1, r));
-        g = Math.max(0, Math.min(1, g));
-        b = Math.max(0, Math.min(1, b));
-
-        ctx.fillStyle = `rgb(${Math.floor(r * 255)},${Math.floor(g * 255)},${Math.floor(b * 255)})`;
+        ctx.fillStyle = `rgb(${Math.floor(rGrass * 255)},${Math.floor(gDirt * 255)},${Math.floor(bSand * 255)})`;
         ctx.fillRect(px, py, 1, 1);
       }
     }

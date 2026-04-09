@@ -248,27 +248,37 @@ export class LanchaColectiva {
       waterSystem.isWater(portX, portZ) &&
       waterSystem.isWater(stbdX, stbdZ);
 
+    // Helper: check all 5 hull points are in water for a given position
+    const allPointsInWater = (cx: number, cz: number): boolean => {
+      const bx = cx + sinR * halfL, bz = cz + cosR * halfL;
+      const sx2 = cx - sinR * halfL, sz2 = cz - cosR * halfL;
+      const px2 = cx - cosR * halfW, pz2 = cz + sinR * halfW;
+      const sb = cx + cosR * halfW, sbz = cz - sinR * halfW;
+      return waterSystem.isWater(cx, cz) &&
+        waterSystem.isWater(bx, bz) &&
+        waterSystem.isWater(sx2, sz2) &&
+        waterSystem.isWater(px2, pz2) &&
+        waterSystem.isWater(sb, sbz);
+    };
+
     if (allInWater) {
       this.position.x = newX;
       this.position.z = newZ;
     } else {
-      this.speed *= -0.3;
-      // Try sliding along one axis
+      // Try sliding along one axis (check ALL hull points)
       const slideX = this.position.x + dx;
-      const slideXOk =
-        waterSystem.isWater(slideX, this.position.z) &&
-        waterSystem.isWater(slideX + sinR * halfL, this.position.z + cosR * halfL);
-      const slideZ = this.position.z + dz;
-      const slideZOk =
-        waterSystem.isWater(this.position.x, slideZ) &&
-        waterSystem.isWater(this.position.x + sinR * halfL, slideZ + cosR * halfL);
-
-      if (slideXOk) {
+      if (allPointsInWater(slideX, this.position.z)) {
         this.position.x = slideX;
         this.speed *= 0.5;
-      } else if (slideZOk) {
-        this.position.z = slideZ;
-        this.speed *= 0.5;
+      } else {
+        const slideZ = this.position.z + dz;
+        if (allPointsInWater(this.position.x, slideZ)) {
+          this.position.z = slideZ;
+          this.speed *= 0.5;
+        } else {
+          // Can't move at all — push back toward water center
+          this.speed *= -0.3;
+        }
       }
     }
 
