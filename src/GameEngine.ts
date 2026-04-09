@@ -137,8 +137,7 @@ export class GameEngine {
 
     this.updateLoadingBar(95, "Preparando interfaz...");
 
-    // UI — pass scene as any until GameUI is migrated
-    this.ui = new GameUI(this.scene as any);
+    this.ui = new GameUI();
     this.ui.onPlayClick(() => this.startGame());
     this.ui.onWeatherChange((preset) => this.weatherSystem.setWeather(preset as any));
 

@@ -1,10 +1,7 @@
-import { Color3 } from "@babylonjs/core/Maths/math.color";
+import * as THREE from "three";
 
-export function hexToColor3(hex: string): Color3 {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
-  return new Color3(r, g, b);
+export function hexToColor3(hex: string): THREE.Color {
+  return new THREE.Color(hex);
 }
 
 export function lerp(a: number, b: number, t: number): number {

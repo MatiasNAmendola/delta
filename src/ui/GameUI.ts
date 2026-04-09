@@ -1,4 +1,3 @@
-import { Scene } from "@babylonjs/core/scene";
 import {
   GAME_DURATION,
   MAX_PASSENGERS,
@@ -22,7 +21,7 @@ export class GameUI {
   private startScreenDiv: HTMLDivElement | null = null;
   private endScreenDiv: HTMLDivElement | null = null;
 
-  constructor(private scene: Scene) {
+  constructor() {
     this.createHUD();
     this.createMinimap();
     this.showStartScreen();
