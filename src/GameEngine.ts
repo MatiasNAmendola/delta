@@ -109,45 +109,33 @@ export class GameEngine {
     // Give the browser a frame to update the button text
     await new Promise(r => setTimeout(r, 50));
 
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const yield_ = () => new Promise<void>(r => setTimeout(r, 16)); // 1 full frame
+    const yield_ = () => new Promise<void>(r => setTimeout(r, 16));
 
-    // Scene + Camera (mobile optimized: shorter far plane + fog)
+    // === MINIMAL SCENE — no fog, no weather, no effects ===
     this.scene = new THREE.Scene();
-    const farPlane = isMobile ? 400 : 800;
-    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, farPlane);
+    this.scene.background = new THREE.Color(0x87ceeb); // sky blue
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 800);
     this.camera.position.set(0, CAMERA_HEIGHT, -CAMERA_DISTANCE);
     this.camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-    // Mobile: lower pixel ratio
-    if (isMobile) this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-
-    // Lights
-    this.scene.add(new THREE.AmbientLight(0x8899aa, 0.8));
+    // Simple lights — nothing fancy
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
     const sun = new THREE.DirectionalLight(0xffffff, 1.0);
-    sun.position.set(100, 150, 50);
+    sun.position.set(50, 100, 50);
     this.scene.add(sun);
-
-    // Fog to hide far plane cutoff
-    this.scene.fog = new THREE.FogExp2(0x87ceeb, isMobile ? 0.003 : 0.001);
-    this.scene.background = new THREE.Color(0x87ceeb);
 
     debug("scene OK");
     await yield_();
 
-    // Weather (optional — has sky, better lights)
-    try { this.weatherSystem = new WeatherSystem(this.scene); debug("weather OK"); } catch (e) { debug("weather: " + e); }
-    await yield_();
-
-    // Water (ESSENTIAL — this is a boat game)
+    // Water
     try { this.waterSystem = new WaterSystem(this.scene); debug("water OK"); } catch (e) { debug("WATER FAIL: " + e); }
     await yield_();
 
-    // Environment: terrain + trees + houses + docks (ESSENTIAL)
+    // Environment (terrain + trees + houses + docks)
     try { this.environment = new Environment(this.scene, this.waterSystem); debug("env OK"); } catch (e) { debug("ENV FAIL: " + e); }
     await yield_();
 
-    // Boat (ESSENTIAL)
+    // Boat
     try {
       const startDock = DOCK_LOCATIONS[0];
       this.boat = new LanchaColectiva(this.scene, startDock.x + 5, startDock.z);
@@ -156,20 +144,11 @@ export class GameEngine {
     } catch (e) { debug("BOAT FAIL: " + e); }
     await yield_();
 
-    // Controls (ESSENTIAL)
+    // Controls
     try { this.controls = new MobileControls(this.canvas); debug("controls OK"); } catch (e) { debug("controls: " + e); }
 
-    // Wake effect (lightweight)
-    try { this.wakeEffect = new WakeEffect(this.scene); } catch (e) { debug("wake: " + e); }
-
-    // Optional heavy systems — desktop only
-    if (!isMobile) {
-      await yield_();
-      try { this.grassSystem = new GrassSystem(this.scene, this.waterSystem); debug("grass OK"); } catch (e) { /* skip */ }
-      try { this.forestSystem = new ForestSystem(this.scene, this.waterSystem); debug("forest OK"); } catch (e) { /* skip */ }
-      try { this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer); } catch (e) { /* skip */ }
-      try { this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera); } catch (e) { /* skip */ }
-    }
+    // Wake (lightweight)
+    try { this.wakeEffect = new WakeEffect(this.scene); } catch (e) { /* skip */ }
 
     this.randomizeDockPassengers();
     debug("World loaded! Starting game...");
