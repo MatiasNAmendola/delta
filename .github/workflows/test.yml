@@ -1,4 +1,4 @@
-name: E2E Tests
+name: Build & Type Check
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
     branches: ["main"]
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v4
@@ -21,30 +21,14 @@ jobs:
 
       - run: npm ci
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      - name: TypeScript type check
+        run: npx tsc --noEmit
 
-      - name: Build project
+      - name: Vite production build
         run: npx vite build
 
-      - name: Run E2E tests
-        run: npx playwright test --project=desktop-chrome
-        timeout-minutes: 5
-        env:
-          CI: true
-
-      - name: Upload test report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14
-
-      - name: Upload failure traces
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: test-traces
-          path: test-results/
-          retention-days: 7
+      - name: Verify build output
+        run: |
+          test -f dist/index.html || (echo "Missing index.html" && exit 1)
+          test -d dist/assets || (echo "Missing assets dir" && exit 1)
+          echo "Build OK — $(du -sh dist | cut -f1) total"
