@@ -53,7 +53,7 @@ export class Environment {
     );
     const groundMat = this.createMat("groundMat", COLORS.grass);
     ground.material = groundMat;
-    ground.position.y = WATER_LEVEL - 0.2;
+    ground.position.y = WATER_LEVEL + 0.3;
     ground.receiveShadows = true;
 
     // Vertex displacement: gentle hills using multi-octave noise
@@ -96,28 +96,36 @@ export class Environment {
         const wx = positions[i];
         const wz = positions[i + 2];
 
-        // Quick river proximity check using waterSystem collision map
-        // Sample a few nearby points to estimate distance to water
-        let nearWater = false;
-        const step = 8;
-        for (let d = 0; d <= 30 && !nearWater; d += step) {
-          if (d === 0) {
-            nearWater = waterSystem.isWater(wx, wz);
-          } else {
+        // Estimate distance to water: check rings outward
+        const isInWater = waterSystem.isWater(wx, wz);
+        let minWaterDist = isInWater ? 0 : 999;
+        if (!isInWater) {
+          const step = 6;
+          outer: for (let d = step; d <= 40; d += step) {
             for (let a = 0; a < 4; a++) {
               const ax = wx + [d, -d, 0, 0][a];
               const az = wz + [0, 0, d, -d][a];
-              if (waterSystem.isWater(ax, az)) { nearWater = true; break; }
+              if (waterSystem.isWater(ax, az)) { minWaterDist = d; break outer; }
             }
           }
         }
-        const riverFade = nearWater ? 0.0 : 1.0;
-        const edgeFade = 1 - Math.max(
-          Math.abs(wx) / half,
-          Math.abs(wz) / half
-        );
+
+        const edgeFade = 1 - Math.max(Math.abs(wx) / half, Math.abs(wz) / half);
         const noise = hillNoise(wx, wz);
-        const height = noise * 6.0 * riverFade * Math.max(0, edgeFade);
+
+        let height: number;
+        if (isInWater) {
+          // Below water — drop terrain so water covers it
+          height = -1.5;
+        } else if (minWaterDist < 10) {
+          // Riverbank slope: rises from water edge to +0.5m over 10m
+          const bankT = minWaterDist / 10;
+          height = -0.8 + bankT * 1.3 + noise * 0.5 * bankT;
+        } else {
+          // Inland: hills with full noise
+          const hillFade = Math.min(1, (minWaterDist - 10) / 25);
+          height = 0.5 + noise * 5.0 * hillFade * Math.max(0, edgeFade);
+        }
         positions[i + 1] = height;
       }
       ground.setVerticesData("position", positions);
@@ -317,9 +325,9 @@ export class Environment {
               const bushW = 0.8 + rng() * 1.2;
               const bushSeed = i * 41 + b * 11 + (side > 0 ? 10000 : 15000);
 
-              const bush = MeshBuilder.CreateBox(
+              const bush = MeshBuilder.CreateSphere(
                 `bush_${river.name}_${bushSeed}`,
-                { width: bushW, height: bushH, depth: bushW * (0.8 + rng() * 0.4) },
+                { diameter: bushW, segments: 4 },
                 this.scene
               );
               const bushColors = [COLORS.bush, COLORS.bushDark, COLORS.leavesDark, COLORS.leaves];
@@ -327,7 +335,8 @@ export class Environment {
                 `bushMat_${bushSeed}`,
                 bushColors[Math.floor(rng() * 4)]
               );
-              bush.position.set(bx, WATER_LEVEL + bushH / 2, bz);
+              bush.scaling.y = bushH / bushW; // squash into bush shape
+              bush.position.set(bx, WATER_LEVEL + bushH * 0.4, bz);
               bush.rotation.y = rng() * Math.PI * 2;
             }
           }
