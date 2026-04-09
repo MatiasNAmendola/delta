@@ -9,6 +9,7 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { WaterSystem } from "./world/WaterSystem";
 import { Environment } from "./world/Environment";
 import { WakeEffect } from "./world/WakeEffect";
+import { GrassSystem } from "./world/GrassSystem";
 import { LanchaColectiva } from "./boat/LanchaColectiva";
 import { MobileControls } from "./controls/MobileControls";
 import { GameUI } from "./ui/GameUI";
@@ -32,6 +33,7 @@ export class GameEngine {
   private waterSystem!: WaterSystem;
   private environment!: Environment;
   private wakeEffect!: WakeEffect;
+  private grassSystem!: GrassSystem;
   private boat!: LanchaColectiva;
   private controls!: MobileControls;
   private ui!: GameUI;
@@ -116,6 +118,9 @@ export class GameEngine {
 
     // Wake effect
     this.wakeEffect = new WakeEffect(this.scene);
+
+    // Grass system — thin instances with wind shader
+    this.grassSystem = new GrassSystem(this.scene, this.waterSystem);
 
     // Add all scene meshes to water reflection/refraction
     this.waterSystem.addSceneToRenderList();
@@ -219,6 +224,9 @@ export class GameEngine {
 
       // Update water
       this.waterSystem.update(dt);
+
+      // Update grass wind animation
+      this.grassSystem.update(dt);
 
       // Update wake
       this.wakeEffect.update(
