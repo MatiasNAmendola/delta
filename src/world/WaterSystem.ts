@@ -38,47 +38,72 @@ export class WaterSystem {
 
   private buildCollisionMap(): void {
     const res = this.mapResolution;
+    const cellSize = WORLD_SIZE / res;
     this.riverCollisionMap = Array.from({ length: res }, () =>
       new Array(res).fill(false)
     );
 
+    // Mark cells by sampling along the river path and painting
+    // perpendicular to the flow direction (not axis-aligned squares)
     for (const river of RIVER_MAP) {
       const samples = river.points.length * 20;
       for (let i = 0; i <= samples; i++) {
         const t = i / samples;
         const [rx, rz] = getPointOnPath(river.points, t);
+
+        // Compute tangent direction at this point
+        const t2 = Math.min(1, t + 0.005);
+        const [rx2, rz2] = getPointOnPath(river.points, t2);
+        const tdx = rx2 - rx;
+        const tdz = rz2 - rz;
+        const len = Math.sqrt(tdx * tdx + tdz * tdz) || 1;
+        // Normal (perpendicular to tangent)
+        const nx = -tdz / len;
+        const nz = tdx / len;
+
+        // Paint cells along the perpendicular, not an axis-aligned box
         const halfW = river.width / 2;
-
-        const minX = Math.floor(
-          ((rx - halfW + WORLD_SIZE / 2) / WORLD_SIZE) * res
-        );
-        const maxX = Math.ceil(
-          ((rx + halfW + WORLD_SIZE / 2) / WORLD_SIZE) * res
-        );
-        const minZ = Math.floor(
-          ((rz - halfW + WORLD_SIZE / 2) / WORLD_SIZE) * res
-        );
-        const maxZ = Math.ceil(
-          ((rz + halfW + WORLD_SIZE / 2) / WORLD_SIZE) * res
-        );
-
-        for (let gx = minX; gx <= maxX; gx++) {
-          for (let gz = minZ; gz <= maxZ; gz++) {
-            if (gx >= 0 && gx < res && gz >= 0 && gz < res) {
-              this.riverCollisionMap[gx][gz] = true;
-            }
+        for (let w = -halfW; w <= halfW; w += cellSize * 0.5) {
+          const wx = rx + nx * w;
+          const wz = rz + nz * w;
+          const gx = Math.floor(((wx + WORLD_SIZE / 2) / WORLD_SIZE) * res);
+          const gz = Math.floor(((wz + WORLD_SIZE / 2) / WORLD_SIZE) * res);
+          if (gx >= 0 && gx < res && gz >= 0 && gz < res) {
+            this.riverCollisionMap[gx][gz] = true;
           }
         }
       }
     }
   }
 
+  /** Fast grid-based check — used for terrain generation, trees, etc. */
   public isWater(worldX: number, worldZ: number): boolean {
     const res = this.mapResolution;
     const gx = Math.floor(((worldX + WORLD_SIZE / 2) / WORLD_SIZE) * res);
     const gz = Math.floor(((worldZ + WORLD_SIZE / 2) / WORLD_SIZE) * res);
     if (gx < 0 || gx >= res || gz < 0 || gz >= res) return false;
     return this.riverCollisionMap[gx][gz];
+  }
+
+  /** Precise distance-to-path check — used for boat collision.
+   *  Computes actual distance from point to the nearest river centerline
+   *  and compares against river.width/2. No grid quantization errors. */
+  public isWaterPrecise(worldX: number, worldZ: number): boolean {
+    for (const river of RIVER_MAP) {
+      const halfW = river.width / 2;
+      const halfWSq = halfW * halfW;
+      const samples = river.points.length * 10;
+      for (let i = 0; i <= samples; i++) {
+        const t = i / samples;
+        const [rx, rz] = getPointOnPath(river.points, t);
+        const dx = worldX - rx;
+        const dz = worldZ - rz;
+        if (dx * dx + dz * dz < halfWSq) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
