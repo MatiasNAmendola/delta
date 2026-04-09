@@ -81,31 +81,144 @@ export class WaterSystem {
     return this.riverCollisionMap[gx][gz];
   }
 
-  /** Create a procedural bump/normal map texture for the water */
-  private createBumpTexture(): DynamicTexture {
+  /**
+   * Attempt to load a real water normal map from a CDN.
+   * Falls back to a high-quality procedural normal map if loading fails.
+   */
+  private createBumpTexture(): Texture | DynamicTexture {
+    // Try loading a proper water normal map from BabylonJS assets
+    try {
+      const tex = new Texture(
+        "https://assets.babylonjs.com/textures/waterbump.png",
+        this.scene,
+        false, // no mipmap generation issues
+        false, // not inverted Y
+        Texture.TRILINEAR_SAMPLINGMODE,
+        () => {
+          // Loaded successfully
+          console.log("Water bump texture loaded from CDN");
+        },
+        () => {
+          // Failed — will use fallback (already set below)
+          console.warn("CDN water bump failed, using procedural");
+        }
+      );
+      tex.wrapU = Texture.WRAP_ADDRESSMODE;
+      tex.wrapV = Texture.WRAP_ADDRESSMODE;
+      tex.uScale = 6;
+      tex.vScale = 6;
+      return tex;
+    } catch {
+      // Fallback to procedural
+    }
+    return this.createProceduralBumpTexture();
+  }
+
+  /** High-quality procedural normal map with multi-octave noise */
+  private createProceduralBumpTexture(): DynamicTexture {
     const size = 512;
     const tex = new DynamicTexture("waterBump", size, this.scene, true);
     const ctx = tex.getContext();
+    // Fill with a base color first, then read back
+    ctx.fillStyle = "rgb(128,128,255)";
+    ctx.fillRect(0, 0, size, size);
+    const imgData = ctx.getImageData(0, 0, size, size);
+    const data = imgData.data;
 
-    // Generate a tileable bump-map pattern
+    // Simple hash-based noise for tileable patterns
+    const hash = (x: number, y: number): number => {
+      let h = (x * 374761393 + y * 668265263 + 1013904223) | 0;
+      h = ((h >> 13) ^ h) | 0;
+      h = (h * (h * h * 15731 + 789221) + 1376312589) | 0;
+      return ((h >> 16) & 0x7fff) / 0x7fff;
+    };
+
+    // Smooth noise with cosine interpolation (tileable)
+    const smoothNoise = (x: number, y: number, period: number): number => {
+      const ix = Math.floor(x) % period;
+      const iy = Math.floor(y) % period;
+      const fx = x - Math.floor(x);
+      const fy = y - Math.floor(y);
+      // Cosine interpolation
+      const cx = (1 - Math.cos(fx * Math.PI)) * 0.5;
+      const cy = (1 - Math.cos(fy * Math.PI)) * 0.5;
+      const ix1 = (ix + 1) % period;
+      const iy1 = (iy + 1) % period;
+      const v00 = hash(ix, iy);
+      const v10 = hash(ix1, iy);
+      const v01 = hash(ix, iy1);
+      const v11 = hash(ix1, iy1);
+      const i1 = v00 * (1 - cx) + v10 * cx;
+      const i2 = v01 * (1 - cx) + v11 * cx;
+      return i1 * (1 - cy) + i2 * cy;
+    };
+
+    // Multi-octave turbulence (tileable)
+    const turbulence = (x: number, y: number): number => {
+      let val = 0;
+      let amp = 1;
+      let freq = 1;
+      let maxVal = 0;
+      for (let oct = 0; oct < 5; oct++) {
+        const period = Math.max(1, Math.floor(4 * freq));
+        val += smoothNoise(x * freq, y * freq, period) * amp;
+        maxVal += amp;
+        amp *= 0.5;
+        freq *= 2;
+      }
+      return val / maxVal;
+    };
+
+    // Generate height map
+    const heights = new Float32Array(size * size);
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        const nx = x / size;
-        const ny = y / size;
-
-        // Layered sine waves to simulate water normal perturbation
-        const wave1 = Math.sin(nx * 20 + ny * 10) * 0.3;
-        const wave2 = Math.sin(nx * 35 - ny * 25) * 0.2;
-        const wave3 = Math.sin(nx * 8 + ny * 40) * 0.15;
-        const wave4 = Math.sin((nx + ny) * 50) * 0.1;
-        const combined = (wave1 + wave2 + wave3 + wave4 + 0.75) * 0.5;
-
-        const val = Math.floor(Math.max(0, Math.min(255, combined * 255)));
-        ctx.fillStyle = `rgb(${val},${val},255)`;
-        ctx.fillRect(x, y, 1, 1);
+        const nx = (x / size) * 4;
+        const ny = (y / size) * 4;
+        // Combine turbulence with directional waves
+        const h = turbulence(nx, ny) * 0.6
+          + Math.sin(nx * 3.5 + ny * 2.1) * 0.15
+          + Math.sin(nx * 1.3 - ny * 4.7) * 0.12
+          + Math.sin((nx + ny) * 5.3) * 0.08;
+        heights[y * size + x] = h;
       }
     }
-    tex.update();
+
+    // Convert height map to normal map (Sobel-like derivatives)
+    const strength = 2.5;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const idx = (y * size + x) * 4;
+        // Tileable sampling
+        const xp = (x + 1) % size;
+        const xm = (x - 1 + size) % size;
+        const yp = (y + 1) % size;
+        const ym = (y - 1 + size) % size;
+
+        const hL = heights[y * size + xm];
+        const hR = heights[y * size + xp];
+        const hU = heights[ym * size + x];
+        const hD = heights[yp * size + x];
+
+        // Normal from height differences
+        const dx = (hR - hL) * strength;
+        const dy = (hD - hU) * strength;
+        // Normalize
+        const len = Math.sqrt(dx * dx + dy * dy + 1);
+        const rnx = dx / len;
+        const rny = dy / len;
+        const rnz = 1 / len;
+
+        // Encode normal to RGB ([-1,1] → [0,255])
+        data[idx + 0] = Math.floor((rnx * 0.5 + 0.5) * 255); // R = X
+        data[idx + 1] = Math.floor((rny * 0.5 + 0.5) * 255); // G = Y
+        data[idx + 2] = Math.floor((rnz * 0.5 + 0.5) * 255); // B = Z
+        data[idx + 3] = 255; // A
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    tex.update(false);
     tex.wrapU = Texture.WRAP_ADDRESSMODE;
     tex.wrapV = Texture.WRAP_ADDRESSMODE;
     return tex;
@@ -122,35 +235,39 @@ export class WaterSystem {
       new Vector2(rtSize, rtSize)
     );
 
-    // Bump texture for wave normals
+    // Bump texture — try CDN first, fallback to procedural normal map
     this.waterMaterial.bumpTexture = this.createBumpTexture();
-    this.waterMaterial.bumpHeight = 0.4;
+    this.waterMaterial.bumpHeight = 0.6;
     this.waterMaterial.bumpSuperimpose = true;
     this.waterMaterial.bumpAffectsReflection = true;
 
-    // Wave properties - Delta river style (gentle muddy water)
-    this.waterMaterial.windForce = 8;
-    this.waterMaterial.windDirection = new Vector2(0.5, 0.8);
-    this.waterMaterial.waveHeight = 0.3;
-    this.waterMaterial.waveLength = 0.3;
-    this.waterMaterial.waveSpeed = 30;
-    this.waterMaterial.waveCount = 3;
+    // Wave properties — Delta river: gentle current, not ocean
+    this.waterMaterial.windForce = 5;
+    this.waterMaterial.windDirection = new Vector2(0.6, 0.8);
+    this.waterMaterial.waveHeight = 0.08;
+    this.waterMaterial.waveLength = 0.15;
+    this.waterMaterial.waveSpeed = 15;
+    this.waterMaterial.waveCount = 8;
 
-    // Water colors - murky Delta brown-green
-    this.waterMaterial.waterColor = new Color3(0.15, 0.28, 0.18);
-    this.waterMaterial.waterColor2 = new Color3(0.1, 0.2, 0.12);
-    this.waterMaterial.colorBlendFactor = 0.4;
-    this.waterMaterial.colorBlendFactor2 = 0.3;
+    // Water colors — Delta Tigre: brown-green murky river water
+    this.waterMaterial.waterColor = new Color3(0.18, 0.3, 0.2);
+    this.waterMaterial.waterColor2 = new Color3(0.12, 0.22, 0.14);
+    this.waterMaterial.colorBlendFactor = 0.35;
+    this.waterMaterial.colorBlendFactor2 = 0.25;
+    this.waterMaterial.diffuseColor = new Color3(0.25, 0.35, 0.2);
 
-    // Fresnel for realistic reflection angle
+    // Fresnel — more reflection at shallow angles
     this.waterMaterial.fresnelSeparate = true;
 
-    // Specular
-    this.waterMaterial.specularColor = new Color3(0.2, 0.2, 0.15);
-    this.waterMaterial.specularPower = 64;
+    // Specular — subtle sun glints
+    this.waterMaterial.specularColor = new Color3(0.3, 0.3, 0.25);
+    this.waterMaterial.specularPower = 128;
 
     // Use world coordinates so all river strips share the same wave pattern
     this.waterMaterial.useWorldCoordinatesForWaveDeformation = true;
+
+    // Performance: limit lights
+    this.waterMaterial.maxSimultaneousLights = 2;
 
     // Create river strip meshes using the shared WaterMaterial
     for (const river of RIVER_MAP) {
