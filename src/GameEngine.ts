@@ -9,6 +9,7 @@ import { Environment } from "./world/Environment";
 import { WakeEffect } from "./world/WakeEffect";
 import { GrassSystem } from "./world/GrassSystem";
 import { WeatherSystem } from "./world/WeatherSystem";
+import { ForestSystem } from "./world/ForestSystem";
 import { LanchaColectiva } from "./boat/LanchaColectiva";
 import { MobileControls } from "./controls/MobileControls";
 import { GameUI } from "./ui/GameUI";
@@ -34,6 +35,7 @@ export class GameEngine {
   private wakeEffect!: WakeEffect;
   private grassSystem!: GrassSystem;
   private weatherSystem!: WeatherSystem;
+  private forestSystem!: ForestSystem;
   private boat!: LanchaColectiva;
   private controls!: MobileControls;
   private ui!: GameUI;
@@ -106,6 +108,9 @@ export class GameEngine {
 
     // Grass system — thin instances with wind shader
     this.grassSystem = new GrassSystem(this.scene, this.waterSystem);
+
+    // Dense instanced forest (8 tree templates, hundreds of thin instances)
+    this.forestSystem = new ForestSystem(this.scene, this.waterSystem);
 
     // Add all scene meshes to water reflection/refraction
     this.waterSystem.addSceneToRenderList();

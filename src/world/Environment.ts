@@ -59,7 +59,7 @@ export class Environment {
     );
     const groundMat = this.createMat("groundMat", COLORS.grass);
     ground.material = groundMat;
-    ground.position.y = WATER_LEVEL + 0.3;
+    ground.position.y = WATER_LEVEL;
     ground.receiveShadows = true;
 
     // Vertex displacement: gentle hills using multi-octave noise
@@ -121,16 +121,19 @@ export class Environment {
 
         let height: number;
         if (isInWater) {
-          // Below water — drop terrain so water covers it
-          height = -1.5;
-        } else if (minWaterDist < 10) {
-          // Riverbank slope: rises from water edge to +0.5m over 10m
-          const bankT = minWaterDist / 10;
-          height = -0.8 + bankT * 1.3 + noise * 0.5 * bankT;
+          // Below water — drop terrain well below water surface
+          height = -2.0;
+        } else if (minWaterDist < 8) {
+          // Riverbank: steep rise from just below water to above
+          // At 0m from water: -0.3 (just below waterline 0.05)
+          // At 8m from water: +0.8 (clearly above water)
+          const bankT = minWaterDist / 8;
+          const steepT = bankT * bankT; // steeper at the start
+          height = -0.3 + steepT * 1.1 + noise * 0.3 * bankT;
         } else {
-          // Inland: hills with full noise
-          const hillFade = Math.min(1, (minWaterDist - 10) / 25);
-          height = 0.5 + noise * 5.0 * hillFade * Math.max(0, edgeFade);
+          // Inland: gentle hills
+          const hillFade = Math.min(1, (minWaterDist - 8) / 30);
+          height = 0.8 + noise * 4.0 * hillFade * Math.max(0, edgeFade);
         }
         positions[i + 1] = height;
       }
