@@ -1,10 +1,12 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import {
   WORLD_SIZE,
   WATER_LEVEL,
@@ -127,138 +129,253 @@ export class Environment {
   }
 
   private createSkybox(): void {
-    // Simple gradient sky using a large sphere
+    // --- Gradient sky dome with vertex colors ---
     const sky = MeshBuilder.CreateSphere(
       "sky",
       { diameter: WORLD_SIZE * 2.5, segments: 16 },
       this.scene
     );
+    // Apply vertex colors: blue at top → warm white at horizon
+    const positions = sky.getVerticesData("position");
+    if (positions) {
+      const colors: number[] = [];
+      const radius = WORLD_SIZE * 1.25;
+      for (let i = 0; i < positions.length; i += 3) {
+        const y = positions[i + 1];
+        const t = Math.max(0, y / radius); // 0 = horizon, 1 = zenith
+        // Zenith: deep blue (0.3, 0.55, 0.9)
+        // Horizon: warm haze (0.85, 0.82, 0.75)
+        const r = 0.85 - t * 0.55;
+        const g = 0.82 - t * 0.27;
+        const b = 0.75 + t * 0.15;
+        colors.push(r, g, b, 1);
+      }
+      sky.setVerticesData("color", colors);
+    }
     const skyMat = new StandardMaterial("skyMat", this.scene);
     skyMat.backFaceCulling = false;
-    skyMat.diffuseColor = hexToColor3(COLORS.sky);
-    skyMat.emissiveColor = hexToColor3(COLORS.sky);
+    skyMat.emissiveColor = Color3.White();
+    skyMat.diffuseColor = Color3.Black();
     skyMat.specularColor = Color3.Black();
     skyMat.disableLighting = true;
     sky.material = skyMat;
     sky.infiniteDistance = true;
+    sky.renderingGroupId = 0;
+
+    // --- Sun glow disk ---
+    const sunDir = new Vector3(-0.5, -1, 0.5).normalize();
+    const sunPos = sunDir.scale(-WORLD_SIZE * 1.1);
+    const sun = MeshBuilder.CreateDisc("sun", { radius: 40, tessellation: 16 }, this.scene);
+    const sunMat = new StandardMaterial("sunMat", this.scene);
+    sunMat.emissiveColor = new Color3(1.0, 0.95, 0.7);
+    sunMat.diffuseColor = Color3.Black();
+    sunMat.specularColor = Color3.Black();
+    sunMat.disableLighting = true;
+    sunMat.alpha = 0.9;
+    sunMat.backFaceCulling = false;
+    sun.material = sunMat;
+    sun.position = sunPos;
+    sun.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    sun.infiniteDistance = true;
+
+    // Sun halo (larger, fainter)
+    const halo = MeshBuilder.CreateDisc("sunHalo", { radius: 80, tessellation: 16 }, this.scene);
+    const haloMat = new StandardMaterial("haloMat", this.scene);
+    haloMat.emissiveColor = new Color3(1.0, 0.9, 0.6);
+    haloMat.diffuseColor = Color3.Black();
+    haloMat.specularColor = Color3.Black();
+    haloMat.disableLighting = true;
+    haloMat.alpha = 0.2;
+    haloMat.backFaceCulling = false;
+    halo.material = haloMat;
+    halo.position = sunPos;
+    halo.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    halo.infiniteDistance = true;
+
+    // --- Procedural clouds ---
+    this.createClouds();
 
     // Set clear color
     this.scene.clearColor = new Color4(0.53, 0.81, 0.92, 1);
     // Fog for atmosphere
     this.scene.fogMode = Scene.FOGMODE_EXP2;
-    this.scene.fogDensity = 0.0012;
-    this.scene.fogColor = new Color3(0.6, 0.78, 0.85);
+    this.scene.fogDensity = 0.0015;
+    this.scene.fogColor = new Color3(0.7, 0.78, 0.82);
   }
 
-  // Tree type 0: Weeping willow - tall trunk + drooping curtain branches
+  private createClouds(): void {
+    // Create a cloud texture procedurally
+    const texSize = 128;
+    const cloudTex = new DynamicTexture("cloudTex", texSize, this.scene, false);
+    const ctx = cloudTex.getContext();
+    const hash = (x: number, y: number): number => {
+      let h = (x * 374761393 + y * 668265263 + 1013904223) | 0;
+      h = ((h >> 13) ^ h) | 0;
+      h = (h * (h * h * 15731 + 789221) + 1376312589) | 0;
+      return ((h >> 16) & 0x7fff) / 0x7fff;
+    };
+    const smoothNoise = (px: number, py: number, period: number) => {
+      const ix = ((Math.floor(px) % period) + period) % period;
+      const iy = ((Math.floor(py) % period) + period) % period;
+      const fx = px - Math.floor(px);
+      const fy = py - Math.floor(py);
+      const cx = (1 - Math.cos(fx * Math.PI)) * 0.5;
+      const cy = (1 - Math.cos(fy * Math.PI)) * 0.5;
+      const ix1 = (ix + 1) % period;
+      const iy1 = (iy + 1) % period;
+      return (
+        (hash(ix, iy) * (1 - cx) + hash(ix1, iy) * cx) * (1 - cy) +
+        (hash(ix, iy1) * (1 - cx) + hash(ix1, iy1) * cx) * cy
+      );
+    };
+    const fbm = (px: number, py: number) => {
+      let v = 0, a = 1, f = 1, m = 0;
+      for (let o = 0; o < 4; o++) {
+        const p = Math.max(1, Math.floor(4 * f));
+        v += smoothNoise(px * f, py * f, p) * a;
+        m += a; a *= 0.5; f *= 2;
+      }
+      return v / m;
+    };
+    // Paint cloud texture
+    const center = texSize / 2;
+    for (let y = 0; y < texSize; y++) {
+      for (let x = 0; x < texSize; x++) {
+        const dx = (x - center) / center;
+        const dy = (y - center) / center;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const radial = Math.max(0, 1 - dist * 1.2);
+        const n = fbm((x / texSize) * 5, (y / texSize) * 5);
+        const cloud = Math.max(0, radial * n - 0.15) * 3;
+        const alpha = Math.min(1, cloud);
+        const bright = 245 + Math.floor(n * 10);
+        ctx.fillStyle = `rgba(${bright},${bright},${bright - 5},${alpha})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+    cloudTex.update(true);
+    cloudTex.hasAlpha = true;
+
+    const cloudMat = new StandardMaterial("cloudMat", this.scene);
+    cloudMat.diffuseTexture = cloudTex;
+    cloudMat.emissiveColor = new Color3(0.9, 0.9, 0.88);
+    cloudMat.specularColor = Color3.Black();
+    cloudMat.disableLighting = true;
+    cloudMat.alpha = 0.7;
+    cloudMat.backFaceCulling = false;
+
+    // Place cloud billboard planes at various heights and positions
+    const rng = seededRandom(555);
+    const cloudCount = 25;
+    for (let i = 0; i < cloudCount; i++) {
+      const cx = (rng() - 0.5) * WORLD_SIZE * 1.5;
+      const cz = (rng() - 0.5) * WORLD_SIZE * 1.5;
+      const cy = 60 + rng() * 80; // height 60-140
+      const w = 40 + rng() * 80;  // width 40-120
+      const h = 15 + rng() * 25;  // height 15-40
+
+      const cloud = MeshBuilder.CreatePlane(
+        `cloud_${i}`,
+        { width: w, height: h },
+        this.scene
+      );
+      cloud.material = cloudMat;
+      cloud.position.set(cx, cy, cz);
+      cloud.rotation.x = Math.PI / 2; // horizontal
+      cloud.rotation.y = rng() * Math.PI; // random rotation for variety
+    }
+  }
+
+  // Tree type 0: Weeping willow - cylinder trunk + sphere canopy + drooping curtains
   private createWeepingWillow(x: number, z: number, seed: number): void {
     const rng = seededRandom(seed);
     const treeNode = new TransformNode(`willow_${seed}`, this.scene);
     treeNode.position.set(x, WATER_LEVEL, z);
 
-    const height = 6 + rng() * 4; // tall: 6-10
-    const trunkWidth = 0.5 + rng() * 0.3;
+    const height = 6 + rng() * 4;
+    const trunkR = 0.25 + rng() * 0.15;
 
-    // Trunk
-    const trunk = MeshBuilder.CreateBox(
+    // Cylinder trunk
+    const trunk = MeshBuilder.CreateCylinder(
       `wtrunk_${seed}`,
-      { width: trunkWidth, height: height, depth: trunkWidth },
+      { height, diameterTop: trunkR * 1.2, diameterBottom: trunkR * 2.2, tessellation: 8 },
       this.scene
     );
-    trunk.material = this.createMat(`wtrunkMat_${seed}`, COLORS.wood);
+    trunk.material = this.createMat("willowTrunk", COLORS.wood);
     trunk.parent = treeNode;
     trunk.position.y = height / 2;
 
-    // Central canopy mass at top
-    const canopySize = 3 + rng() * 2;
-    const canopy = MeshBuilder.CreateBox(
+    // Sphere canopy
+    const canopySize = 3.5 + rng() * 2.5;
+    const canopy = MeshBuilder.CreateSphere(
       `wcanopy_${seed}`,
-      { width: canopySize, height: canopySize * 0.5, depth: canopySize },
+      { diameter: canopySize, segments: 6 },
       this.scene
     );
     const willowColors = [COLORS.willowLeaf, COLORS.willowLeafLight, COLORS.leaves];
-    canopy.material = this.createMat(
-      `wcanopyMat_${seed}`,
-      willowColors[Math.floor(rng() * 3)]
-    );
+    canopy.material = this.createMat("willowCanopy", willowColors[Math.floor(rng() * 3)]);
     canopy.parent = treeNode;
-    canopy.position.y = height + canopySize * 0.2;
+    canopy.scaling.y = 0.6; // flatten sphere
+    canopy.position.y = height;
 
-    // Drooping curtain branches hanging down from canopy
-    const curtainCount = 3 + Math.floor(rng() * 3); // 3-5 curtains
+    // Drooping curtain branches
+    const curtainCount = 3 + Math.floor(rng() * 3);
     for (let c = 0; c < curtainCount; c++) {
       const angle = (c / curtainCount) * Math.PI * 2 + rng() * 0.4;
-      const radius = canopySize * 0.4 + rng() * canopySize * 0.2;
-      const curtainH = 3 + rng() * 3; // droop length 3-6
-      const curtainW = 0.6 + rng() * 0.5;
-      const curtainD = 0.4 + rng() * 0.3;
+      const radius = canopySize * 0.35 + rng() * canopySize * 0.15;
+      const curtainH = 3 + rng() * 3;
 
-      const curtain = MeshBuilder.CreateBox(
+      const curtain = MeshBuilder.CreateCylinder(
         `wcurt_${seed}_${c}`,
-        { width: curtainW, height: curtainH, depth: curtainD },
+        { height: curtainH, diameterTop: 0.05, diameterBottom: 0.6 + rng() * 0.4, tessellation: 6 },
         this.scene
       );
-      curtain.material = this.createMat(
-        `wcurtMat_${seed}_${c}`,
-        willowColors[Math.floor(rng() * 3)]
-      );
+      curtain.material = this.createMat("willowCurtain", willowColors[Math.floor(rng() * 3)]);
       curtain.parent = treeNode;
       curtain.position.set(
         Math.cos(angle) * radius,
-        height - curtainH * 0.3,
+        height - curtainH * 0.35,
         Math.sin(angle) * radius
       );
-      // Slight outward tilt
-      curtain.rotation.z = Math.cos(angle) * 0.15;
-      curtain.rotation.x = Math.sin(angle) * 0.15;
+      curtain.rotation.z = Math.cos(angle) * 0.2;
+      curtain.rotation.x = Math.sin(angle) * 0.2;
     }
 
     treeNode.rotation.y = rng() * Math.PI * 2;
   }
 
-  // Tree type 1: Tall poplar - thin columnar shape
+  // Tree type 1: Tall poplar - cylinder trunk + elongated sphere canopy
   private createPoplar(x: number, z: number, seed: number): void {
     const rng = seededRandom(seed);
     const treeNode = new TransformNode(`poplar_${seed}`, this.scene);
     treeNode.position.set(x, WATER_LEVEL, z);
 
-    const height = 8 + rng() * 6; // very tall: 8-14
-    const trunkWidth = 0.25 + rng() * 0.15;
+    const height = 8 + rng() * 6;
+    const trunkR = 0.12 + rng() * 0.08;
 
-    // Tall thin trunk
-    const trunk = MeshBuilder.CreateBox(
+    // Thin cylinder trunk
+    const trunk = MeshBuilder.CreateCylinder(
       `ptrunk_${seed}`,
-      { width: trunkWidth, height: height, depth: trunkWidth },
+      { height, diameterTop: trunkR, diameterBottom: trunkR * 2, tessellation: 6 },
       this.scene
     );
-    trunk.material = this.createMat(`ptrunkMat_${seed}`, COLORS.woodDark);
+    trunk.material = this.createMat("poplarTrunk", COLORS.woodDark);
     trunk.parent = treeNode;
     trunk.position.y = height / 2;
 
-    // Narrow vertical columnar canopy - stacked narrow boxes
+    // Tall narrow ellipsoid canopy (sphere stretched vertically)
     const poplarColors = [COLORS.poplarLeaf, COLORS.poplarLeafDark, COLORS.leavesDark];
-    const canopyWidth = 1.2 + rng() * 0.8;
-    const canopySegments = 2 + Math.floor(rng() * 2);
-    const segHeight = (height * 0.6) / canopySegments;
-
-    for (let s = 0; s < canopySegments; s++) {
-      // Taper: widest in middle, narrower at top and bottom
-      const midFrac = Math.abs(s / (canopySegments - 1) - 0.4);
-      const taper = 1 - midFrac * 0.6;
-      const w = canopyWidth * taper;
-
-      const seg = MeshBuilder.CreateBox(
-        `pcanopy_${seed}_${s}`,
-        { width: w, height: segHeight * 1.1, depth: w },
-        this.scene
-      );
-      seg.material = this.createMat(
-        `pcanopyMat_${seed}_${s}`,
-        poplarColors[Math.floor(rng() * 3)]
-      );
-      seg.parent = treeNode;
-      seg.position.y = height * 0.35 + s * segHeight;
-    }
+    const canopyW = 1.2 + rng() * 0.8;
+    const canopyH = height * 0.65;
+    const canopy = MeshBuilder.CreateSphere(
+      `pcanopy_${seed}`,
+      { diameter: canopyW, segments: 6 },
+      this.scene
+    );
+    canopy.material = this.createMat("poplarCanopy", poplarColors[Math.floor(rng() * 3)]);
+    canopy.parent = treeNode;
+    canopy.scaling.y = canopyH / canopyW; // stretch vertically
+    canopy.position.y = height * 0.55;
 
     treeNode.rotation.y = rng() * Math.PI * 2;
   }
