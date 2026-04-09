@@ -227,16 +227,47 @@ export class LanchaColectiva {
     const newX = this.position.x + dx;
     const newZ = this.position.z + dz;
 
-    if (waterSystem.isWater(newX, newZ)) {
+    // Check multiple hull points: bow, stern, port, starboard
+    const sinR = Math.sin(this.rotation);
+    const cosR = Math.cos(this.rotation);
+    const halfL = BOAT_LENGTH / 2;
+    const halfW = BOAT_WIDTH / 2;
+    const bowX = newX + sinR * halfL;
+    const bowZ = newZ + cosR * halfL;
+    const sternX = newX - sinR * halfL;
+    const sternZ = newZ - cosR * halfL;
+    const portX = newX - cosR * halfW;
+    const portZ = newZ + sinR * halfW;
+    const stbdX = newX + cosR * halfW;
+    const stbdZ = newZ - sinR * halfW;
+
+    const allInWater =
+      waterSystem.isWater(newX, newZ) &&
+      waterSystem.isWater(bowX, bowZ) &&
+      waterSystem.isWater(sternX, sternZ) &&
+      waterSystem.isWater(portX, portZ) &&
+      waterSystem.isWater(stbdX, stbdZ);
+
+    if (allInWater) {
       this.position.x = newX;
       this.position.z = newZ;
     } else {
       this.speed *= -0.3;
-      if (waterSystem.isWater(newX, this.position.z)) {
-        this.position.x = newX;
+      // Try sliding along one axis
+      const slideX = this.position.x + dx;
+      const slideXOk =
+        waterSystem.isWater(slideX, this.position.z) &&
+        waterSystem.isWater(slideX + sinR * halfL, this.position.z + cosR * halfL);
+      const slideZ = this.position.z + dz;
+      const slideZOk =
+        waterSystem.isWater(this.position.x, slideZ) &&
+        waterSystem.isWater(this.position.x + sinR * halfL, slideZ + cosR * halfL);
+
+      if (slideXOk) {
+        this.position.x = slideX;
         this.speed *= 0.5;
-      } else if (waterSystem.isWater(this.position.x, newZ)) {
-        this.position.z = newZ;
+      } else if (slideZOk) {
+        this.position.z = slideZ;
         this.speed *= 0.5;
       }
     }
