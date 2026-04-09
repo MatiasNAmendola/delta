@@ -1,5 +1,3 @@
-import { Scene } from "@babylonjs/core/scene";
-
 export interface ControlState {
   throttle: number; // -1 to 1
   steering: number; // -1 to 1
@@ -39,7 +37,11 @@ export class MobileControls {
   // Track active button touches to avoid conflicts with camera drag
   private buttonTouchIds = new Set<number>();
 
-  constructor(private scene: Scene) {
+  // Reference to the canvas element for event binding
+  private canvas: HTMLCanvasElement | null;
+
+  constructor(canvas: HTMLCanvasElement | null) {
+    this.canvas = canvas;
     this.isMobile =
       /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
         navigator.userAgent
@@ -68,7 +70,7 @@ export class MobileControls {
   }
 
   private setupCameraDrag(): void {
-    const canvas = this.scene.getEngine().getRenderingCanvas();
+    const canvas = this.canvas;
     if (!canvas) return;
 
     // Touch camera drag (on the canvas, not on buttons)
@@ -171,7 +173,7 @@ export class MobileControls {
       <div style="position:fixed;bottom:10px;left:10px;background:rgba(0,0,0,0.7);
         color:#e8d5a3;padding:10px 15px;border-radius:8px;font-size:13px;
         font-family:monospace;z-index:100;pointer-events:none;">
-        W/↑ Acelerar &nbsp; S/↓ Reversa &nbsp; A/← D/→ Girar &nbsp; ESPACIO Parada &nbsp; Click-derecho Cámara
+        W/&#x2191; Acelerar &nbsp; S/&#x2193; Reversa &nbsp; A/&#x2190; D/&#x2192; Girar &nbsp; ESPACIO Parada &nbsp; Click-derecho C&#xe1;mara
       </div>
     `;
     document.body.appendChild(hint);
@@ -257,12 +259,12 @@ export class MobileControls {
         }
       </style>
       <!-- Left side: steering -->
-      <div class="ctrl-btn" id="btnLeft" style="bottom:35px;left:15px;">◀</div>
-      <div class="ctrl-btn" id="btnRight" style="bottom:35px;left:95px;">▶</div>
+      <div class="ctrl-btn" id="btnLeft" style="bottom:35px;left:15px;">&#x25C0;</div>
+      <div class="ctrl-btn" id="btnRight" style="bottom:35px;left:95px;">&#x25B6;</div>
 
       <!-- Right side: throttle -->
-      <div class="ctrl-btn" id="btnForward" style="bottom:110px;right:40px;">▲</div>
-      <div class="ctrl-btn" id="btnReverse" style="bottom:25px;right:40px;">▼</div>
+      <div class="ctrl-btn" id="btnForward" style="bottom:110px;right:40px;">&#x25B2;</div>
+      <div class="ctrl-btn" id="btnReverse" style="bottom:25px;right:40px;">&#x25BC;</div>
 
       <!-- Action button -->
       <div class="ctrl-btn action-btn" id="btnAction" style="bottom:65px;right:125px;">
@@ -273,7 +275,7 @@ export class MobileControls {
       <div class="gyro-toggle" id="gyroToggle">Giroscopio: OFF</div>
 
       <!-- Camera hint -->
-      <div class="cam-hint" id="camHint">Arrastrá la pantalla para mover la cámara</div>
+      <div class="cam-hint" id="camHint">Arrastr&#xe1; la pantalla para mover la c&#xe1;mara</div>
     `;
     document.body.appendChild(this.controlsDiv);
 
