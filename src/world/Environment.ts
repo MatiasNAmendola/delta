@@ -2,12 +2,12 @@ import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
-import { TerrainMaterial } from "@babylonjs/materials/terrain/terrainMaterial";
 import {
   WORLD_SIZE,
   WATER_LEVEL,
@@ -84,7 +84,8 @@ export class Environment {
   }
 
   private createGround(waterSystem: WaterSystem): void {
-    const subdivisions = 64;
+    // High subdivisions = smooth vertex color blending (no texture pixelation)
+    const subdivisions = 200;
     const ground = MeshBuilder.CreateGround(
       "ground",
       { width: WORLD_SIZE, height: WORLD_SIZE, subdivisions, updatable: true },
@@ -93,180 +94,181 @@ export class Environment {
     ground.position.y = WATER_LEVEL - 0.3;
     ground.receiveShadows = true;
 
-    // Displace vertices for terrain elevation
-    this.displaceTerrainVertices(ground, waterSystem);
+    // Displace vertices for terrain elevation + paint vertex colors
+    this.buildTerrainGeometry(ground, waterSystem, subdivisions);
 
-    // TerrainMaterial: splatmap (low-res, controls blending) + tiling detail textures (high-res)
-    try {
-      const terrainMat = new TerrainMaterial("terrainMat", this.scene);
+    // PBR material with vertex colors — realistic lighting like the water
+    const mat = new PBRMaterial("terrainPBR", this.scene);
+    mat.albedoColor = new Color3(1, 1, 1); // vertex colors provide the color
+    mat.metallic = 0;
+    mat.roughness = 0.92; // mostly matte terrain
+    mat.environmentIntensity = 0.4;
 
-      // Splatmap: R=grass, G=dirt, B=sand — 512px is enough for zone blending
-      terrainMat.mixTexture = this.createSplatmap(waterSystem);
+    // Procedural bump map for surface micro-detail (tiling grass/dirt texture)
+    const bumpTex = this.createTerrainBumpMap();
+    bumpTex.uScale = bumpTex.vScale = 120; // tile many times for fine detail
+    bumpTex.level = 0.6;
+    mat.bumpTexture = bumpTex;
 
-      // Grass detail (R channel) — tiling 256x256 texture repeated across terrain
-      const grassTex = this.createProceduralDetail("grass", [
-        [0.28, 0.52, 0.14], [0.22, 0.45, 0.10], [0.35, 0.58, 0.18], [0.20, 0.40, 0.08]
-      ]);
-      grassTex.uScale = grassTex.vScale = 80;
-      terrainMat.diffuseTexture1 = grassTex;
-
-      // Dirt detail (G channel)
-      const dirtTex = this.createProceduralDetail("dirt", [
-        [0.47, 0.36, 0.20], [0.40, 0.30, 0.16], [0.52, 0.40, 0.24], [0.44, 0.33, 0.18]
-      ]);
-      dirtTex.uScale = dirtTex.vScale = 80;
-      terrainMat.diffuseTexture2 = dirtTex;
-
-      // Sand detail (B channel)
-      const sandTex = this.createProceduralDetail("sand", [
-        [0.72, 0.62, 0.38], [0.68, 0.58, 0.34], [0.76, 0.66, 0.42], [0.65, 0.55, 0.30]
-      ]);
-      sandTex.uScale = sandTex.vScale = 80;
-      terrainMat.diffuseTexture3 = sandTex;
-
-      terrainMat.specularColor = new Color3(0.05, 0.05, 0.05);
-      terrainMat.specularPower = 4;
-      ground.material = terrainMat;
-    } catch (e) {
-      console.warn("TerrainMaterial failed, using fallback:", e);
-      const fallback = new StandardMaterial("groundFallback", this.scene);
-      fallback.diffuseColor = hexToColor3(COLORS.grass);
-      fallback.specularColor = new Color3(0.05, 0.05, 0.05);
-      ground.material = fallback;
-    }
+    ground.material = mat;
   }
 
-  /** Create a 256x256 tiling procedural detail texture for terrain */
-  private createProceduralDetail(name: string, palette: number[][]): DynamicTexture {
-    const size = 256;
-    const tex = new DynamicTexture(`detail_${name}`, size, this.scene, true);
-    const ctx = tex.getContext();
-
-    for (let py = 0; py < size; py++) {
-      for (let px = 0; px < size; px++) {
-        // Multi-frequency noise for natural detail
-        const n1 = this.noise2D(px * 0.08, py * 0.08, 101);
-        const n2 = this.noise2D(px * 0.2, py * 0.2, 202);
-        const n3 = this.noise2D(px * 0.5, py * 0.5, 303);
-
-        // Pick color from palette based on noise
-        const idx = Math.floor(n1 * palette.length) % palette.length;
-        const base = palette[idx];
-        const variation = (n2 - 0.5) * 0.1 + (n3 - 0.5) * 0.06;
-
-        const r = Math.max(0, Math.min(1, base[0] + variation));
-        const g = Math.max(0, Math.min(1, base[1] + variation));
-        const b = Math.max(0, Math.min(1, base[2] + variation * 0.5));
-
-        ctx.fillStyle = `rgb(${Math.floor(r * 255)},${Math.floor(g * 255)},${Math.floor(b * 255)})`;
-        ctx.fillRect(px, py, 1, 1);
-      }
-    }
-    tex.update();
-    return tex;
-  }
-
-  /** Displace terrain vertices — raise land, drop water areas */
-  private displaceTerrainVertices(ground: Mesh, waterSystem: WaterSystem): void {
+  /** Build terrain: displace heights + assign vertex colors based on terrain zone */
+  private buildTerrainGeometry(ground: Mesh, waterSystem: WaterSystem, subdivisions: number): void {
     const positions = ground.getVerticesData(VertexBuffer.PositionKind);
     if (!positions) return;
 
+    const vertexCount = positions.length / 3;
+    const colors = new Float32Array(vertexCount * 4);
     const half = WORLD_SIZE / 2;
+
+    // Grass palette (Delta de Tigre lush greens)
+    const grassColors = [
+      [0.25, 0.50, 0.12], [0.30, 0.55, 0.15], [0.22, 0.45, 0.10],
+      [0.28, 0.48, 0.11], [0.33, 0.52, 0.14], [0.20, 0.42, 0.09],
+    ];
+    // Dirt palette (humid earth)
+    const dirtColors = [
+      [0.42, 0.32, 0.18], [0.48, 0.36, 0.20], [0.38, 0.28, 0.15],
+      [0.45, 0.34, 0.19], [0.40, 0.30, 0.16],
+    ];
+    // Sand/mud palette (riverbank)
+    const sandColors = [
+      [0.65, 0.55, 0.35], [0.70, 0.58, 0.38], [0.60, 0.50, 0.30],
+      [0.55, 0.45, 0.28], [0.62, 0.52, 0.32],
+    ];
+
     for (let i = 0; i < positions.length; i += 3) {
+      const vi = i / 3; // vertex index
       const worldX = positions[i];
       const worldZ = positions[i + 2];
 
-      if (waterSystem.isWater(worldX, worldZ)) {
-        positions[i + 1] = -0.5;
-        continue;
-      }
+      // --- Height displacement ---
+      const inWater = waterSystem.isWater(worldX, worldZ);
 
-      // Estimate distance to water for smooth transition
-      let nearWater = false;
-      for (const d of [3, 6, 10]) {
-        for (let dir = 0; dir < 4; dir++) {
-          const angle = (dir / 4) * Math.PI * 2;
-          if (waterSystem.isWater(worldX + Math.cos(angle) * d, worldZ + Math.sin(angle) * d)) {
-            nearWater = true;
-            break;
+      // Estimate distance to water (check multiple directions)
+      let waterDist = inWater ? 0 : 999;
+      if (!inWater) {
+        for (const d of [2, 4, 7, 12, 20, 30]) {
+          for (let dir = 0; dir < 8; dir++) {
+            const angle = (dir / 8) * Math.PI * 2;
+            if (waterSystem.isWater(worldX + Math.cos(angle) * d, worldZ + Math.sin(angle) * d)) {
+              waterDist = d;
+              break;
+            }
           }
+          if (waterDist < 999) break;
         }
-        if (nearWater) break;
       }
 
-      if (nearWater) {
-        const bankHeight = this.fbm(worldX * 0.02, worldZ * 0.02, 3, 42) * 0.8;
-        positions[i + 1] = Math.max(0, bankHeight);
+      let height: number;
+      if (inWater) {
+        height = -0.5;
+      } else if (waterDist < 10) {
+        // Riverbank: gentle slope
+        const bankNoise = this.fbm(worldX * 0.02, worldZ * 0.02, 3, 42);
+        const t = waterDist / 10;
+        height = -0.1 + t * t * 0.9 + bankNoise * 0.3 * t;
       } else {
+        // Inland: rolling hills
         const edgeFade = 1 - Math.max(Math.abs(worldX) / half, Math.abs(worldZ) / half);
-        const height =
-          this.fbm(worldX * 0.008, worldZ * 0.008, 4, 42) * 4.0 +
-          this.fbm(worldX * 0.025, worldZ * 0.025, 2, 99) * 1.0;
-        positions[i + 1] = Math.max(0.2, height * Math.max(0, edgeFade));
+        const h = this.fbm(worldX * 0.008, worldZ * 0.008, 4, 42) * 4.0
+                + this.fbm(worldX * 0.025, worldZ * 0.025, 2, 99) * 1.0;
+        height = Math.max(0.2, h * Math.max(0, edgeFade));
       }
+      positions[i + 1] = height;
+
+      // --- Vertex color based on terrain zone ---
+      // Use noise at different frequencies for natural variation
+      const n1 = this.noise2D(worldX * 0.03, worldZ * 0.03, 7);
+      const n2 = this.noise2D(worldX * 0.1, worldZ * 0.1, 19);
+      const n3 = this.noise2D(worldX * 0.25, worldZ * 0.25, 41);
+      const microDetail = (n3 - 0.5) * 0.08; // fine grain variation
+
+      let r: number, g: number, b: number;
+
+      if (inWater) {
+        // Muddy riverbed
+        r = 0.25 + microDetail; g = 0.20 + microDetail; b = 0.10;
+      } else if (waterDist < 4) {
+        // Sandy/muddy bank at waterline
+        const noisyT = Math.max(0, Math.min(1, waterDist / 4 + (n1 - 0.5) * 0.3));
+        const sandIdx = Math.floor(n2 * sandColors.length) % sandColors.length;
+        const dirtIdx = Math.floor(n1 * dirtColors.length) % dirtColors.length;
+        const sc = sandColors[sandIdx];
+        const dc = dirtColors[dirtIdx];
+        r = sc[0] + (dc[0] - sc[0]) * noisyT + microDetail;
+        g = sc[1] + (dc[1] - sc[1]) * noisyT + microDetail;
+        b = sc[2] + (dc[2] - sc[2]) * noisyT + microDetail;
+      } else if (waterDist < 15) {
+        // Dirt -> grass transition
+        const noisyT = Math.max(0, Math.min(1, (waterDist - 4) / 11 + (n1 - 0.5) * 0.2));
+        const dirtIdx = Math.floor(n2 * dirtColors.length) % dirtColors.length;
+        const grassIdx = Math.floor(n2 * grassColors.length) % grassColors.length;
+        const dc = dirtColors[dirtIdx];
+        const gc = grassColors[grassIdx];
+        r = dc[0] + (gc[0] - dc[0]) * noisyT + microDetail;
+        g = dc[1] + (gc[1] - dc[1]) * noisyT + microDetail;
+        b = dc[2] + (gc[2] - dc[2]) * noisyT + microDetail;
+      } else {
+        // Full grass with rich variation
+        const idx = Math.floor(n1 * grassColors.length) % grassColors.length;
+        const gc = grassColors[idx];
+        const shade = 0.85 + n2 * 0.3; // sunlit/shaded variation
+        r = gc[0] * shade + microDetail;
+        g = gc[1] * shade + microDetail;
+        b = gc[2] * shade + microDetail;
+
+        // Patches of darker undergrowth
+        if (n1 > 0.68 && n2 < 0.4) {
+          r *= 0.7; g *= 0.8; b *= 0.65;
+        }
+        // Patches of dry/yellow grass
+        if (n2 > 0.75) {
+          r += 0.08; g += 0.04; b -= 0.02;
+        }
+      }
+
+      // Clamp and write RGBA
+      colors[vi * 4]     = Math.max(0, Math.min(1, r));
+      colors[vi * 4 + 1] = Math.max(0, Math.min(1, g));
+      colors[vi * 4 + 2] = Math.max(0, Math.min(1, b));
+      colors[vi * 4 + 3] = 1;
     }
 
     ground.setVerticesData(VertexBuffer.PositionKind, positions);
+    ground.setVerticesData(VertexBuffer.ColorKind, colors);
     ground.createNormals(true);
   }
 
-  /** Create splatmap for TerrainMaterial: R=grass, G=dirt, B=sand */
-  private createSplatmap(waterSystem: WaterSystem): DynamicTexture {
-    const size = 512;
-    const tex = new DynamicTexture("splatmap", size, this.scene, false);
+  /** Procedural tiling bump/normal map for terrain surface micro-detail */
+  private createTerrainBumpMap(): DynamicTexture {
+    const size = 256;
+    const tex = new DynamicTexture("terrainBump", size, this.scene, true);
     const ctx = tex.getContext();
 
-    const half = WORLD_SIZE / 2;
+    // Generate a normal map: encode normals as RGB where (128,128,255) = flat
     for (let py = 0; py < size; py++) {
       for (let px = 0; px < size; px++) {
-        const worldX = (px / size) * WORLD_SIZE - half;
-        const worldZ = (py / size) * WORLD_SIZE - half;
+        // Multi-octave height for this texel
+        const h00 = this.fbm(px * 0.15, py * 0.15, 3, 501)
+                   + this.noise2D(px * 0.6, py * 0.6, 601) * 0.3;
+        const h10 = this.fbm((px + 1) * 0.15, py * 0.15, 3, 501)
+                   + this.noise2D((px + 1) * 0.6, py * 0.6, 601) * 0.3;
+        const h01 = this.fbm(px * 0.15, (py + 1) * 0.15, 3, 501)
+                   + this.noise2D(px * 0.6, (py + 1) * 0.6, 601) * 0.3;
 
-        const inWater = waterSystem.isWater(worldX, worldZ);
+        // Compute normal from height differences
+        const dx = (h10 - h00) * 2.0;
+        const dy = (h01 - h00) * 2.0;
+        const len = Math.sqrt(dx * dx + dy * dy + 1);
 
-        // Estimate distance to nearest water
-        let nearWaterDist = 999;
-        if (inWater) {
-          nearWaterDist = 0;
-        } else {
-          for (const d of [2, 5, 10, 18, 30]) {
-            for (let dir = 0; dir < 8; dir++) {
-              const angle = (dir / 8) * Math.PI * 2;
-              if (waterSystem.isWater(worldX + Math.cos(angle) * d, worldZ + Math.sin(angle) * d)) {
-                nearWaterDist = d;
-                break;
-              }
-            }
-            if (nearWaterDist < 999) break;
-          }
-        }
+        // Encode as RGB normal map (tangent space)
+        const nr = Math.floor((-dx / len * 0.5 + 0.5) * 255);
+        const ng = Math.floor((-dy / len * 0.5 + 0.5) * 255);
+        const nb = Math.floor((1 / len * 0.5 + 0.5) * 255);
 
-        // Noise for organic transitions
-        const n1 = this.noise2D(worldX * 0.04, worldZ * 0.04, 7);
-        const noisyDist = nearWaterDist + (n1 - 0.5) * 8;
-
-        // Blend weights: R=grass, G=dirt, B=sand
-        let rGrass = 0, gDirt = 0, bSand = 0;
-
-        if (inWater || noisyDist < 3) {
-          // At waterline: sand
-          bSand = 1;
-        } else if (noisyDist < 8) {
-          // Sand -> dirt transition
-          const t = (noisyDist - 3) / 5;
-          bSand = 1 - t;
-          gDirt = t;
-        } else if (noisyDist < 18) {
-          // Dirt -> grass transition
-          const t = (noisyDist - 8) / 10;
-          gDirt = 1 - t;
-          rGrass = t;
-        } else {
-          // Full grass
-          rGrass = 1;
-        }
-
-        ctx.fillStyle = `rgb(${Math.floor(rGrass * 255)},${Math.floor(gDirt * 255)},${Math.floor(bSand * 255)})`;
+        ctx.fillStyle = `rgb(${nr},${ng},${nb})`;
         ctx.fillRect(px, py, 1, 1);
       }
     }
