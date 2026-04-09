@@ -5,6 +5,7 @@ import { Environment } from "./world/Environment";
 import { WakeEffect } from "./world/WakeEffect";
 import { GrassSystem } from "./world/GrassSystem";
 import { WeatherSystem } from "./world/WeatherSystem";
+import { Atmosphere } from "./world/Atmosphere";
 import { ForestSystem } from "./world/ForestSystem";
 import { LanchaColectiva } from "./boat/LanchaColectiva";
 import { MobileControls } from "./controls/MobileControls";
@@ -35,6 +36,7 @@ export class GameEngine {
   private wakeEffect!: WakeEffect;
   private grassSystem!: GrassSystem;
   private weatherSystem!: WeatherSystem;
+  private atmosphere!: Atmosphere;
   private forestSystem!: ForestSystem;
   private boat!: LanchaColectiva;
   private controls!: MobileControls;
@@ -99,6 +101,9 @@ export class GameEngine {
 
     // Initialize environment map generation (needs renderer for PMREM)
     this.weatherSystem.initEnvironmentMap(this.renderer);
+
+    // Atmospheric effects — god rays and ambient particles
+    this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer);
 
     this.updateLoadingBar(30, "Generando ríos del Delta...");
 
