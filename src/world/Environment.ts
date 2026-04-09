@@ -23,7 +23,7 @@ export class Environment {
 
   constructor(scene: Scene, waterSystem: WaterSystem) {
     this.scene = scene;
-    this.createGround();
+    this.createGround(waterSystem);
     this.createSkybox();
     this.createTrees(waterSystem);
     this.createRiverVegetation(waterSystem);
@@ -39,9 +39,9 @@ export class Environment {
     return mat;
   }
 
-  private createGround(): void {
+  private createGround(waterSystem: WaterSystem): void {
     // Main ground with subdivisions for height variation
-    const subdivisions = 100;
+    const subdivisions = 50;
     const ground = MeshBuilder.CreateGround(
       "ground",
       { width: WORLD_SIZE, height: WORLD_SIZE, subdivisions },
@@ -92,29 +92,22 @@ export class Environment {
         const wx = positions[i];
         const wz = positions[i + 2];
 
-        // Check distance to nearest river to suppress hills near water
-        let minRiverDist = Infinity;
-        for (const river of RIVER_MAP) {
-          const samples = river.points.length * 3;
-          for (let s = 0; s <= samples; s++) {
-            const t = s / samples;
-            const totalSeg = river.points.length - 1;
-            const segT = t * totalSeg;
-            const seg = Math.min(Math.floor(segT), totalSeg - 1);
-            const lt = segT - seg;
-            const p1 = river.points[seg];
-            const p2 = river.points[Math.min(river.points.length - 1, seg + 1)];
-            const rx = p1[0] + (p2[0] - p1[0]) * lt;
-            const rz = p1[1] + (p2[1] - p1[1]) * lt;
-            const dx = wx - rx;
-            const dz = wz - rz;
-            const d = Math.sqrt(dx * dx + dz * dz) - river.width / 2;
-            if (d < minRiverDist) minRiverDist = d;
+        // Quick river proximity check using waterSystem collision map
+        // Sample a few nearby points to estimate distance to water
+        let nearWater = false;
+        const step = 8;
+        for (let d = 0; d <= 30 && !nearWater; d += step) {
+          if (d === 0) {
+            nearWater = waterSystem.isWater(wx, wz);
+          } else {
+            for (let a = 0; a < 4; a++) {
+              const ax = wx + [d, -d, 0, 0][a];
+              const az = wz + [0, 0, d, -d][a];
+              if (waterSystem.isWater(ax, az)) { nearWater = true; break; }
+            }
           }
         }
-
-        // Height: hills that taper to 0 near rivers
-        const riverFade = Math.max(0, Math.min(1, (minRiverDist - 5) / 25));
+        const riverFade = nearWater ? 0.0 : 1.0;
         const edgeFade = 1 - Math.max(
           Math.abs(wx) / half,
           Math.abs(wz) / half
@@ -312,7 +305,7 @@ export class Environment {
 
   private createTrees(waterSystem: WaterSystem): void {
     const rng = seededRandom(42);
-    const treeCount = 1200;
+    const treeCount = 400;
 
     for (let i = 0; i < treeCount; i++) {
       const x = (rng() - 0.5) * WORLD_SIZE * 0.9;
@@ -365,7 +358,7 @@ export class Environment {
     for (const river of RIVER_MAP) {
       const pathLen = river.points.length - 1;
       // Sample many points along the river
-      const samplesPerSegment = 12;
+      const samplesPerSegment = 4;
       const totalSamples = pathLen * samplesPerSegment;
 
       for (let i = 0; i < totalSamples; i++) {
@@ -929,7 +922,7 @@ export class Environment {
     const dirtMat = this.createMat("dirtBankMat", COLORS.dirt);
 
     for (const river of RIVER_MAP) {
-      const samples = river.points.length * 4;
+      const samples = river.points.length * 2;
       for (let i = 0; i < samples; i++) {
         const t = i / samples;
         const [x, z] = (() => {
