@@ -194,36 +194,173 @@ test.describe("Rendering", () => {
 // ============================================================
 test.describe("Controls", () => {
   test("mobile controls are visible on mobile viewport", async ({ page }) => {
-    // Set mobile viewport
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     await waitForGameReady(page);
     await page.locator("#playBtn").click();
     await page.waitForTimeout(1000);
 
-    // Control buttons should exist
     const parada = page.locator("text=PARADA");
     await expect(parada).toBeVisible({ timeout: 5000 });
   });
 
-  test("keyboard controls move the boat", async ({ page }) => {
+  test("JUGAR button responds to touch on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await waitForGameReady(page);
+
+    // Verify start screen is showing
+    const playBtn = page.locator("#playBtn");
+    await expect(playBtn).toBeVisible({ timeout: 10000 });
+
+    // Tap the button (simulates touch, not just click)
+    await playBtn.tap();
+    await page.waitForTimeout(1500);
+
+    // Start screen should disappear, HUD should show
+    await expect(playBtn).toBeHidden({ timeout: 5000 });
+    const hud = page.locator("#gameHUD");
+    await expect(hud).toBeVisible({ timeout: 5000 });
+  });
+
+  test("touch controls respond to taps on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await waitForGameReady(page);
+    await page.locator("#playBtn").tap();
+    await page.waitForTimeout(1000);
+
+    // Forward button should be visible and tappable
+    const fwdBtn = page.locator("#btnForward");
+    await expect(fwdBtn).toBeVisible({ timeout: 5000 });
+
+    // Tap forward button — should not crash
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await fwdBtn.tap();
+    await page.waitForTimeout(500);
+    // Release
+    await page.waitForTimeout(500);
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("PARADA button responds to touch", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await waitForGameReady(page);
+    await page.locator("#playBtn").tap();
+    await page.waitForTimeout(1000);
+
+    const paradaBtn = page.locator("#btnAction");
+    await expect(paradaBtn).toBeVisible({ timeout: 5000 });
+
+    // Tap PARADA — should not crash
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await paradaBtn.tap();
+    await page.waitForTimeout(500);
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("steering buttons respond to touch", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await waitForGameReady(page);
+    await page.locator("#playBtn").tap();
+    await page.waitForTimeout(1000);
+
+    const leftBtn = page.locator("#btnLeft");
+    const rightBtn = page.locator("#btnRight");
+    await expect(leftBtn).toBeVisible({ timeout: 5000 });
+    await expect(rightBtn).toBeVisible({ timeout: 5000 });
+
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    // Tap left then right
+    await leftBtn.tap();
+    await page.waitForTimeout(300);
+    await rightBtn.tap();
+    await page.waitForTimeout(300);
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("canvas touch preventDefault does NOT block UI buttons", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await waitForGameReady(page);
+
+    // This is the key regression test:
+    // The canvas has touchstart preventDefault, but it should NOT
+    // prevent taps on the JUGAR button or control buttons.
+    const playBtn = page.locator("#playBtn");
+    await expect(playBtn).toBeVisible({ timeout: 10000 });
+
+    // Tap play button via touch
+    await playBtn.tap();
+    await page.waitForTimeout(1500);
+
+    // If the button responded, the HUD should now be visible
+    const hud = page.locator("#gameHUD");
+    await expect(hud).toBeVisible({ timeout: 5000 });
+
+    // Now verify control buttons also respond
+    const fwdBtn = page.locator("#btnForward");
+    await expect(fwdBtn).toBeVisible({ timeout: 5000 });
+
+    // Tap and verify no error
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+    await fwdBtn.tap();
+    await page.waitForTimeout(500);
+    expect(errors).toHaveLength(0);
+  });
+
+  test("keyboard controls work without crash", async ({ page }) => {
     await page.goto("/");
     await waitForGameReady(page);
     await page.locator("#playBtn").click();
     await page.waitForTimeout(1000);
 
-    // Get initial boat position via game state
-    const pos1 = await page.evaluate(() => {
-      return (window as any).__boatPosition?.z ?? null;
-    });
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    // Press forward key
+    // Press all control keys
     await page.keyboard.down("ArrowUp");
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(500);
     await page.keyboard.up("ArrowUp");
+    await page.keyboard.down("ArrowLeft");
+    await page.waitForTimeout(500);
+    await page.keyboard.up("ArrowLeft");
+    await page.keyboard.press(" "); // space = PARADA
 
-    // Note: position might not be exposed on window, so this test
-    // mainly verifies no crash on keyboard input
+    expect(errors).toHaveLength(0);
+  });
+
+  test("weather buttons respond to touch", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await waitForGameReady(page);
+    await page.locator("#playBtn").tap();
+    await page.waitForTimeout(1000);
+
+    const weatherBtns = page.locator(".weather-btn");
+    const count = await weatherBtns.count();
+    expect(count).toBeGreaterThan(0);
+
+    // Tap first weather button — should not crash
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await weatherBtns.first().tap();
+    await page.waitForTimeout(500);
+
+    expect(errors).toHaveLength(0);
   });
 });
 
