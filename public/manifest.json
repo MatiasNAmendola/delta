@@ -1,0 +1,25 @@
+{
+  "name": "Delta de Tigre - Lancha Colectiva",
+  "short_name": "Delta Tigre",
+  "description": "Navegá por los ríos del Delta de Tigre manejando una lancha colectiva",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1a3a2a",
+  "theme_color": "#1a3a2a",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

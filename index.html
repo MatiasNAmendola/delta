@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="screen-orientation" content="landscape" />
+  <title>Delta de Tigre - Lancha Colectiva</title>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#1a3a2a" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a3a2a;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      touch-action: none;
+    }
+    #renderCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      outline: none;
+      touch-action: none;
+    }
+    #loadingScreen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: linear-gradient(135deg, #0a1628 0%, #1a3a2a 50%, #0a2840 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      transition: opacity 0.5s;
+    }
+    #loadingScreen h1 {
+      color: #e8d5a3;
+      font-size: 2.5em;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+      margin-bottom: 10px;
+    }
+    #loadingScreen h2 {
+      color: #7cb8a0;
+      font-size: 1.2em;
+      font-weight: normal;
+      margin-bottom: 30px;
+    }
+    .loading-bar-container {
+      width: 300px;
+      height: 20px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+      overflow: hidden;
+      border: 2px solid #4a7a6a;
+    }
+    .loading-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #4a9a7a, #7cb8a0);
+      border-radius: 8px;
+      transition: width 0.3s;
+    }
+    #loadingText {
+      color: #7cb8a0;
+      margin-top: 15px;
+      font-size: 0.9em;
+    }
+    .boat-emoji {
+      font-size: 4em;
+      margin-bottom: 20px;
+      animation: float 2s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px) rotate(-3deg); }
+      50% { transform: translateY(-10px) rotate(3deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="loadingScreen">
+    <div class="boat-emoji">🚢</div>
+    <h1>Delta de Tigre</h1>
+    <h2>Lancha Colectiva Simulator</h2>
+    <div class="loading-bar-container">
+      <div class="loading-bar" id="loadingBar"></div>
+    </div>
+    <p id="loadingText">Cargando...</p>
+  </div>
+  <canvas id="renderCanvas"></canvas>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
