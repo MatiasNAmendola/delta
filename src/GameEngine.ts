@@ -79,7 +79,14 @@ export class GameEngine {
     this.init();
   }
 
+  private dbg(msg: string): void {
+    const fn = (window as any).__debugLog;
+    if (fn) fn(msg);
+    console.log("[init]", msg);
+  }
+
   private init(): void {
+    this.dbg("init start");
     this.updateLoadingBar(10, "Creando escena...");
     this.scene = new THREE.Scene();
 
@@ -97,57 +104,34 @@ export class GameEngine {
     // (hemisphere light, sun with cascaded shadows, rim back-light).
 
     // Each system in its own try/catch so failures don't block the game
-    try {
-      this.weatherSystem = new WeatherSystem(this.scene);
-      this.weatherSystem.initEnvironmentMap(this.renderer);
-    } catch (e) {
-      console.warn("Weather init failed:", e);
-      // Fallback: add basic lights so scene is visible
-      this.scene.add(new THREE.AmbientLight(0x8899aa, 0.8));
-      this.scene.add(new THREE.DirectionalLight(0xffffff, 1.0));
-    }
-
-    try {
-      this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer);
-    } catch (e) { console.warn("Atmosphere init failed:", e); }
-
-    this.updateLoadingBar(30, "Generando ríos del Delta...");
-
-    try {
-      this.waterSystem = new WaterSystem(this.scene);
-    } catch (e) { console.warn("Water init failed:", e); }
-
-    this.updateLoadingBar(50, "Construyendo islas y vegetación...");
-
-    try {
-      this.environment = new Environment(this.scene, this.waterSystem);
-    } catch (e) { console.warn("Environment init failed:", e); }
-
-    this.updateLoadingBar(70, "Preparando la lancha colectiva...");
+    try { this.weatherSystem = new WeatherSystem(this.scene); this.dbg("weather OK"); } catch (e) { this.dbg("weather FAIL: " + e); this.scene.add(new THREE.AmbientLight(0x8899aa, 0.8)); this.scene.add(new THREE.DirectionalLight(0xffffff, 1.0)); }
+    try { this.weatherSystem?.initEnvironmentMap(this.renderer); } catch (e) { this.dbg("envmap FAIL: " + e); }
+    try { this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer); this.dbg("atmosphere OK"); } catch (e) { this.dbg("atmosphere FAIL: " + e); }
+    try { this.waterSystem = new WaterSystem(this.scene); this.dbg("water OK"); } catch (e) { this.dbg("water FAIL: " + e); }
+    try { this.environment = new Environment(this.scene, this.waterSystem); this.dbg("environment OK"); } catch (e) { this.dbg("env FAIL: " + e); }
 
     try {
       const startDock = DOCK_LOCATIONS[0];
       this.boat = new LanchaColectiva(this.scene, startDock.x + 5, startDock.z);
       this.scene.add(this.boat.rootNode);
-    } catch (e) { console.warn("Boat init failed:", e); }
+      this.dbg("boat OK");
+    } catch (e) { this.dbg("boat FAIL: " + e); }
 
-    try { this.wakeEffect = new WakeEffect(this.scene); } catch (e) { console.warn("Wake init failed:", e); }
-    try { this.grassSystem = new GrassSystem(this.scene, this.waterSystem); } catch (e) { console.warn("Grass init failed:", e); }
-    try { this.forestSystem = new ForestSystem(this.scene, this.waterSystem); } catch (e) { console.warn("Forest init failed:", e); }
+    try { this.wakeEffect = new WakeEffect(this.scene); } catch (e) { this.dbg("wake FAIL: " + e); }
+    try { this.grassSystem = new GrassSystem(this.scene, this.waterSystem); } catch (e) { this.dbg("grass FAIL: " + e); }
+    try { this.forestSystem = new ForestSystem(this.scene, this.waterSystem); } catch (e) { this.dbg("forest FAIL: " + e); }
+    try { this.enableSceneShadows(); } catch (e) { this.dbg("shadows FAIL: " + e); }
+    try { this.waterSystem?.addSceneToRenderList(); } catch (e) { this.dbg("renderlist FAIL: " + e); }
 
-    try { this.enableSceneShadows(); } catch (e) { console.warn("Shadow setup failed:", e); }
-    try { this.waterSystem?.addSceneToRenderList(); } catch (e) { console.warn("Water render list failed:", e); }
-
-    this.updateLoadingBar(85, "Configurando controles...");
-
-    try { this.controls = new MobileControls(this.canvas); } catch (e) { console.warn("Controls init failed:", e); }
+    this.dbg("controls...");
+    try { this.controls = new MobileControls(this.canvas); this.dbg("controls OK"); } catch (e) { this.dbg("controls FAIL: " + e); }
     this.randomizeDockPassengers();
 
-    this.updateLoadingBar(95, "Preparando interfaz...");
-
+    this.dbg("UI...");
     this.ui = new GameUI();
+    this.dbg("onPlayClick...");
     this.ui.onPlayClick(() => {
-      console.log("JUGAR pressed — starting game");
+      this.dbg("JUGAR pressed!");
       this.startGame();
     });
     this.ui.onWeatherChange((preset) => this.weatherSystem?.setWeather(preset as any));
