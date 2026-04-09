@@ -201,7 +201,7 @@ export class GameEngine {
       }
 
       // Update controls
-      const controlState = this.controls.update();
+      const controlState = this.controls.update(dt);
       this.boat.throttle = controlState.throttle;
       this.boat.steering = controlState.steering;
 
@@ -228,7 +228,7 @@ export class GameEngine {
       this.checkDocks(controlState.action);
 
       // Update camera
-      this.updateCamera(dt);
+      this.updateCamera(dt, controlState.cameraAngleOffset, controlState.cameraPitchOffset);
 
       // Update UI
       this.ui.updateScore(this.score);
@@ -337,13 +337,16 @@ export class GameEngine {
     }
   }
 
-  private updateCamera(dt: number): void {
-    const targetX =
-      this.boat.position.x -
-      Math.sin(this.boat.rotation) * CAMERA_DISTANCE * 0.6;
-    const targetZ =
-      this.boat.position.z -
-      Math.cos(this.boat.rotation) * CAMERA_DISTANCE * 0.6;
+  private cameraLookTarget = Vector3.Zero();
+
+  private updateCamera(dt: number, angleOffset: number, pitchOffset: number): void {
+    // Camera orbits around the boat based on boat rotation + user angle offset
+    const cameraAngle = this.boat.rotation + Math.PI + angleOffset;
+    const dist = CAMERA_DISTANCE * 0.6;
+    const height = CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset;
+
+    const targetX = this.boat.position.x + Math.sin(cameraAngle) * dist;
+    const targetZ = this.boat.position.z + Math.cos(cameraAngle) * dist;
 
     this.camera.position.x = lerp(
       this.camera.position.x,
@@ -357,21 +360,27 @@ export class GameEngine {
     );
     this.camera.position.y = lerp(
       this.camera.position.y,
-      CAMERA_HEIGHT + this.boat.speed * 3,
+      height,
       CAMERA_LERP
     );
 
     // Look at boat
-    const lookTarget = new Vector3(
-      lerp(this.camera.getTarget().x, this.boat.position.x, CAMERA_LERP * 2),
-      lerp(
-        this.camera.getTarget().y,
-        this.boat.position.y + 2,
-        CAMERA_LERP * 2
-      ),
-      lerp(this.camera.getTarget().z, this.boat.position.z, CAMERA_LERP * 2)
+    this.cameraLookTarget.x = lerp(
+      this.cameraLookTarget.x,
+      this.boat.position.x,
+      CAMERA_LERP * 2
     );
-    this.camera.setTarget(lookTarget);
+    this.cameraLookTarget.y = lerp(
+      this.cameraLookTarget.y,
+      this.boat.position.y + 2,
+      CAMERA_LERP * 2
+    );
+    this.cameraLookTarget.z = lerp(
+      this.cameraLookTarget.z,
+      this.boat.position.z,
+      CAMERA_LERP * 2
+    );
+    this.camera.setTarget(this.cameraLookTarget);
   }
 
   private updateLocationName(): void {
