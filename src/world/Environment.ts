@@ -797,7 +797,7 @@ export class Environment {
         );
         panel.material = roofMat;
         panel.parent = node;
-        panel.rotation.z = side * Math.atan2(roofPeakH, halfSpan);
+        panel.rotation.z = -side * Math.atan2(roofPeakH, halfSpan);
         panel.position.set((side * halfSpan) / 2, roofBaseY + roofPeakH / 2, roofZ0);
       }
       // Ridge beam
