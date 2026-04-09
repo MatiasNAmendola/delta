@@ -1,27 +1,15 @@
 /**
- * GrassSystem — Efficient grass rendering using thin instances + ShaderMaterial
+ * GrassSystem — Efficient grass rendering using InstancedMesh + ShaderMaterial
  *
  * Technique based on community research:
  * - Cross-billboard quads (2 intersecting planes per grass clump)
- * - Thin instances for GPU-efficient rendering of thousands of blades
+ * - InstancedMesh for GPU-efficient rendering of thousands of blades
  * - Vertex shader wind displacement with sin-based sway
  * - Y-based sway (only tips move, base stays planted)
  *
- * References:
- * - https://forum.babylonjs.com/t/stylized-animated-and-reactive-grass/62558
- * - https://github.com/spacejack/terra (MIT License grass shader)
- * - https://forum.babylonjs.com/t/thin-instance-grass-on-height-map/21568
+ * Three.js implementation using InstancedMesh and ShaderMaterial.
  */
-import { Scene } from "@babylonjs/core/scene";
-import { Mesh } from "@babylonjs/core/Meshes/mesh";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
-import { ShaderMaterial } from "@babylonjs/core/Materials/shaderMaterial";
-import { Effect } from "@babylonjs/core/Materials/effect";
-import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
-import { Texture } from "@babylonjs/core/Materials/Textures/texture";
+import * as THREE from 'three';
 import { WATER_LEVEL, RIVER_MAP, WORLD_SIZE } from "../utils/constants";
 import { WaterSystem } from "./WaterSystem";
 import { seededRandom, getPointOnPath } from "../utils/helpers";
@@ -30,19 +18,10 @@ import { seededRandom, getPointOnPath } from "../utils/helpers";
 const GRASS_VERTEX = `
 precision highp float;
 
-// Attributes
-attribute vec3 position;
-attribute vec3 normal;
-attribute vec2 uv;
-
-// Uniforms
-uniform mat4 world;
-uniform mat4 viewProjection;
 uniform float time;
 uniform float windStrength;
 uniform vec2 windDirection;
 
-// Varying
 varying vec2 vUV;
 varying float vHeight;
 varying float vShade;
@@ -54,7 +33,7 @@ void main() {
     float swayFactor = uv.y * uv.y; // quadratic: tips sway most
 
     // Use world position for varied wind phase across the field
-    vec4 worldPos = world * vec4(pos, 1.0);
+    vec4 worldPos = instanceMatrix * vec4(pos, 1.0);
     float phase = worldPos.x * 0.15 + worldPos.z * 0.12 + time * 2.5;
     float phase2 = worldPos.x * 0.08 - worldPos.z * 0.1 + time * 1.8;
 
@@ -66,7 +45,8 @@ void main() {
     // Slight vertical compression when swaying
     pos.y -= abs(sway) * swayFactor * windStrength * 0.1;
 
-    gl_Position = viewProjection * world * vec4(pos, 1.0);
+    vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
 
     vUV = uv;
     vHeight = uv.y;
@@ -111,25 +91,22 @@ void main() {
 `;
 
 export class GrassSystem {
-  private scene: Scene;
-  private grassMesh: Mesh | null = null;
-  private material: ShaderMaterial | null = null;
+  private scene: THREE.Scene;
+  private grassMesh: THREE.InstancedMesh | null = null;
+  private material: THREE.ShaderMaterial | null = null;
   private time = 0;
 
-  constructor(scene: Scene, waterSystem: WaterSystem) {
+  constructor(scene: THREE.Scene, waterSystem: WaterSystem) {
     this.scene = scene;
-
-    // Register inline shaders
-    Effect.ShadersStore["grassVertexShader"] = GRASS_VERTEX;
-    Effect.ShadersStore["grassPixelShader"] = GRASS_FRAGMENT;
-
     this.createGrassField(waterSystem);
   }
 
-  private createGrassTexture(): DynamicTexture {
+  private createGrassTexture(): THREE.CanvasTexture {
     const size = 64;
-    const tex = new DynamicTexture("grassBladeTex", size, this.scene, false);
-    const ctx = tex.getContext();
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
 
     // Draw a grass blade shape: narrow at base, slightly wider in middle, pointed at top
     ctx.clearRect(0, 0, size, size);
@@ -152,13 +129,14 @@ export class GrassSystem {
         }
       }
     }
-    tex.update(true);
-    tex.hasAlpha = true;
-    return tex;
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
   }
 
-  /** Create a cross-billboard grass clump mesh (2 intersecting quads) */
-  private createGrassClumpMesh(): Mesh {
+  /** Create a cross-billboard grass clump geometry (2 intersecting quads) */
+  private createGrassClumpGeometry(): THREE.BufferGeometry {
     const positions: number[] = [];
     const normals: number[] = [];
     const uvs: number[] = [];
@@ -189,6 +167,7 @@ export class GrassSystem {
       normals.push(s, 0, -c);
       uvs.push(1, 1);
 
+      // Front face
       indices.push(vi, vi + 1, vi + 2);
       indices.push(vi + 1, vi + 3, vi + 2);
       // Back face
@@ -196,57 +175,51 @@ export class GrassSystem {
       indices.push(vi + 2, vi + 3, vi + 1);
     };
 
-    // Two crossing quads at 0° and 90°
+    // Two crossing quads at 0deg and 90deg
     addQuad(0);
     addQuad(Math.PI / 2);
 
-    const mesh = new Mesh("grassClump", this.scene);
-    const vertexData = new VertexData();
-    vertexData.positions = positions;
-    vertexData.normals = normals;
-    vertexData.uvs = uvs;
-    vertexData.indices = indices;
-    vertexData.applyToMesh(mesh);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setIndex(indices);
 
-    return mesh;
+    return geometry;
   }
 
   private createGrassField(waterSystem: WaterSystem): void {
     const grassTex = this.createGrassTexture();
 
     // Create shader material
-    this.material = new ShaderMaterial("grassMat", this.scene, "grass", {
-      attributes: ["position", "normal", "uv"],
-      uniforms: [
-        "world", "viewProjection", "time",
-        "windStrength", "windDirection",
-        "grassColorBase", "grassColorTip",
-        "fogColor", "fogDensity",
-      ],
-      samplers: ["grassTex"],
-      needAlphaTesting: true,
+    this.material = new THREE.ShaderMaterial({
+      vertexShader: GRASS_VERTEX,
+      fragmentShader: GRASS_FRAGMENT,
+      uniforms: {
+        time: { value: 0 },
+        windStrength: { value: 0.4 },
+        windDirection: { value: new THREE.Vector2(0.7, 0.5) },
+        grassColorBase: { value: new THREE.Color(0.2, 0.45, 0.12) },
+        grassColorTip: { value: new THREE.Color(0.4, 0.7, 0.2) },
+        grassTex: { value: grassTex },
+        fogColor: { value: new THREE.Color(0.6, 0.78, 0.85) },
+        fogDensity: { value: 0.0012 },
+      },
+      side: THREE.DoubleSide,
+      transparent: true,
+      depthWrite: true,
     });
 
-    this.material.setTexture("grassTex", grassTex);
-    this.material.setFloat("windStrength", 0.4);
-    this.material.setVector2("windDirection", { x: 0.7, y: 0.5 });
-    this.material.setColor3("grassColorBase", new Color3(0.2, 0.45, 0.12));
-    this.material.setColor3("grassColorTip", new Color3(0.4, 0.7, 0.2));
-    this.material.setColor3("fogColor", new Color3(0.6, 0.78, 0.85));
-    this.material.setFloat("fogDensity", 0.0012);
-    this.material.setFloat("time", 0);
-    this.material.backFaceCulling = false;
-    this.material.alphaMode = 1; // ALPHA_ADD-ish, but we use discard
+    // Create base grass clump geometry
+    const geometry = this.createGrassClumpGeometry();
 
-    // Create base grass clump mesh
-    const clumpMesh = this.createGrassClumpMesh();
-    clumpMesh.material = this.material;
-
-    // Place grass instances along river banks
+    // Collect placement matrices
     const rng = seededRandom(777);
-    const matrices: Matrix[] = [];
-    const tmpPos = Vector3.Zero();
-    const tmpScale = Vector3.Zero();
+    const matrices: THREE.Matrix4[] = [];
+    const tmpPos = new THREE.Vector3();
+    const tmpScale = new THREE.Vector3();
+    const tmpQuat = new THREE.Quaternion();
+    const upAxis = new THREE.Vector3(0, 1, 0);
 
     for (const river of RIVER_MAP) {
       const samplesPerRiver = river.points.length * 6;
@@ -285,39 +258,43 @@ export class GrassSystem {
 
             tmpPos.set(px, WATER_LEVEL - 0.1, pz);
             tmpScale.set(0.8 + rng() * 0.4, scale, 0.8 + rng() * 0.4);
+            tmpQuat.setFromAxisAngle(upAxis, rotY);
 
-            const rot = Quaternion.RotationAxis(Vector3.Up(), rotY);
-            const mat = Matrix.Compose(tmpScale, rot, tmpPos);
-            matrices.push(mat.clone());
+            const mat = new THREE.Matrix4();
+            mat.compose(tmpPos, tmpQuat, tmpScale);
+            matrices.push(mat);
           }
         }
       }
     }
 
-    // Apply all instances as a single buffer for max performance
+    // Create InstancedMesh
     if (matrices.length > 0) {
-      const bufferSize = 16 * matrices.length;
-      const buffer = new Float32Array(bufferSize);
+      const instancedMesh = new THREE.InstancedMesh(geometry, this.material, matrices.length);
       for (let i = 0; i < matrices.length; i++) {
-        matrices[i].copyToArray(buffer, i * 16);
+        instancedMesh.setMatrixAt(i, matrices[i]);
       }
-      clumpMesh.thinInstanceSetBuffer("matrix", buffer, 16);
-      clumpMesh.thinInstanceCount = matrices.length;
+      instancedMesh.instanceMatrix.needsUpdate = true;
+      instancedMesh.frustumCulled = false;
+      this.scene.add(instancedMesh);
+      this.grassMesh = instancedMesh;
     }
 
-    this.grassMesh = clumpMesh;
     console.log(`GrassSystem: ${matrices.length} grass clumps placed`);
   }
 
   public update(deltaTime: number): void {
     this.time += deltaTime;
     if (this.material) {
-      this.material.setFloat("time", this.time);
+      this.material.uniforms.time.value = this.time;
     }
   }
 
   public dispose(): void {
-    if (this.grassMesh) this.grassMesh.dispose();
-    if (this.material) this.material.dispose();
+    if (this.grassMesh) {
+      this.scene.remove(this.grassMesh);
+      this.grassMesh.geometry.dispose();
+      (this.grassMesh.material as THREE.ShaderMaterial).dispose();
+    }
   }
 }
