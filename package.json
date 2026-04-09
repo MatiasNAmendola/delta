@@ -11,9 +11,11 @@
   "dependencies": {
     "@babylonjs/core": "^7.0.0",
     "@babylonjs/gui": "^7.0.0",
+    "@babylonjs/loaders": "^7.54.3",
     "@babylonjs/materials": "^7.0.0"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "^4.3.0",
     "typescript": "^5.4.0",
     "vite": "^5.2.0"
   }
