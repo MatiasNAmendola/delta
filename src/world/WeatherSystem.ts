@@ -147,6 +147,9 @@ export class WeatherSystem {
   private transitionTime = 0;
   private transitionDuration = 2.0; // seconds
 
+  // Cached for external queries (e.g. Atmosphere god-ray positioning)
+  private _sunPosition = new THREE.Vector3();
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
 
@@ -221,6 +224,11 @@ export class WeatherSystem {
     this.current = this.cloneState(PRESETS.morning);
     this.target = this.cloneState(PRESETS.morning);
     this.applyState(this.current);
+  }
+
+  /** Current sun position (world-space, un-normalized) — read by Atmosphere. */
+  public get sunPosition(): THREE.Vector3 {
+    return this._sunPosition;
   }
 
   /**
@@ -428,9 +436,21 @@ export class WeatherSystem {
     const sunDir = state.sunPosition.clone().normalize();
     uniforms['sunPosition'].value.copy(sunDir);
 
+    // Cache sun position for external systems (Atmosphere god rays)
+    this._sunPosition.copy(state.sunPosition);
+
+    // -----------------------------------------------------------------
+    // Custom fog colour: blend between horizon colour, base fog, and
+    // sun-tinted colour depending on sun elevation.
+    // -----------------------------------------------------------------
+    const sunY = sunDir.y; // elevation: 0 = horizon, 1 = zenith, <0 = below
+    const sunInfluence = THREE.MathUtils.clamp(sunY * 2, 0, 1);
+    // Blend base fog toward the sun colour when sun is up
+    const blendedFog = state.fogColor.clone().lerp(state.fogColorSun, sunInfluence * 0.3);
+
     // Fog
     this.fog.density = state.fogDensity;
-    this.fog.color.copy(state.fogColor);
+    this.fog.color.copy(blendedFog);
 
     // Hemisphere light — sky and ground colors match weather
     this.ambient.intensity = state.ambientIntensity;
