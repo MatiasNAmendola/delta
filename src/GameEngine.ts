@@ -86,73 +86,87 @@ export class GameEngine {
   }
 
   private init(): void {
-    this.dbg("init start");
-    this.updateLoadingBar(10, "Creando escena...");
     this.scene = new THREE.Scene();
 
     // Camera
-    this.camera = new THREE.PerspectiveCamera(
-      60,
-      window.innerWidth / window.innerHeight,
-      0.5,
-      800
-    );
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 800);
     this.camera.position.set(0, CAMERA_HEIGHT, -CAMERA_DISTANCE);
     this.camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-    // NOTE: No default ambient/directional lights — WeatherSystem manages all lighting
-    // (hemisphere light, sun with cascaded shadows, rim back-light).
+    // Basic lights so scene is never black
+    this.scene.add(new THREE.AmbientLight(0x8899aa, 0.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+    sun.position.set(100, 150, 50);
+    this.scene.add(sun);
 
-    // Each system in its own try/catch so failures don't block the game
-    try { this.weatherSystem = new WeatherSystem(this.scene); this.dbg("weather OK"); } catch (e) { this.dbg("weather FAIL: " + e); this.scene.add(new THREE.AmbientLight(0x8899aa, 0.8)); this.scene.add(new THREE.DirectionalLight(0xffffff, 1.0)); }
-    try { this.weatherSystem?.initEnvironmentMap(this.renderer); } catch (e) { this.dbg("envmap FAIL: " + e); }
-    try { this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer); this.dbg("atmosphere OK"); } catch (e) { this.dbg("atmosphere FAIL: " + e); }
-    try { this.waterSystem = new WaterSystem(this.scene); this.dbg("water OK"); } catch (e) { this.dbg("water FAIL: " + e); }
-    try { this.environment = new Environment(this.scene, this.waterSystem); this.dbg("environment OK"); } catch (e) { this.dbg("env FAIL: " + e); }
+    // === UI + Controls FIRST (so the page is interactive immediately) ===
+    this.controls = new MobileControls(this.canvas);
+    this.randomizeDockPassengers();
+    this.ui = new GameUI();
+    this.ui.onPlayClick(() => this.startGame());
+    this.ui.onWeatherChange((preset) => this.weatherSystem?.setWeather(preset as any));
 
+    // Start render loop immediately (renders empty scene until world loads)
+    this.clock.start();
+    this.animate();
+
+    // Handle resize
+    window.addEventListener("resize", () => {
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.postProcessing?.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // === Load world asynchronously so the page never freezes ===
+    this.loadWorldAsync();
+  }
+
+  /** Load all world systems in steps, yielding between each to keep the page responsive */
+  private async loadWorldAsync(): Promise<void> {
+    const step = (ms = 0) => new Promise<void>(r => setTimeout(r, ms));
+
+    this.updateLoadingBar(20, "Preparando clima...");
+    await step();
+    try { this.weatherSystem = new WeatherSystem(this.scene); } catch (e) { console.warn("Weather:", e); }
+    try { this.weatherSystem?.initEnvironmentMap(this.renderer); } catch (e) { /* skip */ }
+
+    this.updateLoadingBar(30, "Generando ríos...");
+    await step();
+    try { this.waterSystem = new WaterSystem(this.scene); } catch (e) { console.warn("Water:", e); }
+
+    this.updateLoadingBar(50, "Construyendo terreno...");
+    await step(10); // longer yield — terrain is heavy
+    try { this.environment = new Environment(this.scene, this.waterSystem); } catch (e) { console.warn("Environment:", e); }
+
+    this.updateLoadingBar(70, "Preparando lancha...");
+    await step();
     try {
       const startDock = DOCK_LOCATIONS[0];
       this.boat = new LanchaColectiva(this.scene, startDock.x + 5, startDock.z);
       this.scene.add(this.boat.rootNode);
-      this.dbg("boat OK");
-    } catch (e) { this.dbg("boat FAIL: " + e); }
+    } catch (e) { console.warn("Boat:", e); }
 
-    try { this.wakeEffect = new WakeEffect(this.scene); } catch (e) { this.dbg("wake FAIL: " + e); }
-    try { this.grassSystem = new GrassSystem(this.scene, this.waterSystem); } catch (e) { this.dbg("grass FAIL: " + e); }
-    try { this.forestSystem = new ForestSystem(this.scene, this.waterSystem); } catch (e) { this.dbg("forest FAIL: " + e); }
-    try { this.enableSceneShadows(); } catch (e) { this.dbg("shadows FAIL: " + e); }
-    try { this.waterSystem?.addSceneToRenderList(); } catch (e) { this.dbg("renderlist FAIL: " + e); }
+    this.updateLoadingBar(80, "Vegetación...");
+    await step();
+    try { this.wakeEffect = new WakeEffect(this.scene); } catch (e) { console.warn("Wake:", e); }
+    await step();
+    try { this.grassSystem = new GrassSystem(this.scene, this.waterSystem); } catch (e) { console.warn("Grass:", e); }
+    await step();
+    try { this.forestSystem = new ForestSystem(this.scene, this.waterSystem); } catch (e) { console.warn("Forest:", e); }
 
-    this.dbg("controls...");
-    try { this.controls = new MobileControls(this.canvas); this.dbg("controls OK"); } catch (e) { this.dbg("controls FAIL: " + e); }
-    this.randomizeDockPassengers();
+    this.updateLoadingBar(90, "Efectos...");
+    await step();
+    try { this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer); } catch (e) { console.warn("Atmosphere:", e); }
+    try { this.enableSceneShadows(); } catch (e) { /* skip */ }
+    try { this.waterSystem?.addSceneToRenderList(); } catch (e) { /* skip */ }
 
-    this.dbg("UI...");
-    this.ui = new GameUI();
-    this.dbg("onPlayClick...");
-    this.ui.onPlayClick(() => {
-      this.dbg("JUGAR pressed!");
-      this.startGame();
-    });
-    this.ui.onWeatherChange((preset) => this.weatherSystem?.setWeather(preset as any));
-
-    // Postprocessing pipeline (bloom, DOF, color grading, vignette, SSAO)
+    await step();
+    try { this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera); } catch (e) { console.warn("PostProcess:", e); }
     try {
-      this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera);
-    } catch (e) { console.warn("PostProcessing init failed:", e); }
-
-    // Performance optimizer — measures FPS, auto-adjusts quality
-    try {
-      this.perfOptimizer = new PerformanceOptimizer(
-        this.renderer,
-        this.scene,
-        this.camera
-      );
-      this.perfOptimizer.setDebug(true);
-      this.perfOptimizer.onChange((settings: QualitySettings) => {
-        this.applyQualitySettings(settings);
-      });
-    } catch (e) { console.warn("PerfOptimizer init failed:", e); }
+      this.perfOptimizer = new PerformanceOptimizer(this.renderer, this.scene, this.camera);
+      this.perfOptimizer.onChange((s: QualitySettings) => this.applyQualitySettings(s));
+    } catch (e) { console.warn("PerfOpt:", e); }
 
     this.updateLoadingBar(100, "¡Listo!");
 
@@ -164,24 +178,6 @@ export class GameEngine {
         setTimeout(() => loading.remove(), 500);
       }
     }, 500);
-
-    // Start render loop via requestAnimationFrame
-    this.clock.start();
-    this.animate();
-
-    // Handle resize
-    window.addEventListener("resize", () => {
-      this.camera.aspect = window.innerWidth / window.innerHeight;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.postProcessing?.setSize(window.innerWidth, window.innerHeight);
-      // Re-cap pixel ratio on orientation change / resize
-      const dpr = Math.min(
-        window.devicePixelRatio || 1,
-        this.perfOptimizer?.settings?.maxPixelRatio ?? 2
-      );
-      this.renderer.setPixelRatio(dpr);
-    });
   }
 
   /**
