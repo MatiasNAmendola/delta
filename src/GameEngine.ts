@@ -185,6 +185,12 @@ export class GameEngine {
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
       this.postProcessing.setSize(window.innerWidth, window.innerHeight);
+      // Re-cap pixel ratio on orientation change / resize
+      const dpr = Math.min(
+        window.devicePixelRatio || 1,
+        this.perfOptimizer.settings.maxPixelRatio
+      );
+      this.renderer.setPixelRatio(dpr);
     });
   }
 
