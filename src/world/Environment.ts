@@ -81,7 +81,8 @@ export class Environment {
 
   // --- Terrain ---
   private createGround(waterSystem: WaterSystem): void {
-    const subdivisions = 200;
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 800;
+    const subdivisions = isMobile ? 80 : 150;
     const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, subdivisions, subdivisions);
     geometry.rotateX(-Math.PI / 2);
 
@@ -305,7 +306,9 @@ export class Environment {
 
   private createTrees(waterSystem: WaterSystem): void {
     const rng = seededRandom(42);
-    for (let i = 0; i < 400; i++) {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 800;
+    const treeCount = isMobile ? 80 : 300;
+    for (let i = 0; i < treeCount; i++) {
       const x = (rng() - 0.5) * WORLD_SIZE * 0.9;
       const z = (rng() - 0.5) * WORLD_SIZE * 0.9;
       if (waterSystem.isWater(x, z)) continue;
