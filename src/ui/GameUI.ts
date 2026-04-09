@@ -493,8 +493,8 @@ export class GameUI {
         🗺 Ríos: Luján, Tigre, Sarmiento, Capitán, San Antonio y más.<br>
         📱 En móvil: usá los botones táctiles o el giroscopio para manejar.
       </div>
-      <button class="play-btn" id="playBtn">▶ JUGAR</button>
-      <div id="debugPanel" style="margin-top:15px;color:#ff0;font-size:11px;font-family:monospace;max-height:100px;overflow-y:auto;"></div>
+      <button class="play-btn" id="playBtn" ontouchstart="this.style.background='#ff0'" onclick="this.style.background='#f00'">▶ JUGAR</button>
+      <div id="debugPanel" style="margin-top:15px;color:#ff0;font-size:11px;font-family:monospace;max-height:120px;overflow-y:auto;"></div>
     `;
     document.body.appendChild(this.startScreenDiv);
 
@@ -511,22 +511,42 @@ export class GameUI {
     const btn = document.getElementById("playBtn");
     debug(btn ? "playBtn found" : "playBtn NOT FOUND!");
 
-    if (btn) {
-      const handler = () => {
-        debug("JUGAR tapped! calling startGame...");
-        btn.textContent = "Cargando...";
-        try {
-          callback();
-          debug("startGame OK");
-        } catch (e) {
-          debug("startGame ERROR: " + e);
-        }
-      };
-      btn.addEventListener("click", handler);
-      btn.addEventListener("touchend", handler);
-      // Also add inline onclick as fallback
-      btn.onclick = handler;
-    }
+    if (!btn) return;
+
+    let fired = false;
+    const handler = () => {
+      if (fired) return;
+      fired = true;
+      debug("JUGAR handler fired!");
+      btn.textContent = "Cargando...";
+      try {
+        callback();
+        debug("startGame OK");
+      } catch (e) {
+        debug("startGame ERROR: " + e);
+      }
+    };
+
+    // Try EVERY possible way to capture the tap
+    btn.addEventListener("click", handler);
+    btn.addEventListener("touchstart", handler);
+    btn.addEventListener("touchend", handler);
+    btn.addEventListener("pointerdown", handler);
+    btn.addEventListener("pointerup", handler);
+    btn.addEventListener("mousedown", handler);
+    btn.onclick = handler;
+
+    // Nuclear fallback: listen on window for any touch near the button
+    window.addEventListener("pointerdown", (e) => {
+      const rect = btn.getBoundingClientRect();
+      if (e.clientX >= rect.left && e.clientX <= rect.right &&
+          e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        debug("window pointerdown on btn area!");
+        handler();
+      }
+    });
+
+    debug("all handlers registered");
   }
 
   public onWeatherChange(callback: (preset: string) => void): void {
