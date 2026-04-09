@@ -40,7 +40,7 @@ export class LanchaColectiva {
 
   constructor(scene: Scene, startX: number, startZ: number) {
     this.scene = scene;
-    this.position = new Vector3(startX, WATER_LEVEL + 0.3, startZ);
+    this.position = new Vector3(startX, WATER_LEVEL + 0.6, startZ);
     this.rootNode = new TransformNode("lancha", scene);
     this.rootNode.position = this.position.clone();
 
@@ -75,7 +75,6 @@ export class LanchaColectiva {
       }
 
       // Scale and orient the model to fit the game
-      // Adjust these values based on the actual model dimensions
       const boundingInfo = result.meshes[0]?.getBoundingInfo();
       if (boundingInfo) {
         const extents = boundingInfo.boundingBox.extendSizeWorld;
@@ -83,13 +82,15 @@ export class LanchaColectiva {
         const desiredSize = BOAT_LENGTH;
         const scale = desiredSize / (maxExtent || 1);
         this.modelContainer.scaling.setAll(scale);
-      } else {
-        // Default scale if no bounding info
-        this.modelContainer.scaling.setAll(0.3);
-      }
 
-      // Center the model and place it at water level
-      this.modelContainer.position.y = -0.3;
+        // Center the model on its bounding box and raise it above water
+        const center = boundingInfo.boundingBox.centerWorld;
+        const minY = boundingInfo.boundingBox.minimumWorld.y;
+        this.modelContainer.position.y = -minY * scale + 0.4;
+      } else {
+        this.modelContainer.scaling.setAll(0.3);
+        this.modelContainer.position.y = 0.6;
+      }
 
       // Remove fallback blocky boat
       for (const mesh of this.meshes) {
@@ -247,7 +248,7 @@ export class LanchaColectiva {
       this.position.z,
       this.time
     );
-    this.position.y = WATER_LEVEL + 0.3 + waveH;
+    this.position.y = WATER_LEVEL + 0.6 + waveH;
 
     this.wakeIntensity = Math.abs(this.speed) / BOAT_MAX_SPEED;
 
