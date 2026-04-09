@@ -37,7 +37,7 @@ window.addEventListener("DOMContentLoaded", () => {
   // Register service worker for PWA
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker
-      .register("/sw.js")
+      .register(new URL("/sw.js", import.meta.url).href)
       .catch(() => {
         // Service worker registration failed - game still works
       });
