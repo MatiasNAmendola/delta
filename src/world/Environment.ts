@@ -17,7 +17,7 @@ import {
 } from "../utils/constants";
 import { hexToColor3, seededRandom, isPointInRiver } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
-import { quickTree } from "./QuickTreeGenerator";
+import { createProcTreeMesh, TREE_PRESETS } from "./ProcTreeMesh";
 
 export class Environment {
   private scene: Scene;
@@ -286,135 +286,39 @@ export class Environment {
     }
   }
 
-  // Tree type 0: Weeping willow - cylinder trunk + sphere canopy + drooping curtains
+  // Tree type 0: Weeping willow — procedural branching with drooping shape
   private createWeepingWillow(x: number, z: number, seed: number): void {
     const rng = seededRandom(seed);
-    const treeNode = new TransformNode(`willow_${seed}`, this.scene);
-    treeNode.position.set(x, WATER_LEVEL, z);
-
-    const height = 6 + rng() * 4;
-    const trunkR = 0.25 + rng() * 0.15;
-
-    // Cylinder trunk
-    const trunk = MeshBuilder.CreateCylinder(
-      `wtrunk_${seed}`,
-      { height, diameterTop: trunkR * 1.2, diameterBottom: trunkR * 2.2, tessellation: 8 },
-      this.scene
-    );
-    trunk.material = this.createMat("willowTrunk", COLORS.wood);
-    trunk.parent = treeNode;
-    trunk.position.y = height / 2;
-
-    // Sphere canopy
-    const canopySize = 3.5 + rng() * 2.5;
-    const canopy = MeshBuilder.CreateSphere(
-      `wcanopy_${seed}`,
-      { diameter: canopySize, segments: 6 },
-      this.scene
-    );
-    const willowColors = [COLORS.willowLeaf, COLORS.willowLeafLight, COLORS.leaves];
-    canopy.material = this.createMat("willowCanopy", willowColors[Math.floor(rng() * 3)]);
-    canopy.parent = treeNode;
-    canopy.scaling.y = 0.6; // flatten sphere
-    canopy.position.y = height;
-
-    // Drooping curtain branches
-    const curtainCount = 3 + Math.floor(rng() * 3);
-    for (let c = 0; c < curtainCount; c++) {
-      const angle = (c / curtainCount) * Math.PI * 2 + rng() * 0.4;
-      const radius = canopySize * 0.35 + rng() * canopySize * 0.15;
-      const curtainH = 3 + rng() * 3;
-
-      const curtain = MeshBuilder.CreateCylinder(
-        `wcurt_${seed}_${c}`,
-        { height: curtainH, diameterTop: 0.05, diameterBottom: 0.6 + rng() * 0.4, tessellation: 6 },
-        this.scene
-      );
-      curtain.material = this.createMat("willowCurtain", willowColors[Math.floor(rng() * 3)]);
-      curtain.parent = treeNode;
-      curtain.position.set(
-        Math.cos(angle) * radius,
-        height - curtainH * 0.35,
-        Math.sin(angle) * radius
-      );
-      curtain.rotation.z = Math.cos(angle) * 0.2;
-      curtain.rotation.x = Math.sin(angle) * 0.2;
-    }
-
-    treeNode.rotation.y = rng() * Math.PI * 2;
+    const trunkMat = this.createMat("willowTrunk", COLORS.wood);
+    const leafMat = this.createMat("willowLeaf", COLORS.willowLeaf);
+    const scale = 1.8 + rng() * 1.5;
+    const tree = createProcTreeMesh(`willow_${seed}`, this.scene, trunkMat, leafMat,
+      { ...TREE_PRESETS.willow, seed: seed }, scale);
+    tree.position.set(x, WATER_LEVEL, z);
+    tree.rotation.y = rng() * Math.PI * 2;
   }
 
-  // Tree type 1: Tall poplar - cylinder trunk + elongated sphere canopy
+  // Tree type 1: Tall poplar — procedural columnar branching
   private createPoplar(x: number, z: number, seed: number): void {
     const rng = seededRandom(seed);
-    const treeNode = new TransformNode(`poplar_${seed}`, this.scene);
-    treeNode.position.set(x, WATER_LEVEL, z);
-
-    const height = 8 + rng() * 6;
-    const trunkR = 0.12 + rng() * 0.08;
-
-    // Thin cylinder trunk
-    const trunk = MeshBuilder.CreateCylinder(
-      `ptrunk_${seed}`,
-      { height, diameterTop: trunkR, diameterBottom: trunkR * 2, tessellation: 6 },
-      this.scene
-    );
-    trunk.material = this.createMat("poplarTrunk", COLORS.woodDark);
-    trunk.parent = treeNode;
-    trunk.position.y = height / 2;
-
-    // Tall narrow ellipsoid canopy (sphere stretched vertically)
-    const poplarColors = [COLORS.poplarLeaf, COLORS.poplarLeafDark, COLORS.leavesDark];
-    const canopyW = 1.2 + rng() * 0.8;
-    const canopyH = height * 0.65;
-    const canopy = MeshBuilder.CreateSphere(
-      `pcanopy_${seed}`,
-      { diameter: canopyW, segments: 6 },
-      this.scene
-    );
-    canopy.material = this.createMat("poplarCanopy", poplarColors[Math.floor(rng() * 3)]);
-    canopy.parent = treeNode;
-    canopy.scaling.y = canopyH / canopyW; // stretch vertically
-    canopy.position.y = height * 0.55;
-
-    treeNode.rotation.y = rng() * Math.PI * 2;
+    const trunkMat = this.createMat("poplarTrunk", COLORS.woodDark);
+    const leafMat = this.createMat("poplarLeaf", COLORS.poplarLeaf);
+    const scale = 1.5 + rng() * 1.2;
+    const tree = createProcTreeMesh(`poplar_${seed}`, this.scene, trunkMat, leafMat,
+      { ...TREE_PRESETS.poplar, seed: seed }, scale);
+    tree.position.set(x, WATER_LEVEL, z);
+    tree.rotation.y = rng() * Math.PI * 2;
   }
 
-  // Pre-built tree templates for instancing (created lazily)
-  private treeTemplates: Mesh[] = [];
-
-  /** Create a few tree templates, then clone/instance them for each tree */
-  private ensureTreeTemplates(): void {
-    if (this.treeTemplates.length > 0) return;
-
-    const leafColors = [COLORS.leaves, COLORS.leavesDark, COLORS.leavesLight];
-    // Create 4 template variants with different sizes
-    const configs = [
-      { branch: 3, trunk: 3, radius: 2 },
-      { branch: 4, trunk: 4, radius: 2.5 },
-      { branch: 5, trunk: 5, radius: 3 },
-      { branch: 3.5, trunk: 6, radius: 2.2 },
-    ];
-    for (let i = 0; i < configs.length; i++) {
-      const c = configs[i];
-      const trunkMat = this.createMat("treeTrunk", COLORS.wood);
-      const leafMat = this.createMat("treeLeaf_" + i, leafColors[i % 3]);
-      const tpl = quickTree(c.branch, c.trunk, c.radius, trunkMat, leafMat, this.scene);
-      tpl.setEnabled(false); // template is invisible
-      this.treeTemplates.push(tpl);
-    }
-  }
-
-  // Tree type 2: Regular/eucalyptus — cloned from pre-built templates
+  // Tree type 2: Regular/eucalyptus — procedural branching tree
   private createRegularTree(x: number, z: number, seed: number): void {
-    this.ensureTreeTemplates();
     const rng = seededRandom(seed);
-    const tpl = this.treeTemplates[seed % this.treeTemplates.length];
-    const tree = tpl.clone("tree_" + seed, null);
-    if (!tree) return;
-    tree.setEnabled(true);
-    const scale = 0.7 + rng() * 0.6;
-    tree.scaling.setAll(scale);
+    const leafColors = [COLORS.leaves, COLORS.leavesDark, COLORS.leavesLight];
+    const trunkMat = this.createMat("treeTrunk", COLORS.wood);
+    const leafMat = this.createMat("treeLeaf", leafColors[seed % 3]);
+    const scale = 1.5 + rng() * 1.5;
+    const tree = createProcTreeMesh(`tree_${seed}`, this.scene, trunkMat, leafMat,
+      { ...TREE_PRESETS.regular, seed: seed }, scale);
     tree.position.set(x, WATER_LEVEL, z);
     tree.rotation.y = rng() * Math.PI * 2;
   }
