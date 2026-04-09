@@ -80,10 +80,6 @@ export class GameEngine {
   }
 
   private init(): void {
-    try { this._initSystems(); } catch (e) { console.error("Init error:", e); }
-  }
-
-  private _initSystems(): void {
     this.updateLoadingBar(10, "Creando escena...");
     this.scene = new THREE.Scene();
 
@@ -100,12 +96,16 @@ export class GameEngine {
     // NOTE: No default ambient/directional lights — WeatherSystem manages all lighting
     // (hemisphere light, sun with cascaded shadows, rim back-light).
 
-    // Weather system handles sky, lights, fog, rain, shadows, rim light
-    this.weatherSystem = new WeatherSystem(this.scene);
-
+    // Each system in its own try/catch so failures don't block the game
     try {
+      this.weatherSystem = new WeatherSystem(this.scene);
       this.weatherSystem.initEnvironmentMap(this.renderer);
-    } catch (e) { console.warn("EnvMap init failed:", e); }
+    } catch (e) {
+      console.warn("Weather init failed:", e);
+      // Fallback: add basic lights so scene is visible
+      this.scene.add(new THREE.AmbientLight(0x8899aa, 0.8));
+      this.scene.add(new THREE.DirectionalLight(0xffffff, 1.0));
+    }
 
     try {
       this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer);
@@ -113,45 +113,34 @@ export class GameEngine {
 
     this.updateLoadingBar(30, "Generando ríos del Delta...");
 
-    // Create water system
-    this.waterSystem = new WaterSystem(this.scene);
+    try {
+      this.waterSystem = new WaterSystem(this.scene);
+    } catch (e) { console.warn("Water init failed:", e); }
 
     this.updateLoadingBar(50, "Construyendo islas y vegetación...");
 
-    // Create environment
-    this.environment = new Environment(this.scene, this.waterSystem);
+    try {
+      this.environment = new Environment(this.scene, this.waterSystem);
+    } catch (e) { console.warn("Environment init failed:", e); }
 
     this.updateLoadingBar(70, "Preparando la lancha colectiva...");
 
-    // Create boat at Estación Fluvial Tigre
-    const startDock = DOCK_LOCATIONS[0];
-    this.boat = new LanchaColectiva(
-      this.scene,
-      startDock.x + 5,
-      startDock.z
-    );
+    try {
+      const startDock = DOCK_LOCATIONS[0];
+      this.boat = new LanchaColectiva(this.scene, startDock.x + 5, startDock.z);
+      this.scene.add(this.boat.rootNode);
+    } catch (e) { console.warn("Boat init failed:", e); }
 
-    // Wake effect
-    this.wakeEffect = new WakeEffect(this.scene);
+    try { this.wakeEffect = new WakeEffect(this.scene); } catch (e) { console.warn("Wake init failed:", e); }
+    try { this.grassSystem = new GrassSystem(this.scene, this.waterSystem); } catch (e) { console.warn("Grass init failed:", e); }
+    try { this.forestSystem = new ForestSystem(this.scene, this.waterSystem); } catch (e) { console.warn("Forest init failed:", e); }
 
-    // Grass system — thin instances with wind shader
-    this.grassSystem = new GrassSystem(this.scene, this.waterSystem);
-
-    // Dense instanced forest (8 tree templates, hundreds of thin instances)
-    this.forestSystem = new ForestSystem(this.scene, this.waterSystem);
-
-    // Enable castShadow / receiveShadow on all relevant scene objects
-    this.enableSceneShadows();
-
-    // Add all scene meshes to water reflection/refraction
-    this.waterSystem.addSceneToRenderList();
+    try { this.enableSceneShadows(); } catch (e) { console.warn("Shadow setup failed:", e); }
+    try { this.waterSystem?.addSceneToRenderList(); } catch (e) { console.warn("Water render list failed:", e); }
 
     this.updateLoadingBar(85, "Configurando controles...");
 
-    // Controls — pass the canvas element
     this.controls = new MobileControls(this.canvas);
-
-    // Initialize dock passengers
     this.randomizeDockPassengers();
 
     this.updateLoadingBar(95, "Preparando interfaz...");
@@ -384,50 +373,17 @@ export class GameEngine {
       this.boat.throttle = controlState.throttle;
       this.boat.steering = controlState.steering;
 
-      // Update boat
-      this.boat.update(
-        dt,
-        this.waterSystem,
-        controlState.gyroSteering
+      // Update systems (optional chaining for resilience)
+      this.boat?.update(dt, this.waterSystem, controlState.gyroSteering);
+      this.waterSystem?.update(dt);
+      this.grassSystem?.update(dt);
+      this.weatherSystem?.update(dt, this.boat?.position?.x ?? 0, this.boat?.position?.z ?? 0);
+      this.weatherSystem?.applyWaterFogBoost(
+        this.waterSystem?.isWater(this.boat?.position?.x ?? 0, this.boat?.position?.z ?? 0) ?? false
       );
-
-      // Update water
-      this.waterSystem.update(dt);
-
-      // Update grass wind animation
-      this.grassSystem.update(dt);
-
-      // Update weather (transitions, rain follows boat)
-      this.weatherSystem.update(dt, this.boat.position.x, this.boat.position.z);
-
-      // Apply humidity fog boost when boat is over water
-      this.weatherSystem.applyWaterFogBoost(
-        this.waterSystem.isWater(this.boat.position.x, this.boat.position.z)
-      );
-
-      // Update atmospheric effects (god rays + ambient particles)
-      this.atmosphere?.update(
-        dt,
-        this.weatherSystem.sunPosition,
-        this.boat.position.x,
-        this.boat.position.z
-      );
-
-      // Update shadow camera to follow the boat each frame for optimal shadow quality
-      this.weatherSystem.updateShadowCamera(
-        this.boat.position.x,
-        this.boat.position.y,
-        this.boat.position.z
-      );
-
-      // Update wake
-      this.wakeEffect.update(
-        dt,
-        this.boat.position.x,
-        this.boat.position.z,
-        this.boat.rotation,
-        this.boat.speed
-      );
+      this.atmosphere?.update(dt, this.weatherSystem?.sunPosition, this.boat?.position?.x ?? 0, this.boat?.position?.z ?? 0);
+      this.weatherSystem?.updateShadowCamera(this.boat?.position?.x ?? 0, this.boat?.position?.y ?? 0, this.boat?.position?.z ?? 0);
+      this.wakeEffect?.update(dt, this.boat?.position?.x ?? 0, this.boat?.position?.z ?? 0, this.boat?.rotation ?? 0, this.boat?.speed ?? 0);
 
       // Check dock proximity
       this.checkDocks(controlState.action);
@@ -459,7 +415,7 @@ export class GameEngine {
       this.ui.updateNextStop(targetDock.name, dist);
     } else {
       // Still update water animation even on menus
-      this.waterSystem.update(dt);
+      this.waterSystem?.update(dt);
     }
 
     // Render through postprocessing pipeline, or fall back to direct rendering
