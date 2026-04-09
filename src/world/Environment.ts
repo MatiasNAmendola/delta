@@ -5,6 +5,9 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import { Texture } from "@babylonjs/core/Materials/Textures/texture";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
+import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import {
   WORLD_SIZE,
   WATER_LEVEL,
@@ -15,7 +18,7 @@ import {
 } from "../utils/constants";
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import "@babylonjs/loaders/glTF";
-import { hexToColor3, seededRandom, isPointInRiver } from "../utils/helpers";
+import { hexToColor3, seededRandom } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
 import { createProcTreeMesh, TREE_PRESETS } from "./ProcTreeMesh";
 
@@ -33,7 +36,6 @@ export class Environment {
     this.createTrees(waterSystem);
     this.createHouses(waterSystem);
     this.createDocks();
-    this.createRiverBanks(waterSystem);
     // Load GLB vegetation async (replaces procedural boxes)
     this.loadVegetationModels();
   }
@@ -49,97 +51,195 @@ export class Environment {
     return mat;
   }
 
+  /** Simple value noise for coherent terrain patterns */
+  private noise2D(x: number, z: number, seed: number): number {
+    const hash = (ix: number, iz: number) => {
+      let h = ix * 374761393 + iz * 668265263 + seed * 1274126177;
+      h = (h ^ (h >> 13)) * 1274126177;
+      h = h ^ (h >> 16);
+      return (h & 0x7fffffff) / 0x7fffffff;
+    };
+    const ix = Math.floor(x);
+    const iz = Math.floor(z);
+    const fx = x - ix;
+    const fz = z - iz;
+    const sx = fx * fx * (3 - 2 * fx);
+    const sz = fz * fz * (3 - 2 * fz);
+    const v00 = hash(ix, iz);
+    const v10 = hash(ix + 1, iz);
+    const v01 = hash(ix, iz + 1);
+    const v11 = hash(ix + 1, iz + 1);
+    return v00 * (1 - sx) * (1 - sz) + v10 * sx * (1 - sz) + v01 * (1 - sx) * sz + v11 * sx * sz;
+  }
+
+  /** Multi-octave fractal noise */
+  private fbm(x: number, z: number, octaves: number, seed: number): number {
+    let value = 0, amplitude = 0.5, frequency = 1;
+    for (let i = 0; i < octaves; i++) {
+      value += this.noise2D(x * frequency, z * frequency, seed + i * 31) * amplitude;
+      amplitude *= 0.5;
+      frequency *= 2;
+    }
+    return value;
+  }
+
   private createGround(waterSystem: WaterSystem): void {
-    // Main ground with subdivisions for height variation
-    const subdivisions = 50;
+    const subdivisions = 64;
     const ground = MeshBuilder.CreateGround(
       "ground",
-      { width: WORLD_SIZE, height: WORLD_SIZE, subdivisions },
+      { width: WORLD_SIZE, height: WORLD_SIZE, subdivisions, updatable: true },
       this.scene
     );
-    const groundMat = this.createMat("groundMat", COLORS.grass);
-    ground.material = groundMat;
-    ground.position.y = WATER_LEVEL;
+    ground.position.y = WATER_LEVEL - 0.3;
     ground.receiveShadows = true;
 
-    // Vertex displacement: gentle hills using multi-octave noise
-    const positions = ground.getVerticesData("position");
-    if (positions) {
-      const hash = (x: number, y: number): number => {
-        let h = (x * 374761393 + y * 668265263 + 1013904223) | 0;
-        h = ((h >> 13) ^ h) | 0;
-        h = (h * (h * h * 15731 + 789221) + 1376312589) | 0;
-        return ((h >> 16) & 0x7fff) / 0x7fff;
-      };
-      const smoothNoise = (x: number, y: number, period: number): number => {
-        const ix = ((Math.floor(x) % period) + period) % period;
-        const iy = ((Math.floor(y) % period) + period) % period;
-        const fx = x - Math.floor(x);
-        const fy = y - Math.floor(y);
-        const cx = (1 - Math.cos(fx * Math.PI)) * 0.5;
-        const cy = (1 - Math.cos(fy * Math.PI)) * 0.5;
-        const ix1 = (ix + 1) % period;
-        const iy1 = (iy + 1) % period;
-        return (
-          (hash(ix, iy) * (1 - cx) + hash(ix1, iy) * cx) * (1 - cy) +
-          (hash(ix, iy1) * (1 - cx) + hash(ix1, iy1) * cx) * cy
-        );
-      };
-      const hillNoise = (wx: number, wz: number): number => {
-        let val = 0, amp = 1, freq = 0.008, maxVal = 0;
-        for (let oct = 0; oct < 4; oct++) {
-          const period = Math.max(1, Math.floor(50 * (1 / (freq / 0.008))));
-          val += smoothNoise(wx * freq * 50, wz * freq * 50, period) * amp;
-          maxVal += amp;
-          amp *= 0.45;
-          freq *= 2.2;
+    // Displace vertices for terrain elevation
+    this.displaceTerrainVertices(ground, waterSystem);
+
+    // Create procedural terrain material with grass/dirt/sand splatmap
+    const groundMat = new StandardMaterial("groundMat", this.scene);
+    groundMat.diffuseTexture = this.createTerrainSplatTexture(waterSystem);
+    groundMat.specularColor = new Color3(0.05, 0.05, 0.05);
+    groundMat.specularPower = 4;
+    ground.material = groundMat;
+  }
+
+  /** Displace terrain vertices — raise land, drop water areas */
+  private displaceTerrainVertices(ground: Mesh, waterSystem: WaterSystem): void {
+    const positions = ground.getVerticesData(VertexBuffer.PositionKind);
+    if (!positions) return;
+
+    const half = WORLD_SIZE / 2;
+    for (let i = 0; i < positions.length; i += 3) {
+      const worldX = positions[i];
+      const worldZ = positions[i + 2];
+
+      if (waterSystem.isWater(worldX, worldZ)) {
+        positions[i + 1] = -0.5;
+        continue;
+      }
+
+      // Estimate distance to water for smooth transition
+      let nearWater = false;
+      for (const d of [3, 6, 10]) {
+        for (let dir = 0; dir < 4; dir++) {
+          const angle = (dir / 4) * Math.PI * 2;
+          if (waterSystem.isWater(worldX + Math.cos(angle) * d, worldZ + Math.sin(angle) * d)) {
+            nearWater = true;
+            break;
+          }
         }
-        return val / maxVal;
-      };
+        if (nearWater) break;
+      }
 
-      const half = WORLD_SIZE / 2;
-      for (let i = 0; i < positions.length; i += 3) {
-        const wx = positions[i];
-        const wz = positions[i + 2];
+      if (nearWater) {
+        const bankHeight = this.fbm(worldX * 0.02, worldZ * 0.02, 3, 42) * 0.8;
+        positions[i + 1] = Math.max(0, bankHeight);
+      } else {
+        const edgeFade = 1 - Math.max(Math.abs(worldX) / half, Math.abs(worldZ) / half);
+        const height =
+          this.fbm(worldX * 0.008, worldZ * 0.008, 4, 42) * 4.0 +
+          this.fbm(worldX * 0.025, worldZ * 0.025, 2, 99) * 1.0;
+        positions[i + 1] = Math.max(0.2, height * Math.max(0, edgeFade));
+      }
+    }
 
-        // Estimate distance to water: check rings outward
-        const isInWater = waterSystem.isWater(wx, wz);
-        let minWaterDist = isInWater ? 0 : 999;
-        if (!isInWater) {
-          const step = 6;
-          outer: for (let d = step; d <= 40; d += step) {
-            for (let a = 0; a < 4; a++) {
-              const ax = wx + [d, -d, 0, 0][a];
-              const az = wz + [0, 0, d, -d][a];
-              if (waterSystem.isWater(ax, az)) { minWaterDist = d; break outer; }
+    ground.setVerticesData(VertexBuffer.PositionKind, positions);
+    ground.createNormals(true);
+  }
+
+  /** Create a large procedural texture that blends grass, dirt, and sand based on position */
+  private createTerrainSplatTexture(waterSystem: WaterSystem): DynamicTexture {
+    const size = 1024;
+    const tex = new DynamicTexture("terrainTex", size, this.scene, true);
+    const ctx = tex.getContext();
+
+    const half = WORLD_SIZE / 2;
+    for (let py = 0; py < size; py++) {
+      for (let px = 0; px < size; px++) {
+        // Map pixel to world coordinates
+        const worldX = (px / size) * WORLD_SIZE - half;
+        const worldZ = (py / size) * WORLD_SIZE - half;
+
+        const inWater = waterSystem.isWater(worldX, worldZ);
+
+        // Estimate distance to nearest water
+        let nearWaterDist = 999;
+        if (inWater) {
+          nearWaterDist = 0;
+        } else {
+          for (const d of [2, 5, 10, 18, 30]) {
+            for (let dir = 0; dir < 8; dir++) {
+              const angle = (dir / 8) * Math.PI * 2;
+              if (waterSystem.isWater(worldX + Math.cos(angle) * d, worldZ + Math.sin(angle) * d)) {
+                nearWaterDist = d;
+                break;
+              }
             }
+            if (nearWaterDist < 999) break;
           }
         }
 
-        const edgeFade = 1 - Math.max(Math.abs(wx) / half, Math.abs(wz) / half);
-        const noise = hillNoise(wx, wz);
+        // Noise for natural variation
+        const n1 = this.noise2D(worldX * 0.05, worldZ * 0.05, 7);
+        const n2 = this.noise2D(worldX * 0.12, worldZ * 0.12, 13);
+        const n3 = this.noise2D(worldX * 0.3, worldZ * 0.3, 31);
+        const detail = n3 * 0.15;
 
-        let height: number;
-        if (isInWater) {
-          // Below water — drop terrain well below water surface
-          height = -2.0;
-        } else if (minWaterDist < 8) {
-          // Riverbank: steep rise from just below water to above
-          // At 0m from water: -0.3 (just below waterline 0.05)
-          // At 8m from water: +0.8 (clearly above water)
-          const bankT = minWaterDist / 8;
-          const steepT = bankT * bankT; // steeper at the start
-          height = -0.3 + steepT * 1.1 + noise * 0.3 * bankT;
+        let r: number, g: number, b: number;
+
+        if (inWater) {
+          // Muddy riverbed
+          r = 0.28 + detail; g = 0.22 + detail; b = 0.12;
+        } else if (nearWaterDist < 5) {
+          // Sandy/muddy bank right at waterline
+          const t = nearWaterDist / 5;
+          // Sand color -> dirt transition
+          r = 0.72 - t * 0.25 + n2 * 0.08;
+          g = 0.60 - t * 0.18 + n2 * 0.06;
+          b = 0.35 - t * 0.10 + n2 * 0.04;
+        } else if (nearWaterDist < 15) {
+          // Dirt/earth transition zone
+          const t = (nearWaterDist - 5) / 10;
+          // Dirt -> grass transition
+          const dirtR = 0.47 + n1 * 0.08;
+          const dirtG = 0.38 + n1 * 0.06;
+          const dirtB = 0.20 + n1 * 0.04;
+          const grassR = 0.28 + n1 * 0.1 + n2 * 0.05;
+          const grassG = 0.52 + n1 * 0.12 + n2 * 0.06;
+          const grassB = 0.15 + n1 * 0.04;
+          r = dirtR + (grassR - dirtR) * t + detail;
+          g = dirtG + (grassG - dirtG) * t + detail;
+          b = dirtB + (grassB - dirtB) * t + detail;
         } else {
-          // Inland: gentle hills
-          const hillFade = Math.min(1, (minWaterDist - 8) / 30);
-          height = 0.8 + noise * 4.0 * hillFade * Math.max(0, edgeFade);
+          // Full grass with variation
+          const grassVar = this.fbm(worldX * 0.015, worldZ * 0.015, 3, 77);
+          r = 0.25 + grassVar * 0.15 + n2 * 0.06 + detail;
+          g = 0.48 + grassVar * 0.18 + n2 * 0.08 + detail;
+          b = 0.12 + grassVar * 0.05 + detail;
+
+          // Occasional dark patches (shade under trees / denser grass)
+          if (n1 > 0.65) {
+            r *= 0.75; g *= 0.85; b *= 0.7;
+          }
+          // Occasional lighter patches (dry grass)
+          if (n2 > 0.72) {
+            r += 0.12; g += 0.08; b += 0.04;
+          }
         }
-        positions[i + 1] = height;
+
+        // Clamp
+        r = Math.max(0, Math.min(1, r));
+        g = Math.max(0, Math.min(1, g));
+        b = Math.max(0, Math.min(1, b));
+
+        ctx.fillStyle = `rgb(${Math.floor(r * 255)},${Math.floor(g * 255)},${Math.floor(b * 255)})`;
+        ctx.fillRect(px, py, 1, 1);
       }
-      ground.setVerticesData("position", positions);
-      ground.createNormals(true);
     }
+
+    tex.update();
+    return tex;
   }
 
   // Tree type 0: Weeping willow — procedural branching with drooping shape
@@ -844,69 +944,6 @@ export class Environment {
     sign.position.set(platW / 2 - 0.3, platHeight + 1.7, -platD / 2 + 0.5);
 
     return node;
-  }
-
-  private createRiverBanks(waterSystem: WaterSystem): void {
-    // Create sandy/muddy banks along rivers using simple box strips
-    const bankMat = this.createMat("bankMat", COLORS.sand);
-    const dirtMat = this.createMat("dirtBankMat", COLORS.dirt);
-
-    for (const river of RIVER_MAP) {
-      const samples = river.points.length * 2;
-      for (let i = 0; i < samples; i++) {
-        const t = i / samples;
-        const [x, z] = (() => {
-          const totalSegments = river.points.length - 1;
-          const segT = t * totalSegments;
-          const seg = Math.min(Math.floor(segT), totalSegments - 1);
-          const localT = segT - seg;
-          const p1 = river.points[seg];
-          const p2 = river.points[Math.min(river.points.length - 1, seg + 1)];
-          return [
-            p1[0] + (p2[0] - p1[0]) * localT,
-            p1[1] + (p2[1] - p1[1]) * localT,
-          ] as [number, number];
-        })();
-
-        // Get direction for perpendicular
-        const t2 = Math.min(1, t + 0.02);
-        const [x2, z2] = (() => {
-          const totalSegments = river.points.length - 1;
-          const segT = t2 * totalSegments;
-          const seg = Math.min(Math.floor(segT), totalSegments - 1);
-          const localT = segT - seg;
-          const p1 = river.points[seg];
-          const p2 = river.points[Math.min(river.points.length - 1, seg + 1)];
-          return [
-            p1[0] + (p2[0] - p1[0]) * localT,
-            p1[1] + (p2[1] - p1[1]) * localT,
-          ] as [number, number];
-        })();
-
-        const dx = x2 - x;
-        const dz = z2 - z;
-        const len = Math.sqrt(dx * dx + dz * dz) || 1;
-        const nx = -dz / len;
-        const nz = dx / len;
-
-        const halfW = river.width / 2;
-        const bankW = 2;
-
-        for (const side of [-1, 1]) {
-          const bx = x + nx * (halfW + bankW * 0.5) * side;
-          const bz = z + nz * (halfW + bankW * 0.5) * side;
-
-          const bank = MeshBuilder.CreateBox(
-            `bank_${river.name}_${i}_${side}`,
-            { width: bankW, height: 0.15, depth: WORLD_SIZE / samples + 1 },
-            this.scene
-          );
-          bank.material = i % 2 === 0 ? bankMat : dirtMat;
-          bank.position.set(bx, WATER_LEVEL - 0.05, bz);
-          bank.rotation.y = Math.atan2(dx, dz);
-        }
-      }
-    }
   }
 
   public getDockNode(name: string): TransformNode | undefined {
