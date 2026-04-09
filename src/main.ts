@@ -102,16 +102,8 @@ window.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  // Prevent default touch behaviors on canvas only (not on UI buttons)
-  canvas.addEventListener("touchstart", (e) => {
-    const target = e.target as HTMLElement;
-    // Only prevent default if the touch is directly on the canvas, not on overlaid UI
-    if (target === canvas) e.preventDefault();
-  }, { passive: false });
-  canvas.addEventListener("touchmove", (e) => {
-    const target = e.target as HTMLElement;
-    if (target === canvas) e.preventDefault();
-  }, { passive: false });
+  // CSS touch-action:none on #renderCanvas already prevents scroll/zoom.
+  // No JavaScript preventDefault needed — it was causing touch buttons to break.
 
   // Lock orientation to landscape if possible
   if (screen.orientation && "lock" in screen.orientation) {
