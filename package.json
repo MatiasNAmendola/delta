@@ -15,6 +15,7 @@
     "vite": "^5.2.0"
   },
   "dependencies": {
+    "@dgreenheck/ez-tree": "^1.1.0",
     "postprocessing": "^6.39.0",
     "three": "^0.183.2",
     "three-custom-shader-material": "^6.4.0"
