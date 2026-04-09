@@ -13,6 +13,10 @@ import { seededRandom } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
 import { createProcTreeMesh, TREE_PRESETS } from "./ProcTreeMesh";
 import { createTreeLOD } from "../rendering/TreeLOD";
+import {
+  createDeltaTree,
+  type DeltaSpecies,
+} from "./DeltaTrees";
 
 export class Environment {
   private scene: THREE.Scene;
@@ -222,36 +226,29 @@ export class Environment {
   }
 
   // --- Trees (with LOD) ---
-  private createWeepingWillow(x: number, z: number, seed: number): void {
-    const rng = seededRandom(seed);
-    const trunkMat = this.createMat(COLORS.wood);
-    const leafMat = this.createMat(COLORS.willowLeaf);
-    const scale = 1.8 + rng() * 1.5;
-    const tree = createProcTreeMesh(`willow_${seed}`, this.scene, trunkMat, leafMat,
-      { ...TREE_PRESETS.willow, seed }, scale);
-    // Remove from scene — LOD will manage it
-    this.scene.remove(tree);
-    const lod = createTreeLOD(tree, scale * 4, COLORS.willowLeaf);
+
+  /**
+   * Place a single Delta species tree using ez-tree, wrapped in LOD.
+   */
+  private placeDeltaTree(
+    species: DeltaSpecies,
+    x: number,
+    z: number,
+    seed: number,
+    rngValue: number,
+    yaw: number,
+  ): void {
+    const { group, height, leafColor } = createDeltaTree(species, seed, rngValue);
+    const lod = createTreeLOD(group, height, leafColor);
     lod.position.set(x, WATER_LEVEL, z);
-    lod.rotation.y = rng() * Math.PI * 2;
+    lod.rotation.y = yaw;
     this.scene.add(lod);
   }
 
-  private createPoplar(x: number, z: number, seed: number): void {
-    const rng = seededRandom(seed);
-    const trunkMat = this.createMat(COLORS.woodDark);
-    const leafMat = this.createMat(COLORS.poplarLeaf);
-    const scale = 1.5 + rng() * 1.2;
-    const tree = createProcTreeMesh(`poplar_${seed}`, this.scene, trunkMat, leafMat,
-      { ...TREE_PRESETS.poplar, seed }, scale);
-    this.scene.remove(tree);
-    const lod = createTreeLOD(tree, scale * 5, COLORS.poplarLeaf);
-    lod.position.set(x, WATER_LEVEL, z);
-    lod.rotation.y = rng() * Math.PI * 2;
-    this.scene.add(lod);
-  }
-
-  private createRegularTree(x: number, z: number, seed: number): void {
+  /**
+   * Legacy ProcTree fallback — kept for any future non-ez-tree species.
+   */
+  private createProcTreeFallback(x: number, z: number, seed: number): void {
     const rng = seededRandom(seed);
     const leafColors = [COLORS.leaves, COLORS.leavesDark, COLORS.leavesLight];
     const trunkMat = this.createMat(COLORS.wood);
@@ -288,6 +285,24 @@ export class Environment {
     return minDist;
   }
 
+  /**
+   * Pick a Delta species based on distance-to-river and a random value.
+   *
+   * Distribution logic (ecologically motivated):
+   *   - Sauce lloron (willow): near water (<12 m), 30% chance
+   *   - Ceibo: moderate proximity (<30 m), 15% chance
+   *   - Timbo: anywhere on land, 15% chance (large, sparse)
+   *   - Casuarina: further from water (>10 m), 15% chance
+   *   - Alamo (poplar): anywhere, 25% chance (common windbreak)
+   */
+  private pickSpecies(distToRiver: number, tv: number): DeltaSpecies {
+    if (distToRiver < 12 && tv < 0.30) return "sauce";
+    if (distToRiver < 30 && tv < 0.45) return "ceibo";
+    if (tv < 0.60) return "timbo";
+    if (distToRiver > 10 && tv < 0.75) return "casuarina";
+    return "alamo";
+  }
+
   private createTrees(waterSystem: WaterSystem): void {
     const rng = seededRandom(42);
     for (let i = 0; i < 400; i++) {
@@ -295,13 +310,15 @@ export class Environment {
       const z = (rng() - 0.5) * WORLD_SIZE * 0.9;
       if (waterSystem.isWater(x, z)) continue;
       const dist = this.distToRiver(x, z);
-      let chance = dist < 8 ? 0.95 : dist < 25 ? 0.7 : dist < 60 ? 0.35 : 0.15;
+      const chance = dist < 8 ? 0.95 : dist < 25 ? 0.7 : dist < 60 ? 0.35 : 0.15;
       if (rng() > chance) continue;
+
       const seed = i * 7 + 13;
       const tv = seededRandom(seed + 99)();
-      if (dist < 12 && tv < 0.3) this.createWeepingWillow(x, z, seed);
-      else if (tv < 0.5) this.createPoplar(x, z, seed);
-      else this.createRegularTree(x, z, seed);
+      const scaleRng = seededRandom(seed + 201)();
+      const yaw = rng() * Math.PI * 2;
+      const species = this.pickSpecies(dist, tv);
+      this.placeDeltaTree(species, x, z, seed, scaleRng, yaw);
     }
   }
 

@@ -80,6 +80,10 @@ export class GameEngine {
   }
 
   private init(): void {
+    try { this._initSystems(); } catch (e) { console.error("Init error:", e); }
+  }
+
+  private _initSystems(): void {
     this.updateLoadingBar(10, "Creando escena...");
     this.scene = new THREE.Scene();
 
@@ -99,11 +103,13 @@ export class GameEngine {
     // Weather system handles sky, lights, fog, rain, shadows, rim light
     this.weatherSystem = new WeatherSystem(this.scene);
 
-    // Initialize environment map generation (needs renderer for PMREM)
-    this.weatherSystem.initEnvironmentMap(this.renderer);
+    try {
+      this.weatherSystem.initEnvironmentMap(this.renderer);
+    } catch (e) { console.warn("EnvMap init failed:", e); }
 
-    // Atmospheric effects — god rays and ambient particles
-    this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer);
+    try {
+      this.atmosphere = new Atmosphere(this.scene, this.camera, this.renderer);
+    } catch (e) { console.warn("Atmosphere init failed:", e); }
 
     this.updateLoadingBar(30, "Generando ríos del Delta...");
 
@@ -142,8 +148,8 @@ export class GameEngine {
 
     this.updateLoadingBar(85, "Configurando controles...");
 
-    // Controls — pass scene as any until MobileControls is migrated
-    this.controls = new MobileControls(this.scene as any);
+    // Controls — pass the canvas element
+    this.controls = new MobileControls(this.canvas);
 
     // Initialize dock passengers
     this.randomizeDockPassengers();
@@ -155,18 +161,22 @@ export class GameEngine {
     this.ui.onWeatherChange((preset) => this.weatherSystem.setWeather(preset as any));
 
     // Postprocessing pipeline (bloom, DOF, color grading, vignette, SSAO)
-    this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera);
+    try {
+      this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera);
+    } catch (e) { console.warn("PostProcessing init failed:", e); }
 
     // Performance optimizer — measures FPS, auto-adjusts quality
-    this.perfOptimizer = new PerformanceOptimizer(
-      this.renderer,
-      this.scene,
-      this.camera
-    );
-    this.perfOptimizer.setDebug(true);
-    this.perfOptimizer.onChange((settings: QualitySettings) => {
-      this.applyQualitySettings(settings);
-    });
+    try {
+      this.perfOptimizer = new PerformanceOptimizer(
+        this.renderer,
+        this.scene,
+        this.camera
+      );
+      this.perfOptimizer.setDebug(true);
+      this.perfOptimizer.onChange((settings: QualitySettings) => {
+        this.applyQualitySettings(settings);
+      });
+    } catch (e) { console.warn("PerfOptimizer init failed:", e); }
 
     this.updateLoadingBar(100, "¡Listo!");
 
@@ -188,11 +198,11 @@ export class GameEngine {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.postProcessing.setSize(window.innerWidth, window.innerHeight);
+      this.postProcessing?.setSize(window.innerWidth, window.innerHeight);
       // Re-cap pixel ratio on orientation change / resize
       const dpr = Math.min(
         window.devicePixelRatio || 1,
-        this.perfOptimizer.settings.maxPixelRatio
+        this.perfOptimizer?.settings?.maxPixelRatio ?? 2
       );
       this.renderer.setPixelRatio(dpr);
     });
@@ -357,7 +367,7 @@ export class GameEngine {
     const dt = this.clock.getDelta();
 
     // Update performance optimizer every frame
-    this.perfOptimizer.update(dt);
+    this.perfOptimizer?.update(dt);
 
     if (this.gameStarted && !this.gameOver) {
       this.gameTime += dt;
@@ -396,7 +406,7 @@ export class GameEngine {
       );
 
       // Update atmospheric effects (god rays + ambient particles)
-      this.atmosphere.update(
+      this.atmosphere?.update(
         dt,
         this.weatherSystem.sunPosition,
         this.boat.position.x,
@@ -453,7 +463,7 @@ export class GameEngine {
     }
 
     // Render through postprocessing pipeline, or fall back to direct rendering
-    if (this.postProcessing.enabled) {
+    if (this.postProcessing?.enabled) {
       this.postProcessing.render(dt);
     } else {
       this.renderer.render(this.scene, this.camera);
