@@ -338,17 +338,17 @@ export class WakeEffect {
     mesh: THREE.Mesh,
     side: number
   ): void {
-    if (trail.length < 3) {
+    if (trail.length < 3 || !this.trailsEnabled) {
       mesh.visible = false;
       return;
     }
     mesh.visible = true;
 
-    const vertCount = trail.length * 2;
-    const positions = new Float32Array(vertCount * 3);
-    const colors = new Float32Array(vertCount * 4);
-    const indices: number[] = [];
+    const positions = this.ribbonPositions;
+    const colors = this.ribbonColors;
+    const indices = this.ribbonIndices;
     const y = WATER_LEVEL + 0.07;
+    let idxOffset = 0;
 
     for (let i = 0; i < trail.length; i++) {
       const p = trail[i];
@@ -393,19 +393,44 @@ export class WakeEffect {
       colors[(vi + 1) * 4 + 3] = alpha * 0.5;
 
       if (i < trail.length - 1) {
-        indices.push(vi, vi + 1, vi + 2);
-        indices.push(vi + 1, vi + 3, vi + 2);
+        indices[idxOffset++] = vi;
+        indices[idxOffset++] = vi + 1;
+        indices[idxOffset++] = vi + 2;
+        indices[idxOffset++] = vi + 1;
+        indices[idxOffset++] = vi + 3;
+        indices[idxOffset++] = vi + 2;
       }
     }
 
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 4));
-    geom.setIndex(indices);
+    const vertCount = trail.length * 2;
+    const triIndexCount = (trail.length - 1) * 6;
 
-    // Dispose old geometry and swap
-    mesh.geometry.dispose();
-    mesh.geometry = geom;
+    // Reuse geometry — update attributes in place
+    const geom = mesh.geometry;
+    const posAttr = geom.getAttribute("position") as THREE.BufferAttribute;
+    if (!posAttr || posAttr.count < vertCount) {
+      // Need to re-create if the buffer is too small
+      const newGeom = new THREE.BufferGeometry();
+      newGeom.setAttribute("position", new THREE.Float32BufferAttribute(
+        new Float32Array(positions.buffer.slice(0, vertCount * 3 * 4)), 3
+      ));
+      newGeom.setAttribute("color", new THREE.Float32BufferAttribute(
+        new Float32Array(colors.buffer.slice(0, vertCount * 4 * 4)), 4
+      ));
+      newGeom.setIndex(Array.from(indices.subarray(0, triIndexCount)));
+      geom.dispose();
+      mesh.geometry = newGeom;
+    } else {
+      // Update in place — no allocation
+      const pa = posAttr.array as Float32Array;
+      pa.set(positions.subarray(0, vertCount * 3));
+      posAttr.needsUpdate = true;
+      const ca = (geom.getAttribute("color") as THREE.BufferAttribute).array as Float32Array;
+      ca.set(colors.subarray(0, vertCount * 4));
+      (geom.getAttribute("color") as THREE.BufferAttribute).needsUpdate = true;
+      geom.setIndex(Array.from(indices.subarray(0, triIndexCount)));
+      geom.setDrawRange(0, triIndexCount);
+    }
   }
 
   // -----------------------------------------------------------------------
