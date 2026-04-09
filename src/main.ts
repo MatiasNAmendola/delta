@@ -102,9 +102,16 @@ window.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  // Prevent default touch behaviors
-  canvas.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
-  canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+  // Prevent default touch behaviors on canvas only (not on UI buttons)
+  canvas.addEventListener("touchstart", (e) => {
+    const target = e.target as HTMLElement;
+    // Only prevent default if the touch is directly on the canvas, not on overlaid UI
+    if (target === canvas) e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener("touchmove", (e) => {
+    const target = e.target as HTMLElement;
+    if (target === canvas) e.preventDefault();
+  }, { passive: false });
 
   // Lock orientation to landscape if possible
   if (screen.orientation && "lock" in screen.orientation) {
