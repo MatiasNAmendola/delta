@@ -494,9 +494,9 @@ export class Environment {
             }
           }
 
-          // Grass clumps: at water edge
+          // Grass clumps: near water edge but safely on land
           if (grassTemplates.length > 0 && rng() < 0.5) {
-            const dist = halfW + rng() * 2;
+            const dist = halfW + 2 + rng() * 2;
             const px = cx + nx * dist * side + (rng() - 0.5) * 1.5;
             const pz = cz + nz * dist * side + (rng() - 0.5) * 1.5;
             if (!this.waterSystem.isWater(px, pz)) {
