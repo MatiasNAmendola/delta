@@ -13,6 +13,8 @@ import {
   RIVER_MAP,
   type DockLocation,
 } from "../utils/constants";
+import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
+import "@babylonjs/loaders/glTF";
 import { hexToColor3, seededRandom, isPointInRiver } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
 import { createProcTreeMesh, TREE_PRESETS } from "./ProcTreeMesh";
@@ -22,14 +24,18 @@ export class Environment {
   private dockMeshes: Map<string, TransformNode> = new Map();
   private matCache: Map<string, StandardMaterial> = new Map();
 
+  private waterSystem!: WaterSystem;
+
   constructor(scene: Scene, waterSystem: WaterSystem) {
     this.scene = scene;
+    this.waterSystem = waterSystem;
     this.createGround(waterSystem);
     this.createTrees(waterSystem);
-    this.createRiverVegetation(waterSystem);
     this.createHouses(waterSystem);
     this.createDocks();
     this.createRiverBanks(waterSystem);
+    // Load GLB vegetation async (replaces procedural boxes)
+    this.loadVegetationModels();
   }
 
   /** Shared material cache — one material per color, reused everywhere */
@@ -242,14 +248,59 @@ export class Environment {
     }
   }
 
-  private createRiverVegetation(waterSystem: WaterSystem): void {
-    const rng = seededRandom(777);
+  /** Load GLB vegetation models (bushes, flowers, grass) and scatter along rivers */
+  private async loadVegetationModels(): Promise<void> {
+    const modelNames = [
+      { file: "bush1.glb", type: "bush" },
+      { file: "bush2.glb", type: "bush" },
+      { file: "bush3.glb", type: "bush" },
+      { file: "flower1.glb", type: "flower" },
+      { file: "flower2.glb", type: "flower" },
+      { file: "flower3.glb", type: "flower" },
+      { file: "grass1.glb", type: "grass" },
+    ];
 
-    // Walk along each river and place reeds + bushes at the water's edge
+    // Resolve model URL relative to the page base
+    const base = document.querySelector("base")?.href || window.location.href;
+    const modelsUrl = new URL("models/vegetation/", base).href;
+
+    // Load all models in parallel
+    const templates: { mesh: Mesh; type: string }[] = [];
+    const results = await Promise.allSettled(
+      modelNames.map(async (m) => {
+        try {
+          const result = await SceneLoader.ImportMeshAsync("", modelsUrl, m.file, this.scene);
+          if (result.meshes.length > 0) {
+            // Merge all meshes into one for easy cloning
+            const root = result.meshes[0] as Mesh;
+            root.setEnabled(false); // template hidden
+            root.name = `vegTemplate_${m.file}`;
+            templates.push({ mesh: root, type: m.type });
+          }
+        } catch (e) {
+          console.warn(`Failed to load ${m.file}:`, e);
+        }
+      })
+    );
+
+    if (templates.length === 0) {
+      console.warn("No vegetation models loaded, skipping");
+      return;
+    }
+
+    const bushTemplates = templates.filter((t) => t.type === "bush");
+    const flowerTemplates = templates.filter((t) => t.type === "flower");
+    const grassTemplates = templates.filter((t) => t.type === "grass");
+
+    console.log(`Vegetation loaded: ${bushTemplates.length} bushes, ${flowerTemplates.length} flowers, ${grassTemplates.length} grass`);
+
+    // Scatter along rivers
+    const rng = seededRandom(777);
+    let placed = 0;
+
     for (const river of RIVER_MAP) {
       const pathLen = river.points.length - 1;
-      // Sample many points along the river
-      const samplesPerSegment = 4;
+      const samplesPerSegment = 3;
       const totalSamples = pathLen * samplesPerSegment;
 
       for (let i = 0; i < totalSamples; i++) {
@@ -262,87 +313,71 @@ export class Environment {
         const p2 = river.points[Math.min(river.points.length - 1, seg + 1)];
         const cx = p1[0] + (p2[0] - p1[0]) * lt;
         const cz = p1[1] + (p2[1] - p1[1]) * lt;
-
-        // Perpendicular direction
-        const t2 = Math.min(1, t + 0.01);
-        const segT2 = t2 * totalSeg;
-        const seg2 = Math.min(Math.floor(segT2), totalSeg - 1);
-        const lt2 = segT2 - seg2;
-        const p1b = river.points[seg2];
-        const p2b = river.points[Math.min(river.points.length - 1, seg2 + 1)];
-        const cx2 = p1b[0] + (p2b[0] - p1b[0]) * lt2;
-        const cz2 = p1b[1] + (p2b[1] - p1b[1]) * lt2;
-        const dx = cx2 - cx;
-        const dz = cz2 - cz;
-        const len = Math.sqrt(dx * dx + dz * dz) || 1;
-        const nx = -dz / len;
-        const nz = dx / len;
-
+        const nx = -(p2[1] - p1[1]) / (Math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2) || 1);
+        const nz = (p2[0] - p1[0]) / (Math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2) || 1);
         const halfW = river.width / 2;
 
-        // Both sides of the river
         for (const side of [-1, 1]) {
-          // --- Reeds at waterline ---
-          const reedCount = 2 + Math.floor(rng() * 3);
-          for (let r = 0; r < reedCount; r++) {
-            const offset = halfW + rng() * 2 - 0.5; // right at waterline, slight variation
-            const rx = cx + nx * offset * side + (rng() - 0.5) * 1.5;
-            const rz = cz + nz * offset * side + (rng() - 0.5) * 1.5;
-
-            if (waterSystem.isWater(rx, rz)) continue;
-
-            const reedH = 1.0 + rng() * 1.5;
-            const reedW = 0.12 + rng() * 0.1;
-            const reedSeed = i * 31 + r * 7 + (side > 0 ? 0 : 5000);
-
-            const reed = MeshBuilder.CreateBox(
-              `reed_${river.name}_${reedSeed}`,
-              { width: reedW, height: reedH, depth: reedW },
-              this.scene
-            );
-            const reedColors = [COLORS.reed, COLORS.reedDark, COLORS.leavesLight];
-            reed.material = this.createMat(
-              `reedMat_${reedSeed}`,
-              reedColors[Math.floor(rng() * 3)]
-            );
-            reed.position.set(rx, WATER_LEVEL + reedH / 2, rz);
-            // Slight random tilt for natural look
-            reed.rotation.x = (rng() - 0.5) * 0.2;
-            reed.rotation.z = (rng() - 0.5) * 0.2;
+          // Bushes: 2-8m from water
+          if (bushTemplates.length > 0 && rng() < 0.4) {
+            const dist = halfW + 2 + rng() * 6;
+            const px = cx + nx * dist * side + (rng() - 0.5) * 3;
+            const pz = cz + nz * dist * side + (rng() - 0.5) * 3;
+            if (!this.waterSystem.isWater(px, pz)) {
+              const tpl = bushTemplates[Math.floor(rng() * bushTemplates.length)];
+              const clone = tpl.mesh.clone(`bush_${placed}`, null);
+              if (clone) {
+                clone.setEnabled(true);
+                const scale = 0.4 + rng() * 0.6;
+                clone.scaling.setAll(scale);
+                clone.position.set(px, WATER_LEVEL + 0.3, pz);
+                clone.rotation.y = rng() * Math.PI * 2;
+                placed++;
+              }
+            }
           }
 
-          // --- Low bushes between trees near the river (every other sample) ---
-          if (i % 2 === 0) {
-            const bushCount = 1 + Math.floor(rng() * 2);
-            for (let b = 0; b < bushCount; b++) {
-              const bOffset = halfW + 2 + rng() * 6; // a bit inland from waterline
-              const bx = cx + nx * bOffset * side + (rng() - 0.5) * 3;
-              const bz = cz + nz * bOffset * side + (rng() - 0.5) * 3;
+          // Flowers: 1-5m from water, smaller
+          if (flowerTemplates.length > 0 && rng() < 0.3) {
+            const dist = halfW + 1 + rng() * 4;
+            const px = cx + nx * dist * side + (rng() - 0.5) * 2;
+            const pz = cz + nz * dist * side + (rng() - 0.5) * 2;
+            if (!this.waterSystem.isWater(px, pz)) {
+              const tpl = flowerTemplates[Math.floor(rng() * flowerTemplates.length)];
+              const clone = tpl.mesh.clone(`flower_${placed}`, null);
+              if (clone) {
+                clone.setEnabled(true);
+                const scale = 0.2 + rng() * 0.4;
+                clone.scaling.setAll(scale);
+                clone.position.set(px, WATER_LEVEL + 0.2, pz);
+                clone.rotation.y = rng() * Math.PI * 2;
+                placed++;
+              }
+            }
+          }
 
-              if (waterSystem.isWater(bx, bz)) continue;
-
-              const bushH = 0.6 + rng() * 0.8;
-              const bushW = 0.8 + rng() * 1.2;
-              const bushSeed = i * 41 + b * 11 + (side > 0 ? 10000 : 15000);
-
-              const bush = MeshBuilder.CreateSphere(
-                `bush_${river.name}_${bushSeed}`,
-                { diameter: bushW, segments: 4 },
-                this.scene
-              );
-              const bushColors = [COLORS.bush, COLORS.bushDark, COLORS.leavesDark, COLORS.leaves];
-              bush.material = this.createMat(
-                `bushMat_${bushSeed}`,
-                bushColors[Math.floor(rng() * 4)]
-              );
-              bush.scaling.y = bushH / bushW; // squash into bush shape
-              bush.position.set(bx, WATER_LEVEL + bushH * 0.4, bz);
-              bush.rotation.y = rng() * Math.PI * 2;
+          // Grass clumps: at water edge
+          if (grassTemplates.length > 0 && rng() < 0.5) {
+            const dist = halfW + rng() * 2;
+            const px = cx + nx * dist * side + (rng() - 0.5) * 1.5;
+            const pz = cz + nz * dist * side + (rng() - 0.5) * 1.5;
+            if (!this.waterSystem.isWater(px, pz)) {
+              const tpl = grassTemplates[Math.floor(rng() * grassTemplates.length)];
+              const clone = tpl.mesh.clone(`grass_${placed}`, null);
+              if (clone) {
+                clone.setEnabled(true);
+                const scale = 0.3 + rng() * 0.5;
+                clone.scaling.setAll(scale);
+                clone.position.set(px, WATER_LEVEL + 0.1, pz);
+                clone.rotation.y = rng() * Math.PI * 2;
+                placed++;
+              }
             }
           }
         }
       }
     }
+    console.log(`Vegetation: ${placed} instances placed`);
   }
 
   private createHouse(
