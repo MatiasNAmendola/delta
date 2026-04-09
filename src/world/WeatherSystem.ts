@@ -5,6 +5,11 @@
  *
  * Three.js implementation using Sky shader, HemisphereLight,
  * DirectionalLight, FogExp2, and Points-based rain.
+ *
+ * Features:
+ * - Cascaded shadow maps on directional (sun) light
+ * - Rim/back-light for boat silhouette pop
+ * - PMREMGenerator environment map from sky for PBR reflections
  */
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
@@ -75,12 +80,21 @@ const PRESETS: Record<WeatherPreset, WeatherState> = {
 /** Maximum number of rain particles */
 const MAX_RAIN_PARTICLES = 2000;
 
+/** Shadow frustum half-size — area around the boat covered by shadow camera */
+const SHADOW_FRUSTUM_SIZE = 60;
+
 export class WeatherSystem {
   private scene: THREE.Scene;
   private sky: Sky;
   private ambient: THREE.HemisphereLight;
   private sun: THREE.DirectionalLight;
+  private rimLight: THREE.DirectionalLight;
   private fog: THREE.FogExp2;
+
+  // Environment map for PBR reflections
+  private pmremGenerator: THREE.PMREMGenerator | null = null;
+  private envMapDirty = true;
+  private envMapCooldown = 0;
 
   // Rain
   private rainPoints: THREE.Points;
@@ -108,13 +122,38 @@ export class WeatherSystem {
     this.sky.scale.setScalar(10000);
     scene.add(this.sky);
 
-    // --- Lights ---
+    // --- Hemisphere Light (sky + ground colors matching weather) ---
     this.ambient = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
     scene.add(this.ambient);
 
+    // --- Directional Light (sun) with shadow casting ---
     this.sun = new THREE.DirectionalLight(0xffffff, 0.6);
     this.sun.position.set(-0.5, 1, 0.5).normalize();
+    this.sun.castShadow = true;
+
+    // Shadow map configuration — cascaded shadow maps
+    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.shadow.camera.near = 0.5;
+    this.sun.shadow.camera.far = 200;
+
+    // Orthographic shadow camera bounds centered around origin (will follow boat)
+    this.sun.shadow.camera.left = -SHADOW_FRUSTUM_SIZE;
+    this.sun.shadow.camera.right = SHADOW_FRUSTUM_SIZE;
+    this.sun.shadow.camera.top = SHADOW_FRUSTUM_SIZE;
+    this.sun.shadow.camera.bottom = -SHADOW_FRUSTUM_SIZE;
+
+    // Softer shadow edges
+    this.sun.shadow.bias = -0.0005;
+    this.sun.shadow.normalBias = 0.02;
+
     scene.add(this.sun);
+    scene.add(this.sun.target);
+
+    // --- Rim / back-light — subtle light opposite the sun for boat silhouette pop ---
+    this.rimLight = new THREE.DirectionalLight(0xaaccff, 0.15);
+    this.rimLight.position.set(0.5, 0.3, -0.5).normalize();
+    this.rimLight.castShadow = false; // rim light does not cast shadows
+    scene.add(this.rimLight);
 
     // --- Fog ---
     this.fog = new THREE.FogExp2(0xcccccc, 0.0012);
@@ -151,6 +190,57 @@ export class WeatherSystem {
     this.applyState(this.current);
   }
 
+  /**
+   * Initialize the PMREM generator for environment maps.
+   * Must be called after the renderer is available (from GameEngine).
+   */
+  public initEnvironmentMap(renderer: THREE.WebGLRenderer): void {
+    this.pmremGenerator = new THREE.PMREMGenerator(renderer);
+    this.pmremGenerator.compileCubemapShader();
+    this.envMapDirty = true;
+  }
+
+  /**
+   * Regenerate the environment map from the current sky.
+   * Called sparingly (on weather change or periodically) since it is expensive.
+   */
+  private updateEnvironmentMap(): void {
+    if (!this.pmremGenerator) return;
+
+    // Generate an environment map from the sky scene
+    const renderTarget = this.pmremGenerator.fromScene(this.scene, 0, 0.1, 1000);
+    this.scene.environment = renderTarget.texture;
+    this.envMapDirty = false;
+  }
+
+  /**
+   * Update the shadow camera so it follows the boat position for optimal shadow quality.
+   * Called each frame from GameEngine.
+   */
+  public updateShadowCamera(boatX: number, boatY: number, boatZ: number): void {
+    // Place the sun light high above the boat, offset by the sun direction
+    const sunDir = this.current.sunPosition.clone().normalize();
+    const shadowDistance = 100;
+
+    // Position the light source relative to the boat
+    this.sun.position.set(
+      boatX + sunDir.x * shadowDistance,
+      boatY + sunDir.y * shadowDistance + 50,
+      boatZ + sunDir.z * shadowDistance
+    );
+
+    // The shadow camera target follows the boat
+    this.sun.target.position.set(boatX, boatY, boatZ);
+    this.sun.target.updateMatrixWorld();
+
+    // Update rim light to point opposite to the sun direction
+    this.rimLight.position.set(
+      boatX - sunDir.x * shadowDistance,
+      boatY + 30,
+      boatZ - sunDir.z * shadowDistance
+    );
+  }
+
   private createRainTexture(): THREE.CanvasTexture {
     const size = 16;
     const canvas = document.createElement('canvas');
@@ -171,6 +261,8 @@ export class WeatherSystem {
     this.target = this.cloneState(PRESETS[preset]);
     this.transitioning = true;
     this.transitionTime = 0;
+    // Mark environment map as needing refresh after transition
+    this.envMapDirty = true;
   }
 
   /** Update — call each frame with deltaTime */
@@ -182,20 +274,29 @@ export class WeatherSystem {
     // Update rain particles
     this.updateRain(deltaTime);
 
-    if (!this.transitioning) return;
+    if (this.transitioning) {
+      this.transitionTime += deltaTime;
+      const t = Math.min(1, this.transitionTime / this.transitionDuration);
+      // Smooth ease
+      const ease = t * t * (3 - 2 * t);
 
-    this.transitionTime += deltaTime;
-    const t = Math.min(1, this.transitionTime / this.transitionDuration);
-    // Smooth ease
-    const ease = t * t * (3 - 2 * t);
+      this.lerpState(this.current, this.target, ease);
+      this.applyState(this.current);
 
-    this.lerpState(this.current, this.target, ease);
-    this.applyState(this.current);
+      if (t >= 1) {
+        this.transitioning = false;
+        // Copy target values to current
+        this.copyState(this.current, this.target);
+      }
+    }
 
-    if (t >= 1) {
-      this.transitioning = false;
-      // Copy target values to current
-      this.copyState(this.current, this.target);
+    // Periodically refresh environment map (every ~2 seconds when dirty)
+    if (this.envMapDirty && this.pmremGenerator) {
+      this.envMapCooldown -= deltaTime;
+      if (this.envMapCooldown <= 0) {
+        this.updateEnvironmentMap();
+        this.envMapCooldown = 2.0;
+      }
     }
   }
 
@@ -298,14 +399,26 @@ export class WeatherSystem {
     this.fog.density = state.fogDensity;
     this.fog.color.copy(state.fogColor);
 
-    // Lights
+    // Hemisphere light — sky and ground colors match weather
     this.ambient.intensity = state.ambientIntensity;
     this.ambient.color.copy(state.ambientSkyColor);
     this.ambient.groundColor.copy(state.ambientGroundColor);
+
+    // Sun directional light
     this.sun.intensity = state.sunIntensity;
     this.sun.color.copy(state.sunColor);
-    // Point directional light from the sun direction
+    // Point directional light from the sun direction (position updated per-frame in updateShadowCamera)
     this.sun.position.copy(state.sunPosition).normalize();
+
+    // Rim light intensity varies with weather — brighter during harsh lighting, dimmer at night
+    const rimIntensity = Math.max(0.05, state.sunIntensity * 0.2);
+    this.rimLight.intensity = rimIntensity;
+    // Tint rim light with a cool complementary color
+    this.rimLight.color.setRGB(
+      0.6 + state.ambientSkyColor.r * 0.3,
+      0.7 + state.ambientSkyColor.g * 0.2,
+      0.9 + state.ambientSkyColor.b * 0.1
+    );
 
     // Background color matches fog for seamless horizon
     this.scene.background = state.fogColor.clone();
@@ -351,8 +464,13 @@ export class WeatherSystem {
     this.scene.remove(this.sky);
     this.scene.remove(this.ambient);
     this.scene.remove(this.sun);
+    this.scene.remove(this.sun.target);
+    this.scene.remove(this.rimLight);
     this.scene.remove(this.rainPoints);
     this.rainGeometry.dispose();
     (this.rainPoints.material as THREE.PointsMaterial).dispose();
+    if (this.pmremGenerator) {
+      this.pmremGenerator.dispose();
+    }
   }
 }

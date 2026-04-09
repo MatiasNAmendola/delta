@@ -21,6 +21,8 @@ import {
   RIVER_MAP,
 } from "./utils/constants";
 import { distance2D, lerp } from "./utils/helpers";
+import { PostProcessing } from "./rendering/PostProcessing";
+import { PerformanceOptimizer, type QualitySettings } from "./rendering/PerformanceOptimizer";
 
 export class GameEngine {
   private renderer: THREE.WebGLRenderer;
@@ -37,6 +39,8 @@ export class GameEngine {
   private boat!: LanchaColectiva;
   private controls!: MobileControls;
   private ui!: GameUI;
+  private postProcessing!: PostProcessing;
+  private perfOptimizer!: PerformanceOptimizer;
 
   private gameStarted = false;
   private gameOver = false;
@@ -141,6 +145,9 @@ export class GameEngine {
     this.ui.onPlayClick(() => this.startGame());
     this.ui.onWeatherChange((preset) => this.weatherSystem.setWeather(preset as any));
 
+    // Postprocessing pipeline (bloom, DOF, color grading, vignette, SSAO)
+    this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera);
+
     this.updateLoadingBar(100, "¡Listo!");
 
     // Hide loading screen
@@ -161,6 +168,7 @@ export class GameEngine {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.postProcessing.setSize(window.innerWidth, window.innerHeight);
     });
   }
 
@@ -283,7 +291,12 @@ export class GameEngine {
       this.waterSystem.update(dt);
     }
 
-    this.renderer.render(this.scene, this.camera);
+    // Render through postprocessing pipeline, or fall back to direct rendering
+    if (this.postProcessing.enabled) {
+      this.postProcessing.render(dt);
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   private checkDocks(actionPressed: boolean): void {
