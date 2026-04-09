@@ -1,12 +1,5 @@
-import { Scene } from "@babylonjs/core/scene";
-import { Mesh } from "@babylonjs/core/Meshes/mesh";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
-import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
-import "@babylonjs/loaders/glTF";
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
   BOAT_MAX_SPEED,
   BOAT_ACCELERATION,
@@ -18,12 +11,12 @@ import {
   COLORS,
   MAX_PASSENGERS,
 } from "../utils/constants";
-import { hexToColor3, clamp } from "../utils/helpers";
+import { clamp } from "../utils/helpers";
 import { WaterSystem } from "../world/WaterSystem";
 
 export class LanchaColectiva {
-  public rootNode: TransformNode;
-  public position: Vector3;
+  public rootNode: THREE.Group;
+  public position: THREE.Vector3;
   public rotation = 0; // Y-axis rotation
   public speed = 0;
   public throttle = 0; // -1 to 1
@@ -32,17 +25,16 @@ export class LanchaColectiva {
   public wakeIntensity = 0;
   public modelLoaded = false;
 
-  private scene: Scene;
-  private meshes: Mesh[] = [];
+  private meshes: THREE.Mesh[] = [];
   private time = 0;
   private bobPhase = 0;
-  private modelContainer: TransformNode | null = null;
+  private modelContainer: THREE.Group | null = null;
 
-  constructor(scene: Scene, startX: number, startZ: number) {
-    this.scene = scene;
-    this.position = new Vector3(startX, WATER_LEVEL + 0.08, startZ);
-    this.rootNode = new TransformNode("lancha", scene);
-    this.rootNode.position = this.position.clone();
+  constructor(scene: THREE.Scene, startX: number, startZ: number) {
+    this.position = new THREE.Vector3(startX, WATER_LEVEL + 0.08, startZ);
+    this.rootNode = new THREE.Group();
+    this.rootNode.name = "lancha";
+    this.rootNode.position.copy(this.position);
 
     // Build fallback blocky boat immediately
     this.buildFallbackBoat();
@@ -50,147 +42,135 @@ export class LanchaColectiva {
     this.loadGLBModel();
   }
 
-  private async loadGLBModel(): Promise<void> {
+  private loadGLBModel(): void {
     try {
-      // Resolve the model URL relative to the page base
+      const loader = new GLTFLoader();
       const base = document.querySelector("base")?.href || window.location.href;
-      const modelsUrl = new URL("models/", base).href;
+      const url = new URL("models/lancha-optimized.glb", base).href;
 
-      const result = await SceneLoader.ImportMeshAsync(
-        "",
-        modelsUrl,
-        "lancha-optimized.glb",
-        this.scene
-      );
+      loader.load(
+        url,
+        (gltf) => {
+          // Create container for the GLB model
+          this.modelContainer = gltf.scene;
+          this.modelContainer.name = "lanchaModel";
 
-      // Create container for the GLB model
-      this.modelContainer = new TransformNode("lanchaModel", this.scene);
-      this.modelContainer.parent = this.rootNode;
+          // Scale and orient the model to fit the game
+          const box = new THREE.Box3().setFromObject(gltf.scene);
+          const size = box.getSize(new THREE.Vector3());
+          const maxExtent = Math.max(size.x, size.y, size.z);
+          const scale = BOAT_LENGTH / (maxExtent || 1);
+          this.modelContainer.scale.setScalar(scale);
 
-      // Parent all loaded meshes to our container
-      for (const mesh of result.meshes) {
-        if (!mesh.parent) {
-          mesh.parent = this.modelContainer;
+          // Center the model on its bounding box and raise it above water
+          const minY = box.min.y;
+          this.modelContainer.position.y = -minY * scale - 0.02;
+
+          this.rootNode.add(this.modelContainer);
+
+          // Remove fallback blocky boat
+          for (const mesh of this.meshes) {
+            this.rootNode.remove(mesh);
+            mesh.geometry.dispose();
+            if (mesh.material instanceof THREE.Material) {
+              mesh.material.dispose();
+            }
+          }
+          this.meshes = [];
+
+          this.modelLoaded = true;
+          console.log("Lancha GLB model loaded successfully");
+        },
+        undefined,
+        (error) => {
+          console.warn("Could not load GLB model, using fallback:", error);
+          // Keep the fallback blocky boat
         }
-      }
-
-      // Scale and orient the model to fit the game
-      const boundingInfo = result.meshes[0]?.getBoundingInfo();
-      if (boundingInfo) {
-        const extents = boundingInfo.boundingBox.extendSizeWorld;
-        const maxExtent = Math.max(extents.x, extents.y, extents.z) * 2;
-        const desiredSize = BOAT_LENGTH;
-        const scale = desiredSize / (maxExtent || 1);
-        this.modelContainer.scaling.setAll(scale);
-
-        // Center the model on its bounding box and raise it above water
-        const center = boundingInfo.boundingBox.centerWorld;
-        const minY = boundingInfo.boundingBox.minimumWorld.y;
-        this.modelContainer.position.y = -minY * scale - 0.02;
-      } else {
-        this.modelContainer.scaling.setAll(0.3);
-        this.modelContainer.position.y = -0.02;
-      }
-
-      // Remove fallback blocky boat
-      for (const mesh of this.meshes) {
-        mesh.dispose();
-      }
-      this.meshes = [];
-
-      this.modelLoaded = true;
-      console.log("Lancha GLB model loaded successfully");
+      );
     } catch (error) {
       console.warn("Could not load GLB model, using fallback:", error);
       // Keep the fallback blocky boat
     }
   }
 
-  private createMat(name: string, color: string): StandardMaterial {
-    const mat = new StandardMaterial(name, this.scene);
-    mat.diffuseColor = hexToColor3(color);
-    mat.specularColor = new Color3(0.1, 0.1, 0.1);
+  private createMat(color: string): THREE.MeshStandardMaterial {
+    const mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(color),
+      metalness: 0.1,
+      roughness: 0.8,
+    });
     return mat;
   }
 
   private buildFallbackBoat(): void {
     // Hull
-    const hull = MeshBuilder.CreateBox(
-      "hull",
-      { width: BOAT_WIDTH + 0.4, height: 0.8, depth: BOAT_LENGTH },
-      this.scene
-    );
-    hull.material = this.createMat("hullMat", COLORS.boatHull);
-    hull.parent = this.rootNode;
+    const hullGeo = new THREE.BoxGeometry(BOAT_WIDTH + 0.4, 0.8, BOAT_LENGTH);
+    const hull = new THREE.Mesh(hullGeo, this.createMat(COLORS.boatHull));
+    hull.name = "hull";
     hull.position.y = 0;
+    this.rootNode.add(hull);
     this.meshes.push(hull);
 
     // Sides
     for (const side of [-1, 1]) {
-      const s = MeshBuilder.CreateBox(
-        `side_${side}`,
-        { width: 0.2, height: 0.6, depth: BOAT_LENGTH - 0.5 },
-        this.scene
-      );
-      s.material = this.createMat(`sideMat_${side}`, COLORS.woodDark);
-      s.parent = this.rootNode;
+      const sideGeo = new THREE.BoxGeometry(0.2, 0.6, BOAT_LENGTH - 0.5);
+      const s = new THREE.Mesh(sideGeo, this.createMat(COLORS.woodDark));
+      s.name = `side_${side}`;
       s.position.set(side * (BOAT_WIDTH / 2 + 0.1), 0.5, 0);
+      this.rootNode.add(s);
       this.meshes.push(s);
     }
 
     // Deck
-    const deck = MeshBuilder.CreateBox(
-      "deck",
-      { width: BOAT_WIDTH + 0.2, height: 0.1, depth: BOAT_LENGTH - 0.4 },
-      this.scene
+    const deckGeo = new THREE.BoxGeometry(
+      BOAT_WIDTH + 0.2,
+      0.1,
+      BOAT_LENGTH - 0.4
     );
-    deck.material = this.createMat("deckMat", COLORS.boatDeck);
-    deck.parent = this.rootNode;
+    const deck = new THREE.Mesh(deckGeo, this.createMat(COLORS.boatDeck));
+    deck.name = "deck";
     deck.position.y = 0.45;
+    this.rootNode.add(deck);
     this.meshes.push(deck);
 
     // Cabin
-    const cabin = MeshBuilder.CreateBox(
-      "cabin",
-      { width: BOAT_WIDTH - 0.2, height: 1.2, depth: BOAT_LENGTH * 0.5 },
-      this.scene
+    const cabinGeo = new THREE.BoxGeometry(
+      BOAT_WIDTH - 0.2,
+      1.2,
+      BOAT_LENGTH * 0.5
     );
-    cabin.material = this.createMat("cabinMat", COLORS.boatCabin);
-    cabin.parent = this.rootNode;
+    const cabin = new THREE.Mesh(cabinGeo, this.createMat(COLORS.boatCabin));
+    cabin.name = "cabin";
     cabin.position.set(0, 1.1, -0.3);
+    this.rootNode.add(cabin);
     this.meshes.push(cabin);
 
     // Roof
-    const roof = MeshBuilder.CreateBox(
-      "roof",
-      { width: BOAT_WIDTH + 0.3, height: 0.15, depth: BOAT_LENGTH * 0.5 + 0.6 },
-      this.scene
+    const roofGeo = new THREE.BoxGeometry(
+      BOAT_WIDTH + 0.3,
+      0.15,
+      BOAT_LENGTH * 0.5 + 0.6
     );
-    roof.material = this.createMat("roofMat", COLORS.boatRoof);
-    roof.parent = this.rootNode;
+    const roof = new THREE.Mesh(roofGeo, this.createMat(COLORS.boatRoof));
+    roof.name = "roof";
     roof.position.set(0, 1.8, -0.3);
+    this.rootNode.add(roof);
     this.meshes.push(roof);
 
     // Bow
-    const bow = MeshBuilder.CreateBox(
-      "bow",
-      { width: BOAT_WIDTH * 0.5, height: 0.5, depth: 1.0 },
-      this.scene
-    );
-    bow.material = this.createMat("bowMat", COLORS.boatHull);
-    bow.parent = this.rootNode;
+    const bowGeo = new THREE.BoxGeometry(BOAT_WIDTH * 0.5, 0.5, 1.0);
+    const bow = new THREE.Mesh(bowGeo, this.createMat(COLORS.boatHull));
+    bow.name = "bow";
     bow.position.set(0, 0.1, BOAT_LENGTH / 2);
+    this.rootNode.add(bow);
     this.meshes.push(bow);
 
     // Pilot house
-    const pilot = MeshBuilder.CreateBox(
-      "pilot",
-      { width: BOAT_WIDTH - 0.4, height: 1.0, depth: 1.2 },
-      this.scene
-    );
-    pilot.material = this.createMat("pilotMat", COLORS.woodLight);
-    pilot.parent = this.rootNode;
+    const pilotGeo = new THREE.BoxGeometry(BOAT_WIDTH - 0.4, 1.0, 1.2);
+    const pilot = new THREE.Mesh(pilotGeo, this.createMat(COLORS.woodLight));
+    pilot.name = "pilot";
     pilot.position.set(0, 1.0, BOAT_LENGTH / 2 - 1.2);
+    this.rootNode.add(pilot);
     this.meshes.push(pilot);
   }
 
@@ -217,7 +197,10 @@ export class LanchaColectiva {
     this.speed = clamp(this.speed, -BOAT_MAX_SPEED * 0.3, BOAT_MAX_SPEED);
 
     // Turning
-    const turnFactor = Math.min(1, Math.abs(this.speed) / (BOAT_MAX_SPEED * 0.3));
+    const turnFactor = Math.min(
+      1,
+      Math.abs(this.speed) / (BOAT_MAX_SPEED * 0.3)
+    );
     this.rotation += effectiveSteering * BOAT_TURN_SPEED * turnFactor;
 
     // Move
@@ -237,20 +220,22 @@ export class LanchaColectiva {
     // Helper: check all 9 hull points are in water for a given position
     const allPointsInWater = (cx: number, cz: number): boolean => {
       // Forward/back along boat axis
-      const fwdX = sinR * halfL, fwdZ = cosR * halfL;
+      const fwdX = sinR * halfL,
+        fwdZ = cosR * halfL;
       // Left/right perpendicular to boat axis
-      const sideX = cosR * halfW, sideZ = -sinR * halfW;
+      const sideX = cosR * halfW,
+        sideZ = -sinR * halfW;
 
       return (
-        waterSystem.isWaterPrecise(cx, cz) &&                          // center
-        waterSystem.isWaterPrecise(cx + fwdX, cz + fwdZ) &&            // bow
-        waterSystem.isWaterPrecise(cx - fwdX, cz - fwdZ) &&            // stern
-        waterSystem.isWaterPrecise(cx + sideX, cz + sideZ) &&          // starboard
-        waterSystem.isWaterPrecise(cx - sideX, cz - sideZ) &&          // port
-        waterSystem.isWaterPrecise(cx + fwdX + sideX, cz + fwdZ + sideZ) &&  // bow-starboard
-        waterSystem.isWaterPrecise(cx + fwdX - sideX, cz + fwdZ - sideZ) &&  // bow-port
-        waterSystem.isWaterPrecise(cx - fwdX + sideX, cz - fwdZ + sideZ) &&  // stern-starboard
-        waterSystem.isWaterPrecise(cx - fwdX - sideX, cz - fwdZ - sideZ)     // stern-port
+        waterSystem.isWaterPrecise(cx, cz) && // center
+        waterSystem.isWaterPrecise(cx + fwdX, cz + fwdZ) && // bow
+        waterSystem.isWaterPrecise(cx - fwdX, cz - fwdZ) && // stern
+        waterSystem.isWaterPrecise(cx + sideX, cz + sideZ) && // starboard
+        waterSystem.isWaterPrecise(cx - sideX, cz - sideZ) && // port
+        waterSystem.isWaterPrecise(cx + fwdX + sideX, cz + fwdZ + sideZ) && // bow-starboard
+        waterSystem.isWaterPrecise(cx + fwdX - sideX, cz + fwdZ - sideZ) && // bow-port
+        waterSystem.isWaterPrecise(cx - fwdX + sideX, cz - fwdZ + sideZ) && // stern-starboard
+        waterSystem.isWaterPrecise(cx - fwdX - sideX, cz - fwdZ - sideZ) // stern-port
       );
     };
 
@@ -283,7 +268,7 @@ export class LanchaColectiva {
     this.wakeIntensity = Math.abs(this.speed) / BOAT_MAX_SPEED;
 
     // Update transform
-    this.rootNode.position.copyFrom(this.position);
+    this.rootNode.position.copy(this.position);
     this.rootNode.rotation.y = this.rotation;
     this.rootNode.rotation.z =
       -effectiveSteering * turnFactor * 0.08 +
