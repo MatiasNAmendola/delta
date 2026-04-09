@@ -40,7 +40,7 @@ export class LanchaColectiva {
 
   constructor(scene: Scene, startX: number, startZ: number) {
     this.scene = scene;
-    this.position = new Vector3(startX, WATER_LEVEL + 0.02, startZ);
+    this.position = new Vector3(startX, WATER_LEVEL + 0.08, startZ);
     this.rootNode = new TransformNode("lancha", scene);
     this.rootNode.position = this.position.clone();
 
@@ -86,10 +86,10 @@ export class LanchaColectiva {
         // Center the model on its bounding box and raise it above water
         const center = boundingInfo.boundingBox.centerWorld;
         const minY = boundingInfo.boundingBox.minimumWorld.y;
-        this.modelContainer.position.y = -minY * scale - 0.1;
+        this.modelContainer.position.y = -minY * scale - 0.02;
       } else {
         this.modelContainer.scaling.setAll(0.3);
-        this.modelContainer.position.y = -0.1;
+        this.modelContainer.position.y = -0.02;
       }
 
       // Remove fallback blocky boat
@@ -289,7 +289,7 @@ export class LanchaColectiva {
       this.position.z,
       this.time
     );
-    this.position.y = WATER_LEVEL + 0.02 + waveH;
+    this.position.y = WATER_LEVEL + 0.08 + waveH;
 
     this.wakeIntensity = Math.abs(this.speed) / BOAT_MAX_SPEED;
 
