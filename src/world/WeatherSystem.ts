@@ -416,6 +416,8 @@ export class WeatherSystem {
     out.luminance = lerp(out.luminance, target.luminance);
     out.fogDensity = lerp(out.fogDensity, target.fogDensity);
     out.fogColor = lerpC(out.fogColor, target.fogColor);
+    out.fogColorSun = lerpC(out.fogColorSun, target.fogColorSun);
+    out.fogColorHorizon = lerpC(out.fogColorHorizon, target.fogColorHorizon);
     out.ambientIntensity = lerp(out.ambientIntensity, target.ambientIntensity);
     out.ambientSkyColor = lerpC(out.ambientSkyColor, target.ambientSkyColor);
     out.ambientGroundColor = lerpC(out.ambientGroundColor, target.ambientGroundColor);
@@ -473,8 +475,10 @@ export class WeatherSystem {
       0.9 + state.ambientSkyColor.b * 0.1
     );
 
-    // Background color matches fog for seamless horizon
-    this.scene.background = state.fogColor.clone();
+    // Background: use the horizon fog colour for a seamless horizon blend.
+    // The slight difference between scene.background and fog.color creates
+    // the blue-white-at-horizon / denser-at-distance gradient effect.
+    this.scene.background = state.fogColorHorizon.clone();
   }
 
   private cloneState(state: WeatherState): WeatherState {
