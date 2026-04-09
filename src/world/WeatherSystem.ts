@@ -2,158 +2,173 @@
  * WeatherSystem — Controls sky, lighting, fog, and rain particles.
  * Provides weather presets (morning, noon, sunset, night, storm)
  * with smooth transitions between states.
+ *
+ * Three.js implementation using Sky shader, HemisphereLight,
+ * DirectionalLight, FogExp2, and Points-based rain.
  */
-import { Scene } from "@babylonjs/core/scene";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
-import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
-import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
-import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
-import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
-import { SkyMaterial } from "@babylonjs/materials/sky/skyMaterial";
+import * as THREE from 'three';
+import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { WATER_LEVEL } from "../utils/constants";
 
 export type WeatherPreset = "morning" | "noon" | "sunset" | "night" | "storm";
 
 interface WeatherState {
-  sunPosition: Vector3;
+  sunPosition: THREE.Vector3;
   turbidity: number;
   rayleigh: number;
   mieCoefficient: number;
   mieDirectionalG: number;
   luminance: number;
   fogDensity: number;
-  fogColor: Color3;
+  fogColor: THREE.Color;
   ambientIntensity: number;
-  ambientDiffuse: Color3;
-  ambientGround: Color3;
+  ambientSkyColor: THREE.Color;
+  ambientGroundColor: THREE.Color;
   sunIntensity: number;
-  sunDiffuse: Color3;
+  sunColor: THREE.Color;
   rainRate: number;
 }
 
 const PRESETS: Record<WeatherPreset, WeatherState> = {
   morning: {
-    sunPosition: new Vector3(-50, 20, 30),
+    sunPosition: new THREE.Vector3(-50, 20, 30),
     turbidity: 8, rayleigh: 2, mieCoefficient: 0.005, mieDirectionalG: 0.8, luminance: 1.0,
-    fogDensity: 0.0012, fogColor: new Color3(0.75, 0.8, 0.85),
-    ambientIntensity: 0.5, ambientDiffuse: new Color3(0.85, 0.8, 0.7), ambientGround: new Color3(0.2, 0.25, 0.2),
-    sunIntensity: 0.6, sunDiffuse: new Color3(1, 0.9, 0.7),
+    fogDensity: 0.0012, fogColor: new THREE.Color(0.75, 0.8, 0.85),
+    ambientIntensity: 0.5, ambientSkyColor: new THREE.Color(0.85, 0.8, 0.7), ambientGroundColor: new THREE.Color(0.2, 0.25, 0.2),
+    sunIntensity: 0.6, sunColor: new THREE.Color(1, 0.9, 0.7),
     rainRate: 0,
   },
   noon: {
-    sunPosition: new Vector3(0, 80, 20),
+    sunPosition: new THREE.Vector3(0, 80, 20),
     turbidity: 5, rayleigh: 1.5, mieCoefficient: 0.003, mieDirectionalG: 0.76, luminance: 1.1,
-    fogDensity: 0.0008, fogColor: new Color3(0.7, 0.78, 0.85),
-    ambientIntensity: 0.7, ambientDiffuse: new Color3(0.95, 0.95, 0.9), ambientGround: new Color3(0.25, 0.3, 0.2),
-    sunIntensity: 0.9, sunDiffuse: new Color3(1, 1, 0.95),
+    fogDensity: 0.0008, fogColor: new THREE.Color(0.7, 0.78, 0.85),
+    ambientIntensity: 0.7, ambientSkyColor: new THREE.Color(0.95, 0.95, 0.9), ambientGroundColor: new THREE.Color(0.25, 0.3, 0.2),
+    sunIntensity: 0.9, sunColor: new THREE.Color(1, 1, 0.95),
     rainRate: 0,
   },
   sunset: {
-    sunPosition: new Vector3(60, 5, -40),
+    sunPosition: new THREE.Vector3(60, 5, -40),
     turbidity: 15, rayleigh: 4, mieCoefficient: 0.02, mieDirectionalG: 0.9, luminance: 1.0,
-    fogDensity: 0.002, fogColor: new Color3(0.8, 0.55, 0.35),
-    ambientIntensity: 0.4, ambientDiffuse: new Color3(0.9, 0.6, 0.3), ambientGround: new Color3(0.15, 0.1, 0.1),
-    sunIntensity: 0.5, sunDiffuse: new Color3(1, 0.6, 0.2),
+    fogDensity: 0.002, fogColor: new THREE.Color(0.8, 0.55, 0.35),
+    ambientIntensity: 0.4, ambientSkyColor: new THREE.Color(0.9, 0.6, 0.3), ambientGroundColor: new THREE.Color(0.15, 0.1, 0.1),
+    sunIntensity: 0.5, sunColor: new THREE.Color(1, 0.6, 0.2),
     rainRate: 0,
   },
   night: {
-    sunPosition: new Vector3(0, -20, 30),
+    sunPosition: new THREE.Vector3(0, -20, 30),
     turbidity: 2, rayleigh: 0.5, mieCoefficient: 0.001, mieDirectionalG: 0.7, luminance: 0.01,
-    fogDensity: 0.003, fogColor: new Color3(0.03, 0.04, 0.08),
-    ambientIntensity: 0.15, ambientDiffuse: new Color3(0.1, 0.12, 0.2), ambientGround: new Color3(0.02, 0.03, 0.05),
-    sunIntensity: 0.05, sunDiffuse: new Color3(0.2, 0.25, 0.4),
+    fogDensity: 0.003, fogColor: new THREE.Color(0.03, 0.04, 0.08),
+    ambientIntensity: 0.15, ambientSkyColor: new THREE.Color(0.1, 0.12, 0.2), ambientGroundColor: new THREE.Color(0.02, 0.03, 0.05),
+    sunIntensity: 0.05, sunColor: new THREE.Color(0.2, 0.25, 0.4),
     rainRate: 0,
   },
   storm: {
-    sunPosition: new Vector3(-30, 15, 20),
+    sunPosition: new THREE.Vector3(-30, 15, 20),
     turbidity: 25, rayleigh: 3, mieCoefficient: 0.05, mieDirectionalG: 0.65, luminance: 0.6,
-    fogDensity: 0.004, fogColor: new Color3(0.35, 0.38, 0.4),
-    ambientIntensity: 0.3, ambientDiffuse: new Color3(0.5, 0.52, 0.55), ambientGround: new Color3(0.1, 0.12, 0.1),
-    sunIntensity: 0.2, sunDiffuse: new Color3(0.6, 0.6, 0.6),
+    fogDensity: 0.004, fogColor: new THREE.Color(0.35, 0.38, 0.4),
+    ambientIntensity: 0.3, ambientSkyColor: new THREE.Color(0.5, 0.52, 0.55), ambientGroundColor: new THREE.Color(0.1, 0.12, 0.1),
+    sunIntensity: 0.2, sunColor: new THREE.Color(0.6, 0.6, 0.6),
     rainRate: 800,
   },
 };
 
+/** Maximum number of rain particles */
+const MAX_RAIN_PARTICLES = 2000;
+
 export class WeatherSystem {
-  private scene: Scene;
-  private skyMat: SkyMaterial;
-  private ambient: HemisphericLight;
-  private sun: DirectionalLight;
-  private rainSystem: ParticleSystem;
+  private scene: THREE.Scene;
+  private sky: Sky;
+  private ambient: THREE.HemisphereLight;
+  private sun: THREE.DirectionalLight;
+  private fog: THREE.FogExp2;
+
+  // Rain
+  private rainPoints: THREE.Points;
+  private rainGeometry: THREE.BufferGeometry;
+  private rainPositions: Float32Array;
+  private rainVelocities: Float32Array;
+  private rainAlive: Uint8Array;
+  private activeRainCount = 0;
+  private rainEmitAccumulator = 0;
+  private rainEmitterX = 0;
+  private rainEmitterZ = 0;
+
+  // Transition
   private current: WeatherState;
   private target: WeatherState;
   private transitioning = false;
   private transitionTime = 0;
   private transitionDuration = 2.0; // seconds
 
-  constructor(scene: Scene) {
+  constructor(scene: THREE.Scene) {
     this.scene = scene;
 
     // --- Sky ---
-    const skybox = MeshBuilder_CreateBox("sky", { size: 2000 }, scene);
-    this.skyMat = new SkyMaterial("skyMat", scene);
-    this.skyMat.backFaceCulling = false;
-    this.skyMat.useSunPosition = true;
-    skybox.material = this.skyMat;
-    skybox.infiniteDistance = true;
+    this.sky = new Sky();
+    this.sky.scale.setScalar(10000);
+    scene.add(this.sky);
 
     // --- Lights ---
-    this.ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-    this.sun = new DirectionalLight("sun", new Vector3(-0.5, -1, 0.5), scene);
+    this.ambient = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
+    scene.add(this.ambient);
+
+    this.sun = new THREE.DirectionalLight(0xffffff, 0.6);
+    this.sun.position.set(-0.5, 1, 0.5).normalize();
+    scene.add(this.sun);
+
+    // --- Fog ---
+    this.fog = new THREE.FogExp2(0xcccccc, 0.0012);
+    scene.fog = this.fog;
 
     // --- Rain particle system ---
-    this.rainSystem = this.createRainSystem();
+    this.rainPositions = new Float32Array(MAX_RAIN_PARTICLES * 3);
+    this.rainVelocities = new Float32Array(MAX_RAIN_PARTICLES * 3);
+    this.rainAlive = new Uint8Array(MAX_RAIN_PARTICLES);
+
+    this.rainGeometry = new THREE.BufferGeometry();
+    this.rainGeometry.setAttribute('position', new THREE.BufferAttribute(this.rainPositions, 3));
+    // Start with 0 drawn particles
+    this.rainGeometry.setDrawRange(0, 0);
+
+    const rainTexture = this.createRainTexture();
+    const rainMaterial = new THREE.PointsMaterial({
+      map: rainTexture,
+      size: 0.8,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+      sizeAttenuation: true,
+    });
+
+    this.rainPoints = new THREE.Points(this.rainGeometry, rainMaterial);
+    this.rainPoints.frustumCulled = false;
+    scene.add(this.rainPoints);
 
     // --- Initialize to morning ---
-    this.current = { ...PRESETS.morning };
-    this.target = { ...PRESETS.morning };
+    this.current = this.cloneState(PRESETS.morning);
+    this.target = this.cloneState(PRESETS.morning);
     this.applyState(this.current);
-
-    // Fog
-    scene.fogMode = Scene.FOGMODE_EXP2;
   }
 
-  private createRainSystem(): ParticleSystem {
-    // Rain drop texture
+  private createRainTexture(): THREE.CanvasTexture {
     const size = 16;
-    const tex = new DynamicTexture("rainTex", size, this.scene, false);
-    const ctx = tex.getContext();
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, size, size);
     // Vertical streak
     ctx.fillStyle = "rgba(200, 210, 220, 0.6)";
     ctx.fillRect(size / 2 - 1, 0, 2, size);
-    tex.update(true);
-    tex.hasAlpha = true;
-
-    const ps = new ParticleSystem("rain", 2000, this.scene);
-    ps.particleTexture = tex;
-    ps.emitter = new Vector3(0, 60, 0);
-    ps.minEmitBox = new Vector3(-100, 0, -100);
-    ps.maxEmitBox = new Vector3(100, 0, 100);
-    ps.direction1 = new Vector3(-0.2, -1, -0.1);
-    ps.direction2 = new Vector3(0.2, -1, 0.1);
-    ps.minEmitPower = 30;
-    ps.maxEmitPower = 50;
-    ps.minSize = 0.1;
-    ps.maxSize = 0.15;
-    ps.minScaleY = 3;
-    ps.maxScaleY = 6;
-    ps.minLifeTime = 0.8;
-    ps.maxLifeTime = 1.5;
-    ps.color1 = new Color4(0.7, 0.75, 0.8, 0.4);
-    ps.color2 = new Color4(0.6, 0.65, 0.7, 0.3);
-    ps.colorDead = new Color4(0.5, 0.55, 0.6, 0.0);
-    ps.gravity = new Vector3(0, -9.8, 0);
-    ps.blendMode = ParticleSystem.BLENDMODE_STANDARD;
-    ps.emitRate = 0;
-    ps.start();
-    return ps;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
   }
 
   /** Set weather preset with smooth transition */
   public setWeather(preset: WeatherPreset): void {
-    this.target = { ...PRESETS[preset] };
+    this.target = this.cloneState(PRESETS[preset]);
     this.transitioning = true;
     this.transitionTime = 0;
   }
@@ -161,8 +176,11 @@ export class WeatherSystem {
   /** Update — call each frame with deltaTime */
   public update(deltaTime: number, boatX: number, boatZ: number): void {
     // Move rain emitter to follow the boat
-    (this.rainSystem.emitter as Vector3).x = boatX;
-    (this.rainSystem.emitter as Vector3).z = boatZ;
+    this.rainEmitterX = boatX;
+    this.rainEmitterZ = boatZ;
+
+    // Update rain particles
+    this.updateRain(deltaTime);
 
     if (!this.transitioning) return;
 
@@ -177,16 +195,77 @@ export class WeatherSystem {
     if (t >= 1) {
       this.transitioning = false;
       // Copy target values to current
-      Object.assign(this.current, this.target);
+      this.copyState(this.current, this.target);
+    }
+  }
+
+  private updateRain(dt: number): void {
+    const rate = Math.floor(this.current.rainRate);
+
+    // Emit new particles
+    if (rate > 0) {
+      this.rainEmitAccumulator += rate * dt;
+      while (this.rainEmitAccumulator >= 1) {
+        this.rainEmitAccumulator -= 1;
+        this.emitRainParticle();
+      }
+    }
+
+    // Update existing particles
+    let aliveCount = 0;
+    for (let i = 0; i < MAX_RAIN_PARTICLES; i++) {
+      if (!this.rainAlive[i]) continue;
+
+      const i3 = i * 3;
+      // Apply velocity + gravity
+      this.rainVelocities[i3 + 1] -= 9.8 * dt; // gravity
+      this.rainPositions[i3] += this.rainVelocities[i3] * dt;
+      this.rainPositions[i3 + 1] += this.rainVelocities[i3 + 1] * dt;
+      this.rainPositions[i3 + 2] += this.rainVelocities[i3 + 2] * dt;
+
+      // Kill particles below water level
+      if (this.rainPositions[i3 + 1] < WATER_LEVEL - 1) {
+        this.rainAlive[i] = 0;
+        // Move off-screen
+        this.rainPositions[i3 + 1] = -9999;
+      } else {
+        aliveCount++;
+      }
+    }
+
+    this.activeRainCount = aliveCount;
+    const posAttr = this.rainGeometry.getAttribute('position') as THREE.BufferAttribute;
+    posAttr.needsUpdate = true;
+    this.rainGeometry.setDrawRange(0, MAX_RAIN_PARTICLES);
+  }
+
+  private emitRainParticle(): void {
+    // Find a dead particle slot
+    for (let i = 0; i < MAX_RAIN_PARTICLES; i++) {
+      if (this.rainAlive[i]) continue;
+
+      const i3 = i * 3;
+      // Position: above the boat in a 200x200 area
+      this.rainPositions[i3] = this.rainEmitterX + (Math.random() - 0.5) * 200;
+      this.rainPositions[i3 + 1] = 60;
+      this.rainPositions[i3 + 2] = this.rainEmitterZ + (Math.random() - 0.5) * 200;
+
+      // Velocity: mostly downward with slight horizontal drift
+      const power = 30 + Math.random() * 20;
+      this.rainVelocities[i3] = (Math.random() - 0.5) * 0.4 * power;
+      this.rainVelocities[i3 + 1] = -power;
+      this.rainVelocities[i3 + 2] = (Math.random() - 0.5) * 0.2 * power;
+
+      this.rainAlive[i] = 1;
+      return;
     }
   }
 
   private lerpState(out: WeatherState, target: WeatherState, t: number): void {
     const lerp = (a: number, b: number) => a + (b - a) * t;
-    const lerpC3 = (a: Color3, b: Color3) => new Color3(lerp(a.r, b.r), lerp(a.g, b.g), lerp(a.b, b.b));
-    const lerpV3 = (a: Vector3, b: Vector3) => new Vector3(lerp(a.x, b.x), lerp(a.y, b.y), lerp(a.z, b.z));
+    const lerpC = (a: THREE.Color, b: THREE.Color) => new THREE.Color(lerp(a.r, b.r), lerp(a.g, b.g), lerp(a.b, b.b));
+    const lerpV3 = (a: THREE.Vector3, b: THREE.Vector3) => new THREE.Vector3(lerp(a.x, b.x), lerp(a.y, b.y), lerp(a.z, b.z));
 
-    // Store starting values on first call by comparing with current
     out.sunPosition = lerpV3(out.sunPosition, target.sunPosition);
     out.turbidity = lerp(out.turbidity, target.turbidity);
     out.rayleigh = lerp(out.rayleigh, target.rayleigh);
@@ -194,49 +273,86 @@ export class WeatherSystem {
     out.mieDirectionalG = lerp(out.mieDirectionalG, target.mieDirectionalG);
     out.luminance = lerp(out.luminance, target.luminance);
     out.fogDensity = lerp(out.fogDensity, target.fogDensity);
-    out.fogColor = lerpC3(out.fogColor, target.fogColor);
+    out.fogColor = lerpC(out.fogColor, target.fogColor);
     out.ambientIntensity = lerp(out.ambientIntensity, target.ambientIntensity);
-    out.ambientDiffuse = lerpC3(out.ambientDiffuse, target.ambientDiffuse);
-    out.ambientGround = lerpC3(out.ambientGround, target.ambientGround);
+    out.ambientSkyColor = lerpC(out.ambientSkyColor, target.ambientSkyColor);
+    out.ambientGroundColor = lerpC(out.ambientGroundColor, target.ambientGroundColor);
     out.sunIntensity = lerp(out.sunIntensity, target.sunIntensity);
-    out.sunDiffuse = lerpC3(out.sunDiffuse, target.sunDiffuse);
+    out.sunColor = lerpC(out.sunColor, target.sunColor);
     out.rainRate = lerp(out.rainRate, target.rainRate);
   }
 
   private applyState(state: WeatherState): void {
     // Sky
-    this.skyMat.sunPosition = state.sunPosition;
-    this.skyMat.turbidity = state.turbidity;
-    this.skyMat.rayleigh = state.rayleigh;
-    this.skyMat.mieCoefficient = state.mieCoefficient;
-    this.skyMat.mieDirectionalG = state.mieDirectionalG;
-    this.skyMat.luminance = state.luminance;
+    const uniforms = this.sky.material.uniforms;
+    uniforms['turbidity'].value = state.turbidity;
+    uniforms['rayleigh'].value = state.rayleigh;
+    uniforms['mieCoefficient'].value = state.mieCoefficient;
+    uniforms['mieDirectionalG'].value = state.mieDirectionalG;
+
+    // Set sun position in the Sky shader
+    const sunDir = state.sunPosition.clone().normalize();
+    uniforms['sunPosition'].value.copy(sunDir);
 
     // Fog
-    this.scene.fogDensity = state.fogDensity;
-    this.scene.fogColor = state.fogColor;
+    this.fog.density = state.fogDensity;
+    this.fog.color.copy(state.fogColor);
 
     // Lights
     this.ambient.intensity = state.ambientIntensity;
-    this.ambient.diffuse = state.ambientDiffuse;
-    this.ambient.groundColor = state.ambientGround;
+    this.ambient.color.copy(state.ambientSkyColor);
+    this.ambient.groundColor.copy(state.ambientGroundColor);
     this.sun.intensity = state.sunIntensity;
-    this.sun.diffuse = state.sunDiffuse;
+    this.sun.color.copy(state.sunColor);
+    // Point directional light from the sun direction
+    this.sun.position.copy(state.sunPosition).normalize();
 
-    // Rain
-    this.rainSystem.emitRate = Math.floor(state.rainRate);
+    // Background color matches fog for seamless horizon
+    this.scene.background = state.fogColor.clone();
+  }
 
-    // Clear color matches fog for seamless horizon
-    this.scene.clearColor = new Color4(
-      state.fogColor.r, state.fogColor.g, state.fogColor.b, 1
-    );
+  private cloneState(state: WeatherState): WeatherState {
+    return {
+      sunPosition: state.sunPosition.clone(),
+      turbidity: state.turbidity,
+      rayleigh: state.rayleigh,
+      mieCoefficient: state.mieCoefficient,
+      mieDirectionalG: state.mieDirectionalG,
+      luminance: state.luminance,
+      fogDensity: state.fogDensity,
+      fogColor: state.fogColor.clone(),
+      ambientIntensity: state.ambientIntensity,
+      ambientSkyColor: state.ambientSkyColor.clone(),
+      ambientGroundColor: state.ambientGroundColor.clone(),
+      sunIntensity: state.sunIntensity,
+      sunColor: state.sunColor.clone(),
+      rainRate: state.rainRate,
+    };
+  }
+
+  private copyState(dest: WeatherState, src: WeatherState): void {
+    dest.sunPosition.copy(src.sunPosition);
+    dest.turbidity = src.turbidity;
+    dest.rayleigh = src.rayleigh;
+    dest.mieCoefficient = src.mieCoefficient;
+    dest.mieDirectionalG = src.mieDirectionalG;
+    dest.luminance = src.luminance;
+    dest.fogDensity = src.fogDensity;
+    dest.fogColor.copy(src.fogColor);
+    dest.ambientIntensity = src.ambientIntensity;
+    dest.ambientSkyColor.copy(src.ambientSkyColor);
+    dest.ambientGroundColor.copy(src.ambientGroundColor);
+    dest.sunIntensity = src.sunIntensity;
+    dest.sunColor.copy(src.sunColor);
+    dest.rainRate = src.rainRate;
   }
 
   public dispose(): void {
-    this.rainSystem.dispose();
+    this.scene.remove(this.sky);
+    this.scene.remove(this.ambient);
+    this.scene.remove(this.sun);
+    this.scene.remove(this.rainPoints);
+    this.rainGeometry.dispose();
+    (this.rainPoints.material as THREE.PointsMaterial).dispose();
   }
 }
-
-// Inline to avoid extra import
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-const MeshBuilder_CreateBox = MeshBuilder.CreateBox;
