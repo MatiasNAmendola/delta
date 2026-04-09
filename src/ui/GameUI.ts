@@ -10,6 +10,7 @@ import { getPointOnPath } from "../utils/helpers";
 
 export class GameUI {
   private hudDiv!: HTMLDivElement;
+  private minimapContainer!: HTMLDivElement;
   private minimapCanvas!: HTMLCanvasElement;
   private minimapCtx!: CanvasRenderingContext2D;
   private scoreEl!: HTMLElement;
@@ -20,11 +21,20 @@ export class GameUI {
   private notificationTimeout: number | null = null;
   private startScreenDiv: HTMLDivElement | null = null;
   private endScreenDiv: HTMLDivElement | null = null;
+  private minimapVisible = true;
 
   constructor() {
     this.createHUD();
     this.createMinimap();
     this.showStartScreen();
+  }
+
+  private isMobileScreen(): boolean {
+    return window.innerWidth < 600;
+  }
+
+  private getMinimapSize(): number {
+    return this.isMobileScreen() ? 120 : 150;
   }
 
   private createHUD(): void {
@@ -42,40 +52,109 @@ export class GameUI {
           z-index: 50;
           font-family: 'Segoe UI', Tahoma, sans-serif;
         }
+
+        /* === Top bar: Score | Passengers | Timer === */
         .hud-bar {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 8px 15px;
-          background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 100%);
+          padding: 6px 12px;
+          background: linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.0) 100%);
+          min-height: 38px;
+          box-sizing: border-box;
         }
         .hud-item {
           color: #e8d5a3;
-          font-size: 16px;
+          font-size: 14px;
           font-weight: bold;
           text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 4px;
+          white-space: nowrap;
         }
         .hud-item .icon {
-          font-size: 20px;
+          font-size: 18px;
         }
         .hud-item .value {
           color: #ffffff;
-          font-size: 18px;
+          font-size: 16px;
         }
+
+        /* === Location name: below top bar, full width === */
         #hud-location {
-          position: fixed;
-          top: 42px;
-          left: 15px;
+          padding: 0 12px 4px 12px;
           color: #7cb8a0;
-          font-size: 12px;
+          font-size: 11px;
           font-family: monospace;
           text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
           pointer-events: none;
-          z-index: 51;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
+
+        /* === Top-right panel: minimap + weather + gyro === */
+        #hud-topright {
+          position: fixed;
+          top: 4px;
+          right: 8px;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 4px;
+          z-index: 55;
+          pointer-events: none;
+        }
+
+        /* === Minimap toggle row (toggle btn + label) === */
+        #hud-minimap-toggle {
+          pointer-events: auto;
+          background: rgba(0,0,0,0.5);
+          border: 1px solid rgba(255,255,255,0.2);
+          color: #e8d5a3;
+          font-size: 11px;
+          padding: 2px 8px;
+          border-radius: 4px;
+          cursor: pointer;
+          align-self: flex-end;
+          display: none; /* only shown on mobile */
+        }
+
+        /* === Weather buttons row === */
+        #hud-weather {
+          display: flex;
+          gap: 3px;
+          pointer-events: auto;
+        }
+        .weather-btn {
+          background: rgba(0,0,0,0.5);
+          border: 1px solid rgba(255,255,255,0.2);
+          color: #fff;
+          font-size: 16px;
+          width: 30px;
+          height: 30px;
+          border-radius: 6px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.2s;
+          padding: 0;
+        }
+        .weather-btn:hover, .weather-btn.active {
+          background: rgba(255,255,255,0.25);
+          border-color: rgba(255,255,255,0.5);
+        }
+
+        /* === Gyro toggle (placed in weather row on mobile) === */
+        #hud-gyro-slot {
+          display: flex;
+          gap: 3px;
+          pointer-events: auto;
+        }
+
+        /* === Notification (center screen overlay) === */
         #hud-notification {
           position: fixed;
           top: 50%;
@@ -93,52 +172,85 @@ export class GameUI {
           opacity: 0;
           transition: opacity 0.3s;
           border: 2px solid rgba(232,213,163,0.3);
+          max-width: 90vw;
         }
         #hud-notification.show {
           opacity: 1;
         }
-        #hud-weather {
-          position: fixed;
-          top: 42px;
-          right: 10px;
-          display: flex;
-          gap: 4px;
-          z-index: 55;
-          pointer-events: auto;
-        }
-        .weather-btn {
-          background: rgba(0,0,0,0.5);
-          border: 1px solid rgba(255,255,255,0.2);
-          color: #fff;
-          font-size: 18px;
-          width: 34px;
-          height: 34px;
-          border-radius: 8px;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: background 0.2s;
-        }
-        .weather-btn:hover, .weather-btn.active {
-          background: rgba(255,255,255,0.25);
-          border-color: rgba(255,255,255,0.5);
-        }
+
+        /* === Next stop indicator: bottom-center above controls === */
         #hud-nextStop {
           position: fixed;
-          bottom: 140px;
+          bottom: 150px;
           left: 50%;
           transform: translateX(-50%);
           background: rgba(0,0,0,0.6);
           color: #7cb8a0;
-          padding: 6px 16px;
+          padding: 5px 14px;
           border-radius: 20px;
-          font-size: 13px;
+          font-size: 12px;
           z-index: 51;
           pointer-events: none;
           border: 1px solid rgba(100,200,150,0.3);
+          white-space: nowrap;
+        }
+
+        /* === Mobile-specific adjustments === */
+        @media (max-width: 600px) {
+          .hud-bar {
+            padding: 4px 8px;
+            min-height: 34px;
+          }
+          .hud-item {
+            font-size: 12px;
+            gap: 2px;
+          }
+          .hud-item .icon {
+            font-size: 15px;
+          }
+          .hud-item .value {
+            font-size: 14px;
+          }
+          #hud-location {
+            font-size: 10px;
+            padding: 0 8px 2px 8px;
+          }
+          .weather-btn {
+            width: 30px;
+            height: 30px;
+            font-size: 14px;
+          }
+          #hud-minimap-toggle {
+            display: block;
+          }
+          #hud-nextStop {
+            bottom: 140px;
+            font-size: 11px;
+            padding: 4px 10px;
+          }
+        }
+
+        /* === Landscape mobile: tighter spacing === */
+        @media (max-height: 450px) {
+          .hud-bar {
+            padding: 2px 10px;
+            min-height: 28px;
+          }
+          .hud-item { font-size: 11px; }
+          .hud-item .icon { font-size: 14px; }
+          .hud-item .value { font-size: 13px; }
+          #hud-location {
+            font-size: 9px;
+            padding: 0 10px 1px 10px;
+          }
+          #hud-nextStop {
+            bottom: 100px;
+            font-size: 10px;
+          }
         }
       </style>
+
+      <!-- Row 1: score / passengers / timer -->
       <div class="hud-bar">
         <div class="hud-item">
           <span class="icon">⭐</span>
@@ -154,15 +266,28 @@ export class GameUI {
           <span class="value" id="hud-timer">5:00</span>
         </div>
       </div>
+
+      <!-- Row 2: location name -->
       <div id="hud-location">Delta de Tigre</div>
+
+      <!-- Center notification -->
       <div id="hud-notification"></div>
-      <div id="hud-weather">
-        <button class="weather-btn active" data-weather="morning" title="Mañana">🌅</button>
-        <button class="weather-btn" data-weather="noon" title="Mediodía">☀️</button>
-        <button class="weather-btn" data-weather="sunset" title="Atardecer">🌇</button>
-        <button class="weather-btn" data-weather="night" title="Noche">🌙</button>
-        <button class="weather-btn" data-weather="storm" title="Tormenta">⛈️</button>
+
+      <!-- Top-right stacked panel: minimap toggle, minimap, weather, gyro slot -->
+      <div id="hud-topright">
+        <button id="hud-minimap-toggle">Mapa ▼</button>
+        <div id="hud-minimap-anchor"></div>
+        <div id="hud-weather">
+          <button class="weather-btn active" data-weather="morning" title="Mañana">🌅</button>
+          <button class="weather-btn" data-weather="noon" title="Mediodía">☀️</button>
+          <button class="weather-btn" data-weather="sunset" title="Atardecer">🌇</button>
+          <button class="weather-btn" data-weather="night" title="Noche">🌙</button>
+          <button class="weather-btn" data-weather="storm" title="Tormenta">⛈️</button>
+        </div>
+        <div id="hud-gyro-slot"></div>
       </div>
+
+      <!-- Next stop indicator -->
       <div id="hud-nextStop"></div>
     `;
     document.body.appendChild(this.hudDiv);
@@ -172,33 +297,70 @@ export class GameUI {
     this.timerEl = document.getElementById("hud-timer")!;
     this.locationEl = document.getElementById("hud-location")!;
     this.notificationEl = document.getElementById("hud-notification")!;
+
+    // Minimap toggle (mobile only)
+    const toggleBtn = document.getElementById("hud-minimap-toggle")!;
+    const toggleHandler = (e: Event) => {
+      e.preventDefault();
+      this.minimapVisible = !this.minimapVisible;
+      if (this.minimapContainer) {
+        this.minimapContainer.style.display = this.minimapVisible ? "block" : "none";
+      }
+      toggleBtn.textContent = this.minimapVisible ? "Mapa ▲" : "Mapa ▼";
+    };
+    toggleBtn.addEventListener("click", toggleHandler);
+    toggleBtn.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      toggleHandler(e);
+    });
   }
 
   private createMinimap(): void {
-    const container = document.createElement("div");
-    container.style.cssText = `
-      position:fixed;top:55px;right:10px;
-      width:120px;height:120px;
+    const size = this.getMinimapSize();
+
+    this.minimapContainer = document.createElement("div");
+    this.minimapContainer.id = "hud-minimap-container";
+    this.minimapContainer.style.cssText = `
+      width:${size}px;height:${size}px;
       border:2px solid rgba(232,213,163,0.5);
       border-radius:8px;overflow:hidden;
-      background:rgba(0,0,0,0.5);z-index:51;
+      background:rgba(0,0,0,0.5);
       pointer-events:none;
     `;
 
     this.minimapCanvas = document.createElement("canvas");
-    this.minimapCanvas.width = 120;
-    this.minimapCanvas.height = 120;
-    container.appendChild(this.minimapCanvas);
-    document.body.appendChild(container);
+    this.minimapCanvas.width = size;
+    this.minimapCanvas.height = size;
+    this.minimapContainer.appendChild(this.minimapCanvas);
+
+    // Insert minimap into the top-right panel's anchor
+    const anchor = document.getElementById("hud-minimap-anchor");
+    if (anchor) {
+      anchor.appendChild(this.minimapContainer);
+    }
 
     this.minimapCtx = this.minimapCanvas.getContext("2d")!;
     this.drawMinimapBase();
+
+    // Resize minimap on orientation / window change
+    window.addEventListener("resize", () => this.resizeMinimap());
+  }
+
+  private resizeMinimap(): void {
+    const size = this.getMinimapSize();
+    if (this.minimapCanvas.width !== size) {
+      this.minimapCanvas.width = size;
+      this.minimapCanvas.height = size;
+      this.minimapContainer.style.width = `${size}px`;
+      this.minimapContainer.style.height = `${size}px`;
+      this.drawMinimapBase();
+    }
   }
 
   private drawMinimapBase(): void {
     const ctx = this.minimapCtx;
-    const w = 120;
-    const h = 120;
+    const w = this.minimapCanvas.width;
+    const h = this.minimapCanvas.height;
 
     // Background (land)
     ctx.fillStyle = "#2a5a35";
@@ -238,8 +400,8 @@ export class GameUI {
     this.drawMinimapBase();
 
     const ctx = this.minimapCtx;
-    const w = 120;
-    const h = 120;
+    const w = this.minimapCanvas.width;
+    const h = this.minimapCanvas.height;
 
     // Draw boat position
     const bx = ((boatX + WORLD_SIZE / 2) / WORLD_SIZE) * w;

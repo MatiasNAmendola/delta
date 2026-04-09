@@ -283,7 +283,17 @@ export class GrassSystem {
     console.log(`GrassSystem: ${matrices.length} grass clumps placed`);
   }
 
+  /** Show or hide the grass system (used by performance optimizer) */
+  public setVisible(visible: boolean): void {
+    if (this.grassMesh) {
+      this.grassMesh.visible = visible;
+    }
+  }
+
   public update(deltaTime: number): void {
+    // Skip shader update when hidden
+    if (this.grassMesh && !this.grassMesh.visible) return;
+
     this.time += deltaTime;
     if (this.material) {
       this.material.uniforms.time.value = this.time;
