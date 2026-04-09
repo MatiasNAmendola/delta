@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ["claude/delta-boat-game-qlfo3", "claude/water-visual-improvements-QM0dw", "main"]
+    branches: ["*"]
 
 permissions:
   contents: read
