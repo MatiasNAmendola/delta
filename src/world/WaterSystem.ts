@@ -47,7 +47,7 @@ export class WaterSystem {
       for (let i = 0; i <= samples; i++) {
         const t = i / samples;
         const [rx, rz] = getPointOnPath(river.points, t);
-        const halfW = river.width / 2 - 1;
+        const halfW = river.width / 2;
 
         const minX = Math.floor(
           ((rx - halfW + WORLD_SIZE / 2) / WORLD_SIZE) * res
