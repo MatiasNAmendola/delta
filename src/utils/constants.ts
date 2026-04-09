@@ -13,9 +13,9 @@ export const BOAT_LENGTH = 6;
 export const BOAT_WIDTH = 2;
 
 // Camera
-export const CAMERA_HEIGHT = 12;
-export const CAMERA_DISTANCE = 18;
-export const CAMERA_LERP = 0.05;
+export const CAMERA_HEIGHT = 4.5;
+export const CAMERA_DISTANCE = 14;
+export const CAMERA_LERP = 0.06;
 
 // Game mechanics
 export const MAX_PASSENGERS = 20;

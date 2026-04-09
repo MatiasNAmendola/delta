@@ -353,10 +353,10 @@ export class GameEngine {
   private cameraLookTarget = Vector3.Zero();
 
   private updateCamera(dt: number, angleOffset: number, pitchOffset: number): void {
-    // Camera orbits around the boat based on boat rotation + user angle offset
+    // Camera behind and slightly above the boat — third-person chase cam
     const cameraAngle = this.boat.rotation + Math.PI + angleOffset;
-    const dist = CAMERA_DISTANCE * 0.6;
-    const height = CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset;
+    const dist = CAMERA_DISTANCE;
+    const height = CAMERA_HEIGHT + this.boat.speed * 1.5 + pitchOffset;
 
     const targetX = this.boat.position.x + Math.sin(cameraAngle) * dist;
     const targetZ = this.boat.position.z + Math.cos(cameraAngle) * dist;
@@ -377,20 +377,24 @@ export class GameEngine {
       CAMERA_LERP
     );
 
-    // Look at boat
+    // Look ahead of the boat (not at the boat itself) so the horizon is visible
+    const lookAhead = 6 + Math.abs(this.boat.speed) * 15;
+    const lookX = this.boat.position.x + Math.sin(this.boat.rotation) * lookAhead;
+    const lookZ = this.boat.position.z + Math.cos(this.boat.rotation) * lookAhead;
+
     this.cameraLookTarget.x = lerp(
       this.cameraLookTarget.x,
-      this.boat.position.x,
+      lookX,
       CAMERA_LERP * 2
     );
     this.cameraLookTarget.y = lerp(
       this.cameraLookTarget.y,
-      this.boat.position.y + 2,
+      this.boat.position.y + 1.2,
       CAMERA_LERP * 2
     );
     this.cameraLookTarget.z = lerp(
       this.cameraLookTarget.z,
-      this.boat.position.z,
+      lookZ,
       CAMERA_LERP * 2
     );
     this.camera.setTarget(this.cameraLookTarget);
