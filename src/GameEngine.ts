@@ -52,20 +52,25 @@ export class GameEngine {
   private nearDock: string | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
-    // Adapt canvas to device pixel ratio for crisp rendering
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    // Cap pixel ratio for mobile performance (2 is plenty on high-DPI screens)
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: dpr <= 1.5,   // disable AA on high-DPI (pixels already tiny)
       alpha: true,
       stencil: true,
+      powerPreference: "high-performance",
     });
 
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
+
+    // Shadow defaults for mobile — kept small until explicitly enabled
+    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.clock = new THREE.Clock();
 
@@ -148,6 +153,17 @@ export class GameEngine {
     // Postprocessing pipeline (bloom, DOF, color grading, vignette, SSAO)
     this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera);
 
+    // Performance optimizer — measures FPS, auto-adjusts quality
+    this.perfOptimizer = new PerformanceOptimizer(
+      this.renderer,
+      this.scene,
+      this.camera
+    );
+    this.perfOptimizer.setDebug(true);
+    this.perfOptimizer.onChange((settings: QualitySettings) => {
+      this.applyQualitySettings(settings);
+    });
+
     this.updateLoadingBar(100, "¡Listo!");
 
     // Hide loading screen
@@ -215,8 +231,33 @@ export class GameEngine {
     this.currentTargetDock = DOCK_LOCATIONS.indexOf(available[idx]);
   }
 
+  /** Apply quality settings from the performance optimizer to subsystems */
+  private applyQualitySettings(s: QualitySettings): void {
+    // Grass visibility
+    if (this.grassSystem) {
+      this.grassSystem.setVisible(s.grass);
+    }
+    // Fog density multiplier applied to weather system
+    if (this.weatherSystem) {
+      this.weatherSystem.setFogDensityMultiplier(s.fogDensityMultiplier);
+    }
+    // Wake effect visibility
+    if (this.wakeEffect) {
+      this.wakeEffect.setFoamEnabled(s.wakeFoam);
+      this.wakeEffect.setTrailsEnabled(s.wakeTrails);
+    }
+    // Rain limit
+    if (this.weatherSystem) {
+      this.weatherSystem.setMaxRainParticles(s.maxRainParticles);
+    }
+    console.log(`[GameEngine] Quality applied: ${this.perfOptimizer.quality}`);
+  }
+
   private gameLoop(): void {
     const dt = this.clock.getDelta();
+
+    // Update performance optimizer every frame
+    this.perfOptimizer.update(dt);
 
     if (this.gameStarted && !this.gameOver) {
       this.gameTime += dt;
