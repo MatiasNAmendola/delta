@@ -193,16 +193,18 @@ export class MobileControls {
           z-index: 100;
           pointer-events: none;
         }
+
+        /* === Control button base === */
         .ctrl-btn {
           pointer-events: all;
           position: fixed;
-          width: 64px;
-          height: 64px;
+          width: 60px;
+          height: 60px;
           border-radius: 50%;
           border: 3px solid rgba(232,213,163,0.6);
           background: rgba(0,0,0,0.5);
           color: #e8d5a3;
-          font-size: 26px;
+          font-size: 24px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -216,36 +218,40 @@ export class MobileControls {
           border-color: rgba(232,213,163,0.9);
           transform: scale(0.92);
         }
+
+        /* === PARADA action button: bottom-center === */
         .ctrl-btn.action-btn {
-          width: 72px;
-          height: 72px;
+          width: 68px;
+          height: 68px;
           border-color: rgba(100,200,150,0.7);
-          font-size: 13px;
+          font-size: 12px;
           font-weight: bold;
         }
         .ctrl-btn.action-btn:active, .ctrl-btn.action-btn.active {
           background: rgba(100,200,150,0.4);
         }
+
+        /* === Gyro toggle: placed inside HUD top-right panel === */
         .gyro-toggle {
           pointer-events: all;
-          position: fixed;
-          top: 60px;
-          right: 10px;
-          padding: 8px 14px;
-          border-radius: 20px;
-          border: 2px solid rgba(232,213,163,0.5);
+          padding: 4px 10px;
+          border-radius: 6px;
+          border: 1px solid rgba(232,213,163,0.5);
           background: rgba(0,0,0,0.5);
           color: #e8d5a3;
-          font-size: 12px;
-          z-index: 101;
+          font-size: 11px;
           touch-action: none;
           user-select: none;
           -webkit-user-select: none;
+          cursor: pointer;
+          white-space: nowrap;
         }
         .gyro-toggle.on {
           border-color: rgba(100,200,150,0.8);
           background: rgba(100,200,150,0.2);
         }
+
+        /* === Camera hint === */
         .cam-hint {
           position: fixed;
           top: 50%;
@@ -257,27 +263,113 @@ export class MobileControls {
           z-index: 49;
           text-align: center;
         }
+
+        /* =============================================
+           LAYOUT: bottom controls zone
+           Left cluster: steering (left/right arrows)
+           Right cluster: throttle (forward/backward)
+           Center: PARADA button
+           ============================================= */
+        #ctrl-left-cluster {
+          position: fixed;
+          bottom: 20px;
+          left: 12px;
+          display: flex;
+          gap: 10px;
+          align-items: flex-end;
+          pointer-events: none;
+        }
+        #ctrl-right-cluster {
+          position: fixed;
+          bottom: 20px;
+          right: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          align-items: center;
+          pointer-events: none;
+        }
+        #ctrl-center {
+          position: fixed;
+          bottom: 30px;
+          left: 50%;
+          transform: translateX(-50%);
+          pointer-events: none;
+        }
+
+        /* Reset positioning since buttons are inside flex containers */
+        #ctrl-left-cluster .ctrl-btn,
+        #ctrl-right-cluster .ctrl-btn,
+        #ctrl-center .ctrl-btn {
+          position: relative;
+          pointer-events: all;
+        }
+
+        /* === Landscape adjustments === */
+        @media (max-height: 450px) {
+          .ctrl-btn {
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+          }
+          .ctrl-btn.action-btn {
+            width: 56px;
+            height: 56px;
+            font-size: 10px;
+          }
+          #ctrl-left-cluster { bottom: 10px; left: 8px; gap: 6px; }
+          #ctrl-right-cluster { bottom: 10px; right: 8px; gap: 6px; }
+          #ctrl-center { bottom: 15px; }
+        }
+
+        /* === Small portrait phones === */
+        @media (max-width: 380px) {
+          .ctrl-btn {
+            width: 52px;
+            height: 52px;
+            font-size: 20px;
+          }
+          .ctrl-btn.action-btn {
+            width: 58px;
+            height: 58px;
+            font-size: 11px;
+          }
+          #ctrl-left-cluster { left: 8px; gap: 6px; }
+          #ctrl-right-cluster { right: 8px; gap: 6px; }
+        }
       </style>
-      <!-- Left side: steering -->
-      <div class="ctrl-btn" id="btnLeft" style="bottom:35px;left:15px;">&#x25C0;</div>
-      <div class="ctrl-btn" id="btnRight" style="bottom:35px;left:95px;">&#x25B6;</div>
 
-      <!-- Right side: throttle -->
-      <div class="ctrl-btn" id="btnForward" style="bottom:110px;right:40px;">&#x25B2;</div>
-      <div class="ctrl-btn" id="btnReverse" style="bottom:25px;right:40px;">&#x25BC;</div>
-
-      <!-- Action button -->
-      <div class="ctrl-btn action-btn" id="btnAction" style="bottom:65px;right:125px;">
-        PARADA
+      <!-- Left cluster: steering left / right -->
+      <div id="ctrl-left-cluster">
+        <div class="ctrl-btn" id="btnLeft">&#x25C0;</div>
+        <div class="ctrl-btn" id="btnRight">&#x25B6;</div>
       </div>
 
-      <!-- Gyroscope toggle -->
-      <div class="gyro-toggle" id="gyroToggle">Giroscopio: OFF</div>
+      <!-- Right cluster: forward (top) / reverse (bottom) -->
+      <div id="ctrl-right-cluster">
+        <div class="ctrl-btn" id="btnForward">&#x25B2;</div>
+        <div class="ctrl-btn" id="btnReverse">&#x25BC;</div>
+      </div>
 
-      <!-- Camera hint -->
+      <!-- Center: PARADA action -->
+      <div id="ctrl-center">
+        <div class="ctrl-btn action-btn" id="btnAction">PARADA</div>
+      </div>
+
+      <!-- Camera hint (fades out) -->
       <div class="cam-hint" id="camHint">Arrastr&#xe1; la pantalla para mover la c&#xe1;mara</div>
     `;
     document.body.appendChild(this.controlsDiv);
+
+    // Place gyroscope toggle inside the HUD top-right gyro slot
+    const gyroSlot = document.getElementById("hud-gyro-slot");
+    if (gyroSlot) {
+      const gyroBtn = document.createElement("button");
+      gyroBtn.className = "gyro-toggle";
+      gyroBtn.id = "gyroToggle";
+      gyroBtn.textContent = "Giroscopio: OFF";
+      gyroSlot.appendChild(gyroBtn);
+    }
 
     // Hide camera hint after a few seconds
     setTimeout(() => {
@@ -312,14 +404,16 @@ export class MobileControls {
 
     // Gyro toggle
     const gyroBtn = document.getElementById("gyroToggle")!;
-    gyroBtn.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      this.toggleGyroscope();
-    }, { passive: false });
-    gyroBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      this.toggleGyroscope();
-    });
+    if (gyroBtn) {
+      gyroBtn.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        this.toggleGyroscope();
+      }, { passive: false });
+      gyroBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        this.toggleGyroscope();
+      });
+    }
   }
 
   private setupTouchButton(

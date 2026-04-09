@@ -390,6 +390,19 @@ export class GameEngine {
       // Update weather (transitions, rain follows boat)
       this.weatherSystem.update(dt, this.boat.position.x, this.boat.position.z);
 
+      // Apply humidity fog boost when boat is over water
+      this.weatherSystem.applyWaterFogBoost(
+        this.waterSystem.isWater(this.boat.position.x, this.boat.position.z)
+      );
+
+      // Update atmospheric effects (god rays + ambient particles)
+      this.atmosphere.update(
+        dt,
+        this.weatherSystem.sunPosition,
+        this.boat.position.x,
+        this.boat.position.z
+      );
+
       // Update shadow camera to follow the boat each frame for optimal shadow quality
       this.weatherSystem.updateShadowCamera(
         this.boat.position.x,
