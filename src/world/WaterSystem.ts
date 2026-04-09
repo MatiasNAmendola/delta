@@ -351,6 +351,12 @@ export class WaterSystem {
       // Don't reflect sky/clouds/sun — causes ugly streaks
       if (mesh.name === "sky" || mesh.name.startsWith("cloud_")
         || mesh.name === "sun" || mesh.name === "sunHalo") continue;
+      // Don't reflect grass (cross-billboard shader breaks in reflections)
+      if (mesh.name === "grassClump") continue;
+      // Don't reflect river bank boxes (fragmented dark reflections)
+      if (mesh.name.startsWith("bank_")) continue;
+      // Don't reflect wake trail ribbons
+      if (mesh.name.endsWith("Trail")) continue;
       this.waterMaterial.addToRenderList(mesh);
     }
   }
