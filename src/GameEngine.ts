@@ -140,14 +140,17 @@ export class GameEngine {
 
     this.updateLoadingBar(85, "Configurando controles...");
 
-    this.controls = new MobileControls(this.canvas);
+    try { this.controls = new MobileControls(this.canvas); } catch (e) { console.warn("Controls init failed:", e); }
     this.randomizeDockPassengers();
 
     this.updateLoadingBar(95, "Preparando interfaz...");
 
     this.ui = new GameUI();
-    this.ui.onPlayClick(() => this.startGame());
-    this.ui.onWeatherChange((preset) => this.weatherSystem.setWeather(preset as any));
+    this.ui.onPlayClick(() => {
+      console.log("JUGAR pressed — starting game");
+      this.startGame();
+    });
+    this.ui.onWeatherChange((preset) => this.weatherSystem?.setWeather(preset as any));
 
     // Postprocessing pipeline (bloom, DOF, color grading, vignette, SSAO)
     try {
