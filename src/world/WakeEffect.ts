@@ -122,6 +122,11 @@ export class WakeEffect {
   private starboardTrailMesh: THREE.Mesh;
   private centerTrailMesh: THREE.Mesh;
 
+  // Pre-allocated ribbon buffers (avoids GC churn from creating new geometry every frame)
+  private ribbonPositions: Float32Array;
+  private ribbonColors: Float32Array;
+  private ribbonIndices: Uint16Array;
+
   // Foam particle system (replaces BabylonJS ParticleSystem)
   private foamParticles: FoamParticle[] = [];
   private foamPoints: THREE.Points;
@@ -132,8 +137,18 @@ export class WakeEffect {
   // Bow wave disc
   private bowWave: THREE.Mesh;
 
+  // Performance toggles
+  private foamEnabled = true;
+  private trailsEnabled = true;
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+
+    // Pre-allocate ribbon buffers sized for TRAIL_LENGTH (reused each frame)
+    const maxVerts = TRAIL_LENGTH * 2;
+    this.ribbonPositions = new Float32Array(maxVerts * 3);
+    this.ribbonColors = new Float32Array(maxVerts * 4);
+    this.ribbonIndices = new Uint16Array((TRAIL_LENGTH - 1) * 6);
 
     // --- Trail ribbon meshes ---
     this.portTrailMesh = this.createTrailMesh("portTrail", 0xccbf99);
@@ -217,6 +232,22 @@ export class WakeEffect {
     mesh.frustumCulled = false;
     this.scene.add(mesh);
     return mesh;
+  }
+
+  // -----------------------------------------------------------------------
+  // Performance toggles
+  // -----------------------------------------------------------------------
+
+  public setFoamEnabled(enabled: boolean): void {
+    this.foamEnabled = enabled;
+    this.foamPoints.visible = enabled;
+  }
+
+  public setTrailsEnabled(enabled: boolean): void {
+    this.trailsEnabled = enabled;
+    this.portTrailMesh.visible = enabled;
+    this.starboardTrailMesh.visible = enabled;
+    this.centerTrailMesh.visible = enabled;
   }
 
   // -----------------------------------------------------------------------

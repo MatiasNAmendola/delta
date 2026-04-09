@@ -221,7 +221,7 @@ export class Environment {
     return tex;
   }
 
-  // --- Trees ---
+  // --- Trees (with LOD) ---
   private createWeepingWillow(x: number, z: number, seed: number): void {
     const rng = seededRandom(seed);
     const trunkMat = this.createMat(COLORS.wood);
@@ -229,8 +229,12 @@ export class Environment {
     const scale = 1.8 + rng() * 1.5;
     const tree = createProcTreeMesh(`willow_${seed}`, this.scene, trunkMat, leafMat,
       { ...TREE_PRESETS.willow, seed }, scale);
-    tree.position.set(x, WATER_LEVEL, z);
-    tree.rotation.y = rng() * Math.PI * 2;
+    // Remove from scene — LOD will manage it
+    this.scene.remove(tree);
+    const lod = createTreeLOD(tree, scale * 4, COLORS.willowLeaf);
+    lod.position.set(x, WATER_LEVEL, z);
+    lod.rotation.y = rng() * Math.PI * 2;
+    this.scene.add(lod);
   }
 
   private createPoplar(x: number, z: number, seed: number): void {
@@ -240,20 +244,27 @@ export class Environment {
     const scale = 1.5 + rng() * 1.2;
     const tree = createProcTreeMesh(`poplar_${seed}`, this.scene, trunkMat, leafMat,
       { ...TREE_PRESETS.poplar, seed }, scale);
-    tree.position.set(x, WATER_LEVEL, z);
-    tree.rotation.y = rng() * Math.PI * 2;
+    this.scene.remove(tree);
+    const lod = createTreeLOD(tree, scale * 5, COLORS.poplarLeaf);
+    lod.position.set(x, WATER_LEVEL, z);
+    lod.rotation.y = rng() * Math.PI * 2;
+    this.scene.add(lod);
   }
 
   private createRegularTree(x: number, z: number, seed: number): void {
     const rng = seededRandom(seed);
     const leafColors = [COLORS.leaves, COLORS.leavesDark, COLORS.leavesLight];
     const trunkMat = this.createMat(COLORS.wood);
-    const leafMat = this.createMat(leafColors[seed % 3]);
+    const leafColor = leafColors[seed % 3];
+    const leafMat = this.createMat(leafColor);
     const scale = 1.5 + rng() * 1.5;
     const tree = createProcTreeMesh(`tree_${seed}`, this.scene, trunkMat, leafMat,
       { ...TREE_PRESETS.regular, seed }, scale);
-    tree.position.set(x, WATER_LEVEL, z);
-    tree.rotation.y = rng() * Math.PI * 2;
+    this.scene.remove(tree);
+    const lod = createTreeLOD(tree, scale * 4, leafColor);
+    lod.position.set(x, WATER_LEVEL, z);
+    lod.rotation.y = rng() * Math.PI * 2;
+    this.scene.add(lod);
   }
 
   private distToRiver(x: number, z: number): number {
@@ -398,9 +409,11 @@ export class Environment {
   private createHouse(x: number, z: number, seed: number, nearRiver: boolean): void {
     const rng = seededRandom(seed);
     const node = new THREE.Group();
+    node.name = `house_${seed}`;
     node.position.set(x, WATER_LEVEL, z);
     node.rotation.y = rng() * Math.PI * 2;
     this.scene.add(node);
+    this.houseGroups.push(node);
 
     const w = 2 + rng() * 2, h = 1.5 + rng() * 1.5, d = 2 + rng() * 2;
 
@@ -564,5 +577,161 @@ export class Environment {
 
   public highlightDock(name: string, highlight: boolean): void {
     // Could add glow or color change
+  }
+
+  // ---------------------------------------------------------------------------
+  // Static geometry merging — reduces draw calls for houses and docks
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Merge all house groups into a few batched meshes (one per material).
+   * This replaces dozens of individual Mesh objects with merged BufferGeometry.
+   */
+  private mergeStaticHouses(): void {
+    if (this.houseGroups.length === 0) return;
+
+    const buckets = new Map<
+      string,
+      { material: THREE.Material; geometries: THREE.BufferGeometry[] }
+    >();
+    const toRemove: THREE.Object3D[] = [];
+
+    for (const group of this.houseGroups) {
+      group.updateMatrixWorld(true);
+      group.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return;
+        const mat = child.material as THREE.Material;
+        if (!mat) return;
+        const key = mat.uuid;
+        if (!buckets.has(key)) {
+          buckets.set(key, { material: mat, geometries: [] });
+        }
+        const geom = child.geometry.clone();
+        geom.applyMatrix4(child.matrixWorld);
+        buckets.get(key)!.geometries.push(geom);
+      });
+      toRemove.push(group);
+    }
+
+    // Remove original house groups
+    for (const g of toRemove) {
+      g.removeFromParent();
+    }
+
+    // Merge each material bucket
+    let mergedCount = 0;
+    for (const [, bucket] of buckets) {
+      if (bucket.geometries.length < 2) {
+        if (bucket.geometries.length === 1) {
+          const m = new THREE.Mesh(bucket.geometries[0], bucket.material);
+          m.matrixAutoUpdate = false;
+          this.scene.add(m);
+          this.mergedMeshes.push(m);
+          mergedCount++;
+        }
+        continue;
+      }
+      try {
+        const merged = mergeGeometries(bucket.geometries, false);
+        if (!merged) continue;
+        merged.computeBoundingSphere();
+        merged.computeBoundingBox();
+        const mesh = new THREE.Mesh(merged, bucket.material);
+        mesh.matrixAutoUpdate = false;
+        mesh.name = `mergedHouses_${mergedCount}`;
+        this.scene.add(mesh);
+        this.mergedMeshes.push(mesh);
+        mergedCount++;
+      } catch (e) {
+        console.warn("[Environment] House merge failed:", e);
+      }
+      // Dispose intermediate cloned geometries
+      for (const g of bucket.geometries) g.dispose();
+    }
+
+    console.log(
+      `[Environment] Merged ${this.houseGroups.length} houses into ${mergedCount} batched meshes`
+    );
+    this.houseGroups = [];
+  }
+
+  /**
+   * Merge dock geometry into fewer meshes per dock.
+   * Docks are more complex so we merge per-dock to keep the bounding sphere useful
+   * for frustum culling while still reducing draw calls.
+   */
+  private mergeStaticDocks(): void {
+    let totalBefore = 0;
+    let totalAfter = 0;
+
+    for (const [name, dockGroup] of this.dockMeshes) {
+      const buckets = new Map<
+        string,
+        { material: THREE.Material; geometries: THREE.BufferGeometry[] }
+      >();
+
+      dockGroup.updateMatrixWorld(true);
+      let childCount = 0;
+
+      dockGroup.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return;
+        childCount++;
+        const mat = child.material as THREE.Material;
+        if (!mat) return;
+        const key = mat.uuid;
+        if (!buckets.has(key)) {
+          buckets.set(key, { material: mat, geometries: [] });
+        }
+        const geom = child.geometry.clone();
+        geom.applyMatrix4(child.matrixWorld);
+        buckets.get(key)!.geometries.push(geom);
+      });
+
+      totalBefore += childCount;
+
+      // Remove old children
+      while (dockGroup.children.length > 0) {
+        const c = dockGroup.children[0];
+        if (c instanceof THREE.Mesh) {
+          c.geometry.dispose();
+        }
+        dockGroup.remove(c);
+      }
+
+      // Reset dock group transform (geometry is now in world space)
+      dockGroup.position.set(0, 0, 0);
+      dockGroup.rotation.set(0, 0, 0);
+      dockGroup.scale.set(1, 1, 1);
+      dockGroup.updateMatrixWorld(true);
+
+      for (const [, bucket] of buckets) {
+        if (bucket.geometries.length < 2) {
+          if (bucket.geometries.length === 1) {
+            const m = new THREE.Mesh(bucket.geometries[0], bucket.material);
+            m.matrixAutoUpdate = false;
+            dockGroup.add(m);
+            totalAfter++;
+          }
+          continue;
+        }
+        try {
+          const merged = mergeGeometries(bucket.geometries, false);
+          if (!merged) continue;
+          merged.computeBoundingSphere();
+          merged.computeBoundingBox();
+          const mesh = new THREE.Mesh(merged, bucket.material);
+          mesh.matrixAutoUpdate = false;
+          dockGroup.add(mesh);
+          totalAfter++;
+        } catch (e) {
+          console.warn(`[Environment] Dock merge failed for ${name}:`, e);
+        }
+        for (const g of bucket.geometries) g.dispose();
+      }
+    }
+
+    console.log(
+      `[Environment] Dock geometry: ${totalBefore} meshes merged into ${totalAfter}`
+    );
   }
 }

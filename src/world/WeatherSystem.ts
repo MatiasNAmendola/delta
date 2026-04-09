@@ -10,6 +10,9 @@
  * - Cascaded shadow maps on directional (sun) light
  * - Rim/back-light for boat silhouette pop
  * - PMREMGenerator environment map from sky for PBR reflections
+ * - Distance fog with colour gradient (blue-white horizon, golden
+ *   near the sun, denser over water for humidity haze)
+ * - Sky presets tuned for humid subtropical Delta de Tigre skies
  */
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
@@ -26,54 +29,84 @@ interface WeatherState {
   luminance: number;
   fogDensity: number;
   fogColor: THREE.Color;
+  /** Secondary fog colour — blended toward when looking at the sun */
+  fogColorSun: THREE.Color;
+  /** Base horizon fog colour (blue-white) */
+  fogColorHorizon: THREE.Color;
   ambientIntensity: number;
   ambientSkyColor: THREE.Color;
   ambientGroundColor: THREE.Color;
   sunIntensity: number;
   sunColor: THREE.Color;
   rainRate: number;
+  /** Extra fog density added over water (humidity haze) */
+  waterFogExtra: number;
 }
 
 const PRESETS: Record<WeatherPreset, WeatherState> = {
+  // Humid subtropical morning — high turbidity from river moisture,
+  // elevated rayleigh for deep blue zenith, strong mie for haze
   morning: {
     sunPosition: new THREE.Vector3(-50, 20, 30),
-    turbidity: 8, rayleigh: 2, mieCoefficient: 0.005, mieDirectionalG: 0.8, luminance: 1.0,
-    fogDensity: 0.0012, fogColor: new THREE.Color(0.75, 0.8, 0.85),
-    ambientIntensity: 0.5, ambientSkyColor: new THREE.Color(0.85, 0.8, 0.7), ambientGroundColor: new THREE.Color(0.2, 0.25, 0.2),
-    sunIntensity: 0.6, sunColor: new THREE.Color(1, 0.9, 0.7),
-    rainRate: 0,
+    turbidity: 10, rayleigh: 2.8, mieCoefficient: 0.008, mieDirectionalG: 0.82, luminance: 1.0,
+    fogDensity: 0.0015,
+    fogColor: new THREE.Color(0.78, 0.82, 0.88),
+    fogColorSun: new THREE.Color(0.95, 0.85, 0.6),
+    fogColorHorizon: new THREE.Color(0.8, 0.85, 0.92),
+    ambientIntensity: 0.55, ambientSkyColor: new THREE.Color(0.88, 0.82, 0.72), ambientGroundColor: new THREE.Color(0.22, 0.28, 0.2),
+    sunIntensity: 0.65, sunColor: new THREE.Color(1, 0.88, 0.65),
+    rainRate: 0, waterFogExtra: 0.0008,
   },
+  // Bright humid noon — slightly washed-out sky typical of Buenos
+  // Aires summers; moderate turbidity, lower rayleigh for pale blue
   noon: {
     sunPosition: new THREE.Vector3(0, 80, 20),
-    turbidity: 5, rayleigh: 1.5, mieCoefficient: 0.003, mieDirectionalG: 0.76, luminance: 1.1,
-    fogDensity: 0.0008, fogColor: new THREE.Color(0.7, 0.78, 0.85),
-    ambientIntensity: 0.7, ambientSkyColor: new THREE.Color(0.95, 0.95, 0.9), ambientGroundColor: new THREE.Color(0.25, 0.3, 0.2),
-    sunIntensity: 0.9, sunColor: new THREE.Color(1, 1, 0.95),
-    rainRate: 0,
+    turbidity: 6, rayleigh: 1.8, mieCoefficient: 0.004, mieDirectionalG: 0.78, luminance: 1.15,
+    fogDensity: 0.0008,
+    fogColor: new THREE.Color(0.72, 0.80, 0.88),
+    fogColorSun: new THREE.Color(0.92, 0.9, 0.78),
+    fogColorHorizon: new THREE.Color(0.78, 0.84, 0.92),
+    ambientIntensity: 0.75, ambientSkyColor: new THREE.Color(0.95, 0.95, 0.92), ambientGroundColor: new THREE.Color(0.28, 0.32, 0.22),
+    sunIntensity: 1.0, sunColor: new THREE.Color(1, 1, 0.95),
+    rainRate: 0, waterFogExtra: 0.0005,
   },
+  // Delta sunsets are famously dramatic — very high turbidity from
+  // humidity and particulates over the water, deep orange/pink mie
   sunset: {
     sunPosition: new THREE.Vector3(60, 5, -40),
-    turbidity: 15, rayleigh: 4, mieCoefficient: 0.02, mieDirectionalG: 0.9, luminance: 1.0,
-    fogDensity: 0.002, fogColor: new THREE.Color(0.8, 0.55, 0.35),
-    ambientIntensity: 0.4, ambientSkyColor: new THREE.Color(0.9, 0.6, 0.3), ambientGroundColor: new THREE.Color(0.15, 0.1, 0.1),
-    sunIntensity: 0.5, sunColor: new THREE.Color(1, 0.6, 0.2),
-    rainRate: 0,
+    turbidity: 18, rayleigh: 4.5, mieCoefficient: 0.025, mieDirectionalG: 0.92, luminance: 1.0,
+    fogDensity: 0.0022,
+    fogColor: new THREE.Color(0.82, 0.55, 0.35),
+    fogColorSun: new THREE.Color(1.0, 0.6, 0.2),
+    fogColorHorizon: new THREE.Color(0.75, 0.55, 0.5),
+    ambientIntensity: 0.4, ambientSkyColor: new THREE.Color(0.92, 0.58, 0.28), ambientGroundColor: new THREE.Color(0.18, 0.1, 0.08),
+    sunIntensity: 0.55, sunColor: new THREE.Color(1, 0.55, 0.18),
+    rainRate: 0, waterFogExtra: 0.001,
   },
+  // Delta night — low turbidity, very faint rayleigh, dark blue-green
   night: {
     sunPosition: new THREE.Vector3(0, -20, 30),
-    turbidity: 2, rayleigh: 0.5, mieCoefficient: 0.001, mieDirectionalG: 0.7, luminance: 0.01,
-    fogDensity: 0.003, fogColor: new THREE.Color(0.03, 0.04, 0.08),
-    ambientIntensity: 0.15, ambientSkyColor: new THREE.Color(0.1, 0.12, 0.2), ambientGroundColor: new THREE.Color(0.02, 0.03, 0.05),
+    turbidity: 2, rayleigh: 0.4, mieCoefficient: 0.001, mieDirectionalG: 0.7, luminance: 0.01,
+    fogDensity: 0.003,
+    fogColor: new THREE.Color(0.03, 0.04, 0.08),
+    fogColorSun: new THREE.Color(0.05, 0.05, 0.1),
+    fogColorHorizon: new THREE.Color(0.04, 0.05, 0.1),
+    ambientIntensity: 0.15, ambientSkyColor: new THREE.Color(0.08, 0.1, 0.18), ambientGroundColor: new THREE.Color(0.02, 0.03, 0.05),
     sunIntensity: 0.05, sunColor: new THREE.Color(0.2, 0.25, 0.4),
-    rainRate: 0,
+    rainRate: 0, waterFogExtra: 0.001,
   },
+  // Sudestada-style storm — extremely high turbidity, thick overcast,
+  // grey-green tint typical of Parana Delta storms
   storm: {
     sunPosition: new THREE.Vector3(-30, 15, 20),
-    turbidity: 25, rayleigh: 3, mieCoefficient: 0.05, mieDirectionalG: 0.65, luminance: 0.6,
-    fogDensity: 0.004, fogColor: new THREE.Color(0.35, 0.38, 0.4),
-    ambientIntensity: 0.3, ambientSkyColor: new THREE.Color(0.5, 0.52, 0.55), ambientGroundColor: new THREE.Color(0.1, 0.12, 0.1),
-    sunIntensity: 0.2, sunColor: new THREE.Color(0.6, 0.6, 0.6),
-    rainRate: 800,
+    turbidity: 30, rayleigh: 3.5, mieCoefficient: 0.06, mieDirectionalG: 0.6, luminance: 0.5,
+    fogDensity: 0.005,
+    fogColor: new THREE.Color(0.32, 0.36, 0.38),
+    fogColorSun: new THREE.Color(0.4, 0.4, 0.38),
+    fogColorHorizon: new THREE.Color(0.35, 0.38, 0.4),
+    ambientIntensity: 0.28, ambientSkyColor: new THREE.Color(0.48, 0.5, 0.52), ambientGroundColor: new THREE.Color(0.1, 0.12, 0.1),
+    sunIntensity: 0.15, sunColor: new THREE.Color(0.55, 0.55, 0.55),
+    rainRate: 800, waterFogExtra: 0.002,
   },
 };
 
@@ -458,6 +491,17 @@ export class WeatherSystem {
     dest.sunIntensity = src.sunIntensity;
     dest.sunColor.copy(src.sunColor);
     dest.rainRate = src.rainRate;
+  }
+
+  /** Set a multiplier for fog density (used by performance optimizer) */
+  public setFogDensityMultiplier(multiplier: number): void {
+    this.fog.density = this.current.fogDensity * multiplier;
+  }
+
+  /** Limit the number of active rain particles (used by performance optimizer) */
+  public setMaxRainParticles(max: number): void {
+    // Clamp the draw range to the given maximum
+    this.rainGeometry.setDrawRange(0, Math.min(max, MAX_RAIN_PARTICLES));
   }
 
   public dispose(): void {

@@ -68,8 +68,8 @@ export class GameEngine {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
 
-    // Shadow defaults for mobile — kept small until explicitly enabled
-    this.renderer.shadowMap.enabled = false;
+    // Enable shadow maps with soft shadows
+    this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.clock = new THREE.Clock();
@@ -91,18 +91,14 @@ export class GameEngine {
     this.camera.position.set(0, CAMERA_HEIGHT, -CAMERA_DISTANCE);
     this.camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-    // Default ambient light (WeatherSystem will manage these later)
-    const ambientLight = new THREE.AmbientLight(0x8899aa, 0.6);
-    this.scene.add(ambientLight);
+    // NOTE: No default ambient/directional lights — WeatherSystem manages all lighting
+    // (hemisphere light, sun with cascaded shadows, rim back-light).
 
-    // Default directional light (sun stand-in)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    directionalLight.position.set(100, 150, 50);
-    directionalLight.castShadow = false;
-    this.scene.add(directionalLight);
-
-    // Weather system handles sky, lights, fog, rain
+    // Weather system handles sky, lights, fog, rain, shadows, rim light
     this.weatherSystem = new WeatherSystem(this.scene);
+
+    // Initialize environment map generation (needs renderer for PMREM)
+    this.weatherSystem.initEnvironmentMap(this.renderer);
 
     this.updateLoadingBar(30, "Generando ríos del Delta...");
 
@@ -132,6 +128,9 @@ export class GameEngine {
 
     // Dense instanced forest (8 tree templates, hundreds of thin instances)
     this.forestSystem = new ForestSystem(this.scene, this.waterSystem);
+
+    // Enable castShadow / receiveShadow on all relevant scene objects
+    this.enableSceneShadows();
 
     // Add all scene meshes to water reflection/refraction
     this.waterSystem.addSceneToRenderList();
@@ -191,6 +190,96 @@ export class GameEngine {
         this.perfOptimizer.settings.maxPixelRatio
       );
       this.renderer.setPixelRatio(dpr);
+    });
+  }
+
+  /**
+   * Walk the scene graph and enable castShadow / receiveShadow on relevant objects.
+   * - Terrain (ground plane): receiveShadow
+   * - Dock meshes: receiveShadow + castShadow
+   * - Trees (ProcTreeMesh), houses, boat: castShadow
+   * - InstancedMesh (forest): castShadow
+   */
+  private enableSceneShadows(): void {
+    this.scene.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh)) return;
+
+      const name = (obj.name || "").toLowerCase();
+      const parentName = (obj.parent?.name || "").toLowerCase();
+
+      // Terrain ground mesh — receive shadows
+      if (obj instanceof THREE.Mesh && obj.geometry instanceof THREE.PlaneGeometry) {
+        obj.receiveShadow = true;
+      }
+
+      // Dock meshes — receive AND cast shadows
+      if (
+        parentName.includes("dock") ||
+        name.includes("dock") ||
+        name.includes("platform") ||
+        name.includes("plank") ||
+        name.includes("stilt")
+      ) {
+        obj.receiveShadow = true;
+        obj.castShadow = true;
+      }
+
+      // Tree meshes (ProcTreeMesh) — cast shadows
+      if (
+        name.includes("trunk") ||
+        name.includes("twig") ||
+        name.includes("tree") ||
+        name.includes("willow") ||
+        name.includes("poplar")
+      ) {
+        obj.castShadow = true;
+      }
+
+      // Forest instanced meshes — cast shadows
+      if (obj instanceof THREE.InstancedMesh) {
+        obj.castShadow = true;
+      }
+
+      // Houses — cast and receive shadows
+      if (
+        parentName.includes("house") ||
+        name.includes("wall") ||
+        name.includes("roof") ||
+        name.includes("peak") ||
+        name.includes("door")
+      ) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      }
+
+      // Boat meshes — cast and receive shadows
+      if (
+        parentName === "lancha" ||
+        parentName.includes("lanchamodel") ||
+        name === "hull" ||
+        name === "deck" ||
+        name === "cabin" ||
+        name === "roof" ||
+        name === "bow" ||
+        name === "pilot" ||
+        name.startsWith("side_")
+      ) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      }
+
+      // Vegetation GLB clones — cast shadows
+      if (parentName.includes("vegtemplate") || parentName.includes("bush") || parentName.includes("flower")) {
+        obj.castShadow = true;
+      }
+    });
+
+    // Explicitly enable shadows on the boat root node children
+    this.boat.rootNode.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
     });
   }
 
@@ -295,6 +384,13 @@ export class GameEngine {
 
       // Update weather (transitions, rain follows boat)
       this.weatherSystem.update(dt, this.boat.position.x, this.boat.position.z);
+
+      // Update shadow camera to follow the boat each frame for optimal shadow quality
+      this.weatherSystem.updateShadowCamera(
+        this.boat.position.x,
+        this.boat.position.y,
+        this.boat.position.z
+      );
 
       // Update wake
       this.wakeEffect.update(
