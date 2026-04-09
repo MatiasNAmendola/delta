@@ -2,23 +2,23 @@
  * ForestSystem — Dense instanced forest using proctree templates.
  *
  * Generates 8 tree templates (varied seeds/presets), merges trunk+twig
- * into single meshes, then places hundreds of thin instances per template.
+ * into InstancedMesh groups, then places hundreds of instances per template.
  * Result: dense jungle with very few draw calls.
+ *
+ * Three.js implementation using InstancedMesh.
  */
-import { Scene } from "@babylonjs/core/scene";
-import { Mesh } from "@babylonjs/core/Meshes/mesh";
-import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
-import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { Color3 } from "@babylonjs/core/Maths/math.color";
+import * as THREE from 'three';
 import { ProcTree } from "./ProcTree";
 import { WATER_LEVEL, RIVER_MAP, WORLD_SIZE } from "../utils/constants";
 import { WaterSystem } from "./WaterSystem";
 import { seededRandom, getPointOnPath } from "../utils/helpers";
 
 interface TreeTemplate {
-  mesh: Mesh;       // merged trunk+twig mesh
-  baseHeight: number; // approximate tree height for placement
+  trunkGeometry: THREE.BufferGeometry;
+  twigGeometry: THREE.BufferGeometry;
+  trunkMaterial: THREE.MeshStandardMaterial;
+  twigMaterial: THREE.MeshStandardMaterial;
+  baseHeight: number;
 }
 
 // Tree configs: varied seeds and params for diverse jungle look
@@ -41,53 +41,63 @@ const LEAF_COLORS = ["#2d8a2d", "#1a6a1a", "#45aa45", "#387a2a", "#2a6e3a", "#4a
 const TRUNK_COLOR = "#6b4226";
 
 export class ForestSystem {
-  private scene: Scene;
+  private scene: THREE.Scene;
   private templates: TreeTemplate[] = [];
+  private instancedMeshes: THREE.InstancedMesh[] = [];
 
-  constructor(scene: Scene, waterSystem: WaterSystem) {
+  constructor(scene: THREE.Scene, waterSystem: WaterSystem) {
     this.scene = scene;
     this.buildTemplates();
     this.placeForest(waterSystem);
   }
 
   private buildTemplates(): void {
-    const trunkMat = new StandardMaterial("forestTrunk", this.scene);
-    trunkMat.diffuseColor = Color3.FromHexString(TRUNK_COLOR);
-    trunkMat.specularColor = new Color3(0.05, 0.05, 0.05);
+    const trunkColor = new THREE.Color(TRUNK_COLOR);
 
     for (let t = 0; t < TREE_CONFIGS.length; t++) {
       const cfg = TREE_CONFIGS[t];
       const tree = new ProcTree({ segments: 6, ...cfg });
 
+      // Trunk material
+      const trunkMat = new THREE.MeshStandardMaterial({
+        color: trunkColor,
+        roughness: 0.9,
+        metalness: 0.0,
+      });
+
       // Leaf material with unique green
-      const leafMat = new StandardMaterial(`forestLeaf${t}`, this.scene);
-      leafMat.diffuseColor = Color3.FromHexString(LEAF_COLORS[t % LEAF_COLORS.length]);
-      leafMat.specularColor = new Color3(0.02, 0.02, 0.02);
-      leafMat.backFaceCulling = false;
+      const leafMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(LEAF_COLORS[t % LEAF_COLORS.length]),
+        roughness: 0.8,
+        metalness: 0.0,
+        side: THREE.DoubleSide,
+      });
 
-      // Create trunk mesh
-      const trunkMesh = new Mesh(`ftTrunk${t}`, this.scene);
-      const tvd = new VertexData();
-      tvd.positions = ProcTree.flatten(tree.verts);
-      tvd.normals = ProcTree.flatten(tree.normals);
-      tvd.uvs = ProcTree.flatten(tree.UV);
-      const ti: number[] = [];
-      for (const f of tree.faces) ti.push(f[0], f[1], f[2]);
-      tvd.indices = ti;
-      tvd.applyToMesh(trunkMesh);
-      trunkMesh.material = trunkMat;
+      // Create trunk geometry
+      const trunkGeom = new THREE.BufferGeometry();
+      const trunkPositions = ProcTree.flatten(tree.verts);
+      const trunkNormals = ProcTree.flatten(tree.normals);
+      const trunkUVs = ProcTree.flatten(tree.UV);
+      const trunkIndices: number[] = [];
+      for (const f of tree.faces) trunkIndices.push(f[0], f[1], f[2]);
 
-      // Create twig mesh
-      const twigMesh = new Mesh(`ftTwig${t}`, this.scene);
-      const wvd = new VertexData();
-      wvd.positions = ProcTree.flatten(tree.vertsTwig);
-      wvd.normals = ProcTree.flatten(tree.normalsTwig);
-      wvd.uvs = ProcTree.flatten(tree.uvsTwig);
-      const wi: number[] = [];
-      for (const f of tree.facesTwig) wi.push(f[0], f[1], f[2]);
-      wvd.indices = wi;
-      wvd.applyToMesh(twigMesh);
-      twigMesh.material = leafMat;
+      trunkGeom.setAttribute('position', new THREE.Float32BufferAttribute(trunkPositions, 3));
+      trunkGeom.setAttribute('normal', new THREE.Float32BufferAttribute(trunkNormals, 3));
+      trunkGeom.setAttribute('uv', new THREE.Float32BufferAttribute(trunkUVs, 2));
+      trunkGeom.setIndex(trunkIndices);
+
+      // Create twig geometry
+      const twigGeom = new THREE.BufferGeometry();
+      const twigPositions = ProcTree.flatten(tree.vertsTwig);
+      const twigNormals = ProcTree.flatten(tree.normalsTwig);
+      const twigUVs = ProcTree.flatten(tree.uvsTwig);
+      const twigIndices: number[] = [];
+      for (const f of tree.facesTwig) twigIndices.push(f[0], f[1], f[2]);
+
+      twigGeom.setAttribute('position', new THREE.Float32BufferAttribute(twigPositions, 3));
+      twigGeom.setAttribute('normal', new THREE.Float32BufferAttribute(twigNormals, 3));
+      twigGeom.setAttribute('uv', new THREE.Float32BufferAttribute(twigUVs, 2));
+      twigGeom.setIndex(twigIndices);
 
       // Estimate tree height from trunk verts
       let maxY = 0;
@@ -95,29 +105,31 @@ export class ForestSystem {
         if (tree.verts[i][1] > maxY) maxY = tree.verts[i][1];
       }
 
-      this.templates.push({ mesh: trunkMesh, baseHeight: maxY });
-      this.templates.push({ mesh: twigMesh, baseHeight: maxY });
+      this.templates.push({
+        trunkGeometry: trunkGeom,
+        twigGeometry: twigGeom,
+        trunkMaterial: trunkMat,
+        twigMaterial: leafMat,
+        baseHeight: maxY,
+      });
     }
   }
 
   private placeForest(waterSystem: WaterSystem): void {
     const rng = seededRandom(999);
     const treeCount = 600;
+    const pairCount = TREE_CONFIGS.length;
 
-    // Collect positions per template pair (trunk+twig)
-    const instanceMatrices: Float32Array[] = [];
-    const instanceCounts: number[] = [];
-    const pairCount = TREE_CONFIGS.length; // each config = 2 meshes (trunk, twig)
-
+    // Collect matrices per template
+    const matricesPerTemplate: THREE.Matrix4[][] = [];
     for (let p = 0; p < pairCount; p++) {
-      instanceMatrices.push(new Float32Array(treeCount * 16)); // overallocate
-      instanceMatrices.push(new Float32Array(treeCount * 16));
-      instanceCounts.push(0);
-      instanceCounts.push(0);
+      matricesPerTemplate.push([]);
     }
 
-    const tmpPos = Vector3.Zero();
-    const tmpScale = Vector3.Zero();
+    const tmpPos = new THREE.Vector3();
+    const tmpScale = new THREE.Vector3();
+    const tmpQuat = new THREE.Quaternion();
+    const upAxis = new THREE.Vector3(0, 1, 0);
     let placed = 0;
 
     for (let i = 0; i < treeCount; i++) {
@@ -145,36 +157,56 @@ export class ForestSystem {
 
       tmpPos.set(x, WATER_LEVEL + 0.1, z);
       tmpScale.set(scale, scale, scale);
-      const rot = Quaternion.RotationAxis(Vector3.Up(), rotY);
-      const mat = Matrix.Compose(tmpScale, rot, tmpPos);
+      tmpQuat.setFromAxisAngle(upAxis, rotY);
 
-      // Add to both trunk and twig buffers
-      const trunkIdx = pairIdx * 2;
-      const twigIdx = pairIdx * 2 + 1;
-      const tc = instanceCounts[trunkIdx];
-      mat.copyToArray(instanceMatrices[trunkIdx], tc * 16);
-      mat.copyToArray(instanceMatrices[twigIdx], tc * 16);
-      instanceCounts[trunkIdx] = tc + 1;
-      instanceCounts[twigIdx] = tc + 1;
+      const mat = new THREE.Matrix4();
+      mat.compose(tmpPos, tmpQuat, tmpScale);
+      matricesPerTemplate[pairIdx].push(mat);
       placed++;
     }
 
-    // Apply thin instances to each template mesh
-    for (let m = 0; m < this.templates.length; m++) {
-      const count = instanceCounts[m];
-      if (count === 0) continue;
-      const mesh = this.templates[m].mesh;
-      const buffer = instanceMatrices[m].slice(0, count * 16);
-      mesh.thinInstanceSetBuffer("matrix", buffer, 16);
-      mesh.thinInstanceCount = count;
+    // Create InstancedMesh for each template (trunk + twig)
+    for (let t = 0; t < pairCount; t++) {
+      const matrices = matricesPerTemplate[t];
+      if (matrices.length === 0) continue;
+      const template = this.templates[t];
+
+      // Trunk instanced mesh
+      const trunkMesh = new THREE.InstancedMesh(
+        template.trunkGeometry, template.trunkMaterial, matrices.length
+      );
+      for (let i = 0; i < matrices.length; i++) {
+        trunkMesh.setMatrixAt(i, matrices[i]);
+      }
+      trunkMesh.instanceMatrix.needsUpdate = true;
+      this.scene.add(trunkMesh);
+      this.instancedMeshes.push(trunkMesh);
+
+      // Twig instanced mesh
+      const twigMesh = new THREE.InstancedMesh(
+        template.twigGeometry, template.twigMaterial, matrices.length
+      );
+      for (let i = 0; i < matrices.length; i++) {
+        twigMesh.setMatrixAt(i, matrices[i]);
+      }
+      twigMesh.instanceMatrix.needsUpdate = true;
+      this.scene.add(twigMesh);
+      this.instancedMeshes.push(twigMesh);
     }
 
-    console.log(`ForestSystem: ${placed} trees (${pairCount} templates x2 meshes, thin instances)`);
+    console.log(`ForestSystem: ${placed} trees (${pairCount} templates x2 meshes, instanced)`);
   }
 
   public dispose(): void {
-    for (const t of this.templates) {
-      t.mesh.dispose();
+    for (const mesh of this.instancedMeshes) {
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+      if (Array.isArray(mesh.material)) {
+        for (const m of mesh.material) m.dispose();
+      } else {
+        mesh.material.dispose();
+      }
     }
+    this.instancedMeshes = [];
   }
 }
