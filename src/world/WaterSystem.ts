@@ -33,7 +33,7 @@ export class WaterSystem {
     this.buildCollisionMap();
     this.createBumpTexture();
     this.createRiverMeshes();
-    this.createRiverBed();
+    // Riverbed removed — WaterMaterial handles underwater via refraction/color blend
   }
 
   private buildCollisionMap(): void {
@@ -268,6 +268,9 @@ export class WaterSystem {
 
     // Performance: limit lights
     this.waterMaterial.maxSimultaneousLights = 2;
+
+    // Clip plane: avoids rendering artifacts below the water surface
+    this.waterMaterial.disableClipPlane = false;
 
     // Create river strip meshes using the shared WaterMaterial
     for (const river of RIVER_MAP) {
