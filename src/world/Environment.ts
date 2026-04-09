@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   WORLD_SIZE,
   WATER_LEVEL,
@@ -11,12 +12,17 @@ import {
 import { seededRandom } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
 import { createProcTreeMesh, TREE_PRESETS } from "./ProcTreeMesh";
+import { createTreeLOD } from "../rendering/TreeLOD";
 
 export class Environment {
   private scene: THREE.Scene;
   private dockMeshes: Map<string, THREE.Group> = new Map();
   private matCache: Map<string, THREE.MeshStandardMaterial> = new Map();
   private waterSystem: WaterSystem;
+  /** Groups that hold house meshes before merging */
+  private houseGroups: THREE.Group[] = [];
+  /** Merged static meshes (for disposal) */
+  private mergedMeshes: THREE.Mesh[] = [];
 
   constructor(scene: THREE.Scene, waterSystem: WaterSystem) {
     this.scene = scene;
@@ -26,6 +32,11 @@ export class Environment {
     this.createHouses(waterSystem);
     this.createDocks();
     this.loadVegetationModels();
+
+    // Merge static house geometry to reduce draw calls
+    this.mergeStaticHouses();
+    // Merge static dock geometry to reduce draw calls
+    this.mergeStaticDocks();
   }
 
   private createMat(color: string): THREE.MeshStandardMaterial {
