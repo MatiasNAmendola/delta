@@ -20,6 +20,7 @@ import { quickTree } from "./QuickTreeGenerator";
 export class Environment {
   private scene: Scene;
   private dockMeshes: Map<string, TransformNode> = new Map();
+  private matCache: Map<string, StandardMaterial> = new Map();
 
   constructor(scene: Scene, waterSystem: WaterSystem) {
     this.scene = scene;
@@ -32,10 +33,14 @@ export class Environment {
     this.createRiverBanks(waterSystem);
   }
 
+  /** Shared material cache — one material per color, reused everywhere */
   private createMat(name: string, color: string): StandardMaterial {
+    const cached = this.matCache.get(color);
+    if (cached) return cached;
     const mat = new StandardMaterial(name, this.scene);
     mat.diffuseColor = hexToColor3(color);
     mat.specularColor = new Color3(0.05, 0.05, 0.05);
+    this.matCache.set(color, mat);
     return mat;
   }
 
@@ -180,7 +185,7 @@ export class Environment {
     canopy.position.y = height + canopySize * 0.2;
 
     // Drooping curtain branches hanging down from canopy
-    const curtainCount = 5 + Math.floor(rng() * 4); // 5-8 curtains
+    const curtainCount = 3 + Math.floor(rng() * 3); // 3-5 curtains
     for (let c = 0; c < curtainCount; c++) {
       const angle = (c / curtainCount) * Math.PI * 2 + rng() * 0.4;
       const radius = canopySize * 0.4 + rng() * canopySize * 0.2;
@@ -233,7 +238,7 @@ export class Environment {
     // Narrow vertical columnar canopy - stacked narrow boxes
     const poplarColors = [COLORS.poplarLeaf, COLORS.poplarLeafDark, COLORS.leavesDark];
     const canopyWidth = 1.2 + rng() * 0.8;
-    const canopySegments = 3 + Math.floor(rng() * 2);
+    const canopySegments = 2 + Math.floor(rng() * 2);
     const segHeight = (height * 0.6) / canopySegments;
 
     for (let s = 0; s < canopySegments; s++) {
@@ -258,23 +263,41 @@ export class Environment {
     treeNode.rotation.y = rng() * Math.PI * 2;
   }
 
-  // Tree type 2: Regular/eucalyptus — uses QuickTreeGenerator (community extension)
-  // Generates organic randomized-sphere canopy + tapered cylinder trunk, flat-shaded
-  private createRegularTree(x: number, z: number, seed: number): void {
-    const rng = seededRandom(seed);
+  // Pre-built tree templates for instancing (created lazily)
+  private treeTemplates: Mesh[] = [];
+
+  /** Create a few tree templates, then clone/instance them for each tree */
+  private ensureTreeTemplates(): void {
+    if (this.treeTemplates.length > 0) return;
 
     const leafColors = [COLORS.leaves, COLORS.leavesDark, COLORS.leavesLight];
-    const trunkMat = this.createMat(`qtrunkMat_${seed}`, COLORS.wood);
-    const leafMat = this.createMat(
-      `qleafMat_${seed}`,
-      leafColors[Math.floor(rng() * 3)]
-    );
+    // Create 4 template variants with different sizes
+    const configs = [
+      { branch: 3, trunk: 3, radius: 2 },
+      { branch: 4, trunk: 4, radius: 2.5 },
+      { branch: 5, trunk: 5, radius: 3 },
+      { branch: 3.5, trunk: 6, radius: 2.2 },
+    ];
+    for (let i = 0; i < configs.length; i++) {
+      const c = configs[i];
+      const trunkMat = this.createMat("treeTrunk", COLORS.wood);
+      const leafMat = this.createMat("treeLeaf_" + i, leafColors[i % 3]);
+      const tpl = quickTree(c.branch, c.trunk, c.radius, trunkMat, leafMat, this.scene);
+      tpl.setEnabled(false); // template is invisible
+      this.treeTemplates.push(tpl);
+    }
+  }
 
-    const sizeBranch = 3 + rng() * 3;   // canopy diameter 3-6
-    const sizeTrunk = 2.5 + rng() * 4;  // trunk height 2.5-6.5
-    const radius = 2 + rng() * 1.5;     // trunk base radius 2-3.5
-
-    const tree = quickTree(sizeBranch, sizeTrunk, radius, trunkMat, leafMat, this.scene);
+  // Tree type 2: Regular/eucalyptus — cloned from pre-built templates
+  private createRegularTree(x: number, z: number, seed: number): void {
+    this.ensureTreeTemplates();
+    const rng = seededRandom(seed);
+    const tpl = this.treeTemplates[seed % this.treeTemplates.length];
+    const tree = tpl.clone("tree_" + seed, null);
+    if (!tree) return;
+    tree.setEnabled(true);
+    const scale = 0.7 + rng() * 0.6;
+    tree.scaling.setAll(scale);
     tree.position.set(x, WATER_LEVEL, z);
     tree.rotation.y = rng() * Math.PI * 2;
   }
