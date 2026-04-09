@@ -440,6 +440,8 @@ export class GameUI {
           z-index: 200;
           color: #e8d5a3;
           font-family: 'Segoe UI', Tahoma, sans-serif;
+          pointer-events: auto;
+          touch-action: auto;
         }
         #startScreen h1 {
           font-size: 2.5em;
@@ -472,6 +474,9 @@ export class GameUI {
           cursor: pointer;
           font-weight: bold;
           transition: transform 0.2s, background 0.2s;
+          pointer-events: auto;
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: rgba(0,0,0,0.2);
         }
         #startScreen .play-btn:hover {
           transform: scale(1.05);
