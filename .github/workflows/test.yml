@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -25,10 +25,13 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Build project
-        run: npm run build
+        run: npx vite build
 
       - name: Run E2E tests
         run: npx playwright test --project=desktop-chrome
+        timeout-minutes: 5
+        env:
+          CI: true
 
       - name: Upload test report
         uses: actions/upload-artifact@v4
@@ -36,14 +39,6 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report/
-          retention-days: 14
-
-      - name: Upload screenshots
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-screenshots
-          path: tests/screenshots/
           retention-days: 14
 
       - name: Upload failure traces
