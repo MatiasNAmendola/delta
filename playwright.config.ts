@@ -1,21 +1,29 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const isCI = !!process.env.CI;
+
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  forbidOnly: isCI,
+  retries: isCI ? 1 : 0,
+  workers: isCI ? 1 : undefined,
   reporter: [["html", { open: "never" }], ["list"]],
+  timeout: 30000, // 30s max per test
+  expect: { timeout: 10000 }, // 10s max per expect
 
   use: {
-    baseURL: "http://localhost:3000/delta/",
+    baseURL: "http://localhost:4173/delta/",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
-    video: "on-first-retry",
-    // WebGL needs this
+    // WebGL software rendering for CI
     launchOptions: {
-      args: ["--use-gl=angle", "--use-angle=swiftshader"],
+      args: [
+        "--use-gl=swiftshader",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+      ],
     },
   },
 
@@ -34,11 +42,11 @@ export default defineConfig({
     },
   ],
 
-  // Start dev server before tests
+  // Serve the built dist folder (not dev server — faster and more stable)
   webServer: {
-    command: "npx vite --port 3000",
-    port: 3000,
-    reuseExistingServer: !process.env.CI,
-    timeout: 30000,
+    command: "npx vite preview --port 4173",
+    port: 4173,
+    reuseExistingServer: !isCI,
+    timeout: 15000,
   },
 });

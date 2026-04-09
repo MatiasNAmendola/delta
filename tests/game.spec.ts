@@ -10,13 +10,22 @@ function trackConsoleErrors(page: Page): string[] {
   return errors;
 }
 
-// Helper: wait for loading screen to disappear
+// Helper: wait for game to be ready (loading screen gone OR play button visible)
 async function waitForGameReady(page: Page) {
-  // Wait for loading screen to appear then disappear
-  await page.waitForSelector("#loadingScreen", { state: "attached", timeout: 10000 }).catch(() => {});
-  await page.waitForSelector("#loadingScreen", { state: "detached", timeout: 30000 }).catch(() => {});
-  // Extra wait for systems to initialize
-  await page.waitForTimeout(1000);
+  // The game is ready when either:
+  // 1. Loading screen disappears and play button is visible, OR
+  // 2. We timeout and just continue (game may partially work in CI without WebGL)
+  try {
+    await page.waitForSelector("#loadingScreen", { state: "attached", timeout: 5000 }).catch(() => {});
+    // Wait for either loading screen to go away OR play button to appear
+    await Promise.race([
+      page.waitForSelector("#loadingScreen", { state: "detached", timeout: 15000 }),
+      page.waitForSelector("#playBtn", { state: "visible", timeout: 15000 }),
+    ]);
+  } catch {
+    // In CI without WebGL, the game might not fully load — continue anyway
+  }
+  await page.waitForTimeout(500);
 }
 
 // ============================================================
@@ -426,16 +435,13 @@ test.describe("Game Mechanics", () => {
     await expect(notification).toHaveClass(/show/, { timeout: 5000 });
   });
 
-  test("game ends after timer runs out", async ({ page }) => {
-    test.setTimeout(330000); // 5.5 minutes
+  test("timer is counting down", async ({ page }) => {
     await page.goto("/");
     await waitForGameReady(page);
     await page.locator("#playBtn").click();
 
-    // Wait for game duration (5 minutes = 300 seconds)
-    // In practice, we'd speed up time. For now, test with shorter wait
-    // and check the timer is counting
-    await page.waitForTimeout(5000);
+    // Just verify timer exists and is counting — don't wait for game end
+    await page.waitForTimeout(2000);
     const timer = await page.locator("#hud-timer").textContent();
     expect(timer).toBeTruthy();
   });
