@@ -249,7 +249,7 @@ export class GrassSystem {
     const tmpScale = Vector3.Zero();
 
     for (const river of RIVER_MAP) {
-      const samplesPerRiver = river.points.length * 16;
+      const samplesPerRiver = river.points.length * 6;
       for (let i = 0; i < samplesPerRiver; i++) {
         const t = i / samplesPerRiver;
         const [rx, rz] = getPointOnPath(river.points, t);
@@ -267,7 +267,7 @@ export class GrassSystem {
         // Place grass clumps along both banks
         for (const side of [-1, 1]) {
           // 3-8 clumps per sample point, spread along the bank
-          const clumpCount = 3 + Math.floor(rng() * 6);
+          const clumpCount = 2 + Math.floor(rng() * 3);
           for (let c = 0; c < clumpCount; c++) {
             const bankDist = halfW + 1 + rng() * 12; // 1-13m from water edge
             const along = (rng() - 0.5) * 4; // scatter along river
