@@ -494,20 +494,38 @@ export class GameUI {
         📱 En móvil: usá los botones táctiles o el giroscopio para manejar.
       </div>
       <button class="play-btn" id="playBtn">▶ JUGAR</button>
+      <div id="debugPanel" style="margin-top:15px;color:#ff0;font-size:11px;font-family:monospace;max-height:100px;overflow-y:auto;"></div>
     `;
     document.body.appendChild(this.startScreenDiv);
+
+    // Debug: log to visible panel
+    (window as any).__debugLog = (msg: string) => {
+      const panel = document.getElementById("debugPanel");
+      if (panel) panel.innerHTML += msg + "<br>";
+    };
+    (window as any).__debugLog("UI created OK");
   }
 
   public onPlayClick(callback: () => void): void {
+    const debug = (window as any).__debugLog || console.log;
     const btn = document.getElementById("playBtn");
+    debug(btn ? "playBtn found" : "playBtn NOT FOUND!");
+
     if (btn) {
-      btn.addEventListener("click", () => {
-        callback();
-      });
-      btn.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        callback();
-      });
+      const handler = () => {
+        debug("JUGAR tapped! calling startGame...");
+        btn.textContent = "Cargando...";
+        try {
+          callback();
+          debug("startGame OK");
+        } catch (e) {
+          debug("startGame ERROR: " + e);
+        }
+      };
+      btn.addEventListener("click", handler);
+      btn.addEventListener("touchend", handler);
+      // Also add inline onclick as fallback
+      btn.onclick = handler;
     }
   }
 
