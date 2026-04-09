@@ -348,9 +348,8 @@ export class WaterSystem {
       if (mesh.material === this.waterMaterial) continue;
       // Don't add riverbed meshes
       if (mesh.name.startsWith("riverbed_")) continue;
-      // Don't reflect sky/clouds/sun — causes ugly streaks
-      if (mesh.name === "sky" || mesh.name.startsWith("cloud_")
-        || mesh.name === "sun" || mesh.name === "sunHalo") continue;
+      // Don't reflect skybox
+      if (mesh.name === "sky") continue;
       // Don't reflect grass (cross-billboard shader breaks in reflections)
       if (mesh.name === "grassClump") continue;
       // Don't reflect river bank boxes (fragmented dark reflections)
