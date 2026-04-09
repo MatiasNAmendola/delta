@@ -39,7 +39,7 @@ const WAVE_LAYERS: WaveLayer[] = [
 
 export class WaterSystem {
   private scene: THREE.Scene;
-  private waterMeshes: Water[] = [];
+  private waterMeshes: THREE.Mesh[] = [];
   private time = 0;
   private riverCollisionMap: boolean[][] = [];
   private mapResolution = 400;
@@ -241,17 +241,17 @@ export class WaterSystem {
   // River water meshes
   // =========================================================================
 
-  private createRiverMeshes(): void {
-    if (!this.normalTexture) return;
+  private simpleMaterials: THREE.MeshStandardMaterial[] = [];
 
+  private createRiverMeshes(): void {
     for (const river of RIVER_MAP) {
-      const water = this.createRiverStrip(river);
-      this.waterMeshes.push(water);
-      this.scene.add(water);
+      const mesh = this.createRiverStripSimple(river);
+      this.scene.add(mesh);
     }
   }
 
-  private createRiverStrip(river: RiverSegment): Water {
+  /** Simple water using MeshStandardMaterial — works on ALL devices, no reflections */
+  private createRiverStripSimple(river: RiverSegment): THREE.Mesh {
     const samples = river.points.length * 8;
     const positions: number[] = [];
     const indices: number[] = [];
@@ -261,23 +261,17 @@ export class WaterSystem {
     for (let i = 0; i <= samples; i++) {
       const t = i / samples;
       const [x, z] = getPointOnPath(river.points, t);
-
       const t2 = Math.min(1, t + 0.01);
       const [x2, z2] = getPointOnPath(river.points, t2);
-      const dx = x2 - x;
-      const dz = z2 - z;
+      const dx = x2 - x, dz = z2 - z;
       const len = Math.sqrt(dx * dx + dz * dz) || 1;
-      const nx = -dz / len;
-      const nz = dx / len;
-
+      const nx = -dz / len, nz = dx / len;
       const halfW = river.width / 2;
 
-      // Left vertex
       positions.push(x + nx * halfW, WATER_LEVEL + 0.05, z + nz * halfW);
       normals.push(0, 1, 0);
       uvs.push(0, t * 4);
 
-      // Right vertex
       positions.push(x - nx * halfW, WATER_LEVEL + 0.05, z - nz * halfW);
       normals.push(0, 1, 0);
       uvs.push(1, t * 4);
@@ -295,67 +289,30 @@ export class WaterSystem {
     geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2));
     geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
 
-    // Detect mobile for smaller reflection render targets
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || "ontouchstart" in window;
-    const rtSize = isMobile ? 256 : 512;
-
-    // -----------------------------------------------------------------------
-    // Muddy brown Delta water color (Rio de la Plata / Parana Delta)
-    // 0x3d2b1f = deep muddy brown, like the real sediment-laden water
-    // -----------------------------------------------------------------------
-    const water = new Water(geometry, {
-      textureWidth: rtSize,
-      textureHeight: rtSize,
-      waterNormals: this.normalTexture!,
-      sunDirection: new THREE.Vector3(0.7, 0.8, 0.6).normalize(),
-      sunColor: 0xfff5e0,
-      waterColor: 0x3d2b1f,  // Muddy brown (Rio de la Plata delta sediment)
-      distortionScale: 2.4,  // Less distortion for calmer river look
-      fog: false,
-      alpha: 0.92,           // Slight transparency for depth perception
+    // Simple water material — muddy brown Delta color, slightly transparent
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x3d5a3f,      // Delta brown-green
+      roughness: 0.15,        // smooth/reflective water
+      metalness: 0.3,         // slight metallic for reflection
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
     });
 
-    const mat = water.material as THREE.ShaderMaterial;
+    // Add bump map for wave detail if available
+    if (this.normalTexture) {
+      mat.bumpMap = this.normalTexture;
+      mat.bumpScale = 0.3;
+      this.normalTexture.wrapS = THREE.RepeatWrapping;
+      this.normalTexture.wrapT = THREE.RepeatWrapping;
+      this.normalTexture.repeat.set(8, 8);
+    }
 
-    // UV tiling — tighter repeat for finer wave detail on a river
-    mat.uniforms['size'].value = 4.0;
+    this.simpleMaterials.push(mat);
 
-    // -----------------------------------------------------------------------
-    // Fresnel tuning — the three/examples Water shader computes Fresnel
-    // via a dot(viewDir, normal) calculation. We can influence the result
-    // by adjusting the 'alpha' uniform (controls base opacity) and making
-    // the water more reflective at glancing angles by patching the shader.
-    // -----------------------------------------------------------------------
-    // Inject a stronger Fresnel power curve into the fragment shader.
-    // The default Water shader uses: reflectance = mix(0.5, 1.0, theta)
-    // We patch it to use a Schlick-like pow(1-theta,4) for more contrast.
-    mat.onBeforeCompile = (shader) => {
-      // Patch fragment shader to enhance Fresnel
-      shader.fragmentShader = shader.fragmentShader.replace(
-        'float theta = max( dot( toEye, normal ), 0.0 );',
-        `float theta = max( dot( toEye, normal ), 0.0 );
-         theta = pow( 1.0 - theta, 4.0 ) * 0.85 + 0.15;`
-      );
-      // Replace the reflectance calculation to use our patched theta directly
-      shader.fragmentShader = shader.fragmentShader.replace(
-        'float reflectance = max( 1.0 - theta, 0.5 );',
-        'float reflectance = theta;'
-      );
-      // Apply muddy brown tint to the refracted (underwater) color.
-      // The Water shader has: refractColor = texture2D(mirrorSampler, ...).rgb * waterColor
-      // We darken and shift towards brown for underwater tint.
-      shader.fragmentShader = shader.fragmentShader.replace(
-        'gl_FragColor = vec4( color, alpha );',
-        `// Brown underwater tint: darken refraction, warm shift
-         color = mix(color, color * vec3(0.65, 0.50, 0.32), 0.35);
-         gl_FragColor = vec4( color, alpha );`
-      );
-    };
-
-    water.name = "river_" + river.name;
-    water.rotation.x = 0;
-
-    return water;
+    const mesh = new THREE.Mesh(geometry, mat);
+    mesh.name = "river_" + river.name;
+    return mesh;
   }
 
   // =========================================================================
@@ -600,13 +557,11 @@ export class WaterSystem {
   public update(deltaTime: number): void {
     this.time += deltaTime;
 
-    // Update the time uniform on all Water meshes so the shader animates.
-    // Use a slightly slower time multiplier for calmer river feel.
-    const shaderTime = this.time * 0.7;
-    for (const water of this.waterMeshes) {
-      const material = water.material as THREE.ShaderMaterial;
-      if (material.uniforms && material.uniforms['time']) {
-        material.uniforms['time'].value = shaderTime;
+    // Animate water bump texture offset for wave movement
+    for (const mat of this.simpleMaterials) {
+      if (mat.bumpMap) {
+        mat.bumpMap.offset.x = this.time * 0.02;
+        mat.bumpMap.offset.y = this.time * 0.015;
       }
     }
 
