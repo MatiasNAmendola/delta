@@ -2,14 +2,13 @@ import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
-import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
-import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 
 import { WaterSystem } from "./world/WaterSystem";
 import { Environment } from "./world/Environment";
 import { WakeEffect } from "./world/WakeEffect";
 import { GrassSystem } from "./world/GrassSystem";
+import { WeatherSystem } from "./world/WeatherSystem";
 import { LanchaColectiva } from "./boat/LanchaColectiva";
 import { MobileControls } from "./controls/MobileControls";
 import { GameUI } from "./ui/GameUI";
@@ -34,6 +33,7 @@ export class GameEngine {
   private environment!: Environment;
   private wakeEffect!: WakeEffect;
   private grassSystem!: GrassSystem;
+  private weatherSystem!: WeatherSystem;
   private boat!: LanchaColectiva;
   private controls!: MobileControls;
   private ui!: GameUI;
@@ -78,23 +78,8 @@ export class GameEngine {
     this.camera.minZ = 0.5;
     this.camera.maxZ = 800;
 
-    // Lighting
-    const ambient = new HemisphericLight(
-      "ambient",
-      new Vector3(0, 1, 0),
-      this.scene
-    );
-    ambient.intensity = 0.6;
-    ambient.groundColor = new Color3(0.2, 0.3, 0.2);
-    ambient.diffuse = new Color3(0.9, 0.9, 0.8);
-
-    const sun = new DirectionalLight(
-      "sun",
-      new Vector3(-0.5, -1, 0.5),
-      this.scene
-    );
-    sun.intensity = 0.7;
-    sun.diffuse = new Color3(1, 0.95, 0.8);
+    // Weather system handles sky, lights, fog, rain
+    this.weatherSystem = new WeatherSystem(this.scene);
 
     this.updateLoadingBar(30, "Generando ríos del Delta...");
 
@@ -138,6 +123,7 @@ export class GameEngine {
     // UI
     this.ui = new GameUI(this.scene);
     this.ui.onPlayClick(() => this.startGame());
+    this.ui.onWeatherChange((preset) => this.weatherSystem.setWeather(preset));
 
     this.updateLoadingBar(100, "¡Listo!");
 
@@ -227,6 +213,9 @@ export class GameEngine {
 
       // Update grass wind animation
       this.grassSystem.update(dt);
+
+      // Update weather (transitions, rain follows boat)
+      this.weatherSystem.update(dt, this.boat.position.x, this.boat.position.z);
 
       // Update wake
       this.wakeEffect.update(
