@@ -98,6 +98,33 @@ export class GameUI {
         #hud-notification.show {
           opacity: 1;
         }
+        #hud-weather {
+          position: fixed;
+          top: 42px;
+          right: 10px;
+          display: flex;
+          gap: 4px;
+          z-index: 55;
+          pointer-events: auto;
+        }
+        .weather-btn {
+          background: rgba(0,0,0,0.5);
+          border: 1px solid rgba(255,255,255,0.2);
+          color: #fff;
+          font-size: 18px;
+          width: 34px;
+          height: 34px;
+          border-radius: 8px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.2s;
+        }
+        .weather-btn:hover, .weather-btn.active {
+          background: rgba(255,255,255,0.25);
+          border-color: rgba(255,255,255,0.5);
+        }
         #hud-nextStop {
           position: fixed;
           bottom: 140px;
@@ -130,6 +157,13 @@ export class GameUI {
       </div>
       <div id="hud-location">Delta de Tigre</div>
       <div id="hud-notification"></div>
+      <div id="hud-weather">
+        <button class="weather-btn active" data-weather="morning" title="Mañana">🌅</button>
+        <button class="weather-btn" data-weather="noon" title="Mediodía">☀️</button>
+        <button class="weather-btn" data-weather="sunset" title="Atardecer">🌇</button>
+        <button class="weather-btn" data-weather="night" title="Noche">🌙</button>
+        <button class="weather-btn" data-weather="storm" title="Tormenta">⛈️</button>
+      </div>
       <div id="hud-nextStop"></div>
     `;
     document.body.appendChild(this.hudDiv);
@@ -309,6 +343,23 @@ export class GameUI {
         callback();
       });
     }
+  }
+
+  public onWeatherChange(callback: (preset: string) => void): void {
+    const btns = document.querySelectorAll(".weather-btn");
+    btns.forEach((btn) => {
+      const handler = (e: Event) => {
+        e.preventDefault();
+        const preset = (btn as HTMLElement).dataset.weather;
+        if (!preset) return;
+        // Update active state
+        btns.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        callback(preset);
+      };
+      btn.addEventListener("click", handler);
+      btn.addEventListener("touchstart", handler);
+    });
   }
 
   public hideStartScreen(): void {

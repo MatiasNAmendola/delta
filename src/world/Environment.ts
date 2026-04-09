@@ -5,7 +5,6 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
-import { SkyMaterial } from "@babylonjs/materials/sky/skyMaterial";
 import {
   WORLD_SIZE,
   WATER_LEVEL,
@@ -26,7 +25,6 @@ export class Environment {
   constructor(scene: Scene, waterSystem: WaterSystem) {
     this.scene = scene;
     this.createGround(waterSystem);
-    this.createSkybox();
     this.createTrees(waterSystem);
     this.createRiverVegetation(waterSystem);
     this.createHouses(waterSystem);
@@ -125,33 +123,6 @@ export class Environment {
       ground.setVerticesData("position", positions);
       ground.createNormals(true);
     }
-  }
-
-  private createSkybox(): void {
-    // --- SkyMaterial: physically-based atmospheric scattering ---
-    const skybox = MeshBuilder.CreateBox("sky", { size: WORLD_SIZE * 2.5 }, this.scene);
-    const skyMat = new SkyMaterial("skyMat", this.scene);
-    skyMat.backFaceCulling = false;
-
-    // Atmospheric scattering parameters
-    skyMat.turbidity = 10;          // haze/particles in atmosphere (higher = hazier)
-    skyMat.luminance = 1.0;         // overall sky brightness
-    skyMat.rayleigh = 2;            // Rayleigh scattering (blue sky)
-    skyMat.mieCoefficient = 0.005;  // Mie scattering (sun halo size)
-    skyMat.mieDirectionalG = 0.8;   // Mie directionality (0.8 = forward scatter)
-
-    // Sun position — late morning, Delta de Tigre
-    skyMat.useSunPosition = true;
-    skyMat.sunPosition = new Vector3(-50, 40, 30);
-
-    skybox.material = skyMat;
-    skybox.infiniteDistance = true;
-
-    // Scene atmosphere
-    this.scene.clearColor = new Color4(0.53, 0.81, 0.92, 1);
-    this.scene.fogMode = Scene.FOGMODE_EXP2;
-    this.scene.fogDensity = 0.0015;
-    this.scene.fogColor = new Color3(0.7, 0.78, 0.82);
   }
 
   // Tree type 0: Weeping willow — procedural branching with drooping shape
