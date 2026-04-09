@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="32" fill="#1a3a2a"/>
+  <text x="96" y="85" font-size="64" text-anchor="middle">🚢</text>
+  <text x="96" y="135" font-size="18" font-family="sans-serif" font-weight="bold" fill="#e8d5a3" text-anchor="middle">DELTA</text>
+  <text x="96" y="158" font-size="14" font-family="sans-serif" fill="#7cb8a0" text-anchor="middle">TIGRE</text>
+</svg>
