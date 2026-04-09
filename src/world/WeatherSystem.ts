@@ -424,6 +424,7 @@ export class WeatherSystem {
     out.sunIntensity = lerp(out.sunIntensity, target.sunIntensity);
     out.sunColor = lerpC(out.sunColor, target.sunColor);
     out.rainRate = lerp(out.rainRate, target.rainRate);
+    out.waterFogExtra = lerp(out.waterFogExtra, target.waterFogExtra);
   }
 
   private applyState(state: WeatherState): void {
@@ -491,12 +492,15 @@ export class WeatherSystem {
       luminance: state.luminance,
       fogDensity: state.fogDensity,
       fogColor: state.fogColor.clone(),
+      fogColorSun: state.fogColorSun.clone(),
+      fogColorHorizon: state.fogColorHorizon.clone(),
       ambientIntensity: state.ambientIntensity,
       ambientSkyColor: state.ambientSkyColor.clone(),
       ambientGroundColor: state.ambientGroundColor.clone(),
       sunIntensity: state.sunIntensity,
       sunColor: state.sunColor.clone(),
       rainRate: state.rainRate,
+      waterFogExtra: state.waterFogExtra,
     };
   }
 
@@ -509,12 +513,26 @@ export class WeatherSystem {
     dest.luminance = src.luminance;
     dest.fogDensity = src.fogDensity;
     dest.fogColor.copy(src.fogColor);
+    dest.fogColorSun.copy(src.fogColorSun);
+    dest.fogColorHorizon.copy(src.fogColorHorizon);
     dest.ambientIntensity = src.ambientIntensity;
     dest.ambientSkyColor.copy(src.ambientSkyColor);
     dest.ambientGroundColor.copy(src.ambientGroundColor);
     dest.sunIntensity = src.sunIntensity;
     dest.sunColor.copy(src.sunColor);
     dest.rainRate = src.rainRate;
+    dest.waterFogExtra = src.waterFogExtra;
+  }
+
+  /**
+   * Apply additional fog density when the boat is over water (humidity haze).
+   * Call after the main update(). The base density is restored next frame in
+   * applyState().
+   */
+  public applyWaterFogBoost(isOverWater: boolean): void {
+    if (isOverWater) {
+      this.fog.density += this.current.waterFogExtra;
+    }
   }
 
   /** Set a multiplier for fog density (used by performance optimizer) */
