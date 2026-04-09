@@ -227,58 +227,47 @@ export class LanchaColectiva {
     const newX = this.position.x + dx;
     const newZ = this.position.z + dz;
 
-    // Check multiple hull points: bow, stern, port, starboard
+    // Check 9 hull points using precise distance-to-river check:
+    // center, bow, stern, port, starboard, and 4 corners
     const sinR = Math.sin(this.rotation);
     const cosR = Math.cos(this.rotation);
     const halfL = BOAT_LENGTH / 2;
     const halfW = BOAT_WIDTH / 2;
-    const bowX = newX + sinR * halfL;
-    const bowZ = newZ + cosR * halfL;
-    const sternX = newX - sinR * halfL;
-    const sternZ = newZ - cosR * halfL;
-    const portX = newX - cosR * halfW;
-    const portZ = newZ + sinR * halfW;
-    const stbdX = newX + cosR * halfW;
-    const stbdZ = newZ - sinR * halfW;
 
-    const allInWater =
-      waterSystem.isWater(newX, newZ) &&
-      waterSystem.isWater(bowX, bowZ) &&
-      waterSystem.isWater(sternX, sternZ) &&
-      waterSystem.isWater(portX, portZ) &&
-      waterSystem.isWater(stbdX, stbdZ);
-
-    // Helper: check all 5 hull points are in water for a given position
+    // Helper: check all 9 hull points are in water for a given position
     const allPointsInWater = (cx: number, cz: number): boolean => {
-      const bx = cx + sinR * halfL, bz = cz + cosR * halfL;
-      const sx2 = cx - sinR * halfL, sz2 = cz - cosR * halfL;
-      const px2 = cx - cosR * halfW, pz2 = cz + sinR * halfW;
-      const sb = cx + cosR * halfW, sbz = cz - sinR * halfW;
-      return waterSystem.isWater(cx, cz) &&
-        waterSystem.isWater(bx, bz) &&
-        waterSystem.isWater(sx2, sz2) &&
-        waterSystem.isWater(px2, pz2) &&
-        waterSystem.isWater(sb, sbz);
+      // Forward/back along boat axis
+      const fwdX = sinR * halfL, fwdZ = cosR * halfL;
+      // Left/right perpendicular to boat axis
+      const sideX = cosR * halfW, sideZ = -sinR * halfW;
+
+      return (
+        waterSystem.isWaterPrecise(cx, cz) &&                          // center
+        waterSystem.isWaterPrecise(cx + fwdX, cz + fwdZ) &&            // bow
+        waterSystem.isWaterPrecise(cx - fwdX, cz - fwdZ) &&            // stern
+        waterSystem.isWaterPrecise(cx + sideX, cz + sideZ) &&          // starboard
+        waterSystem.isWaterPrecise(cx - sideX, cz - sideZ) &&          // port
+        waterSystem.isWaterPrecise(cx + fwdX + sideX, cz + fwdZ + sideZ) &&  // bow-starboard
+        waterSystem.isWaterPrecise(cx + fwdX - sideX, cz + fwdZ - sideZ) &&  // bow-port
+        waterSystem.isWaterPrecise(cx - fwdX + sideX, cz - fwdZ + sideZ) &&  // stern-starboard
+        waterSystem.isWaterPrecise(cx - fwdX - sideX, cz - fwdZ - sideZ)     // stern-port
+      );
     };
 
-    if (allInWater) {
+    if (allPointsInWater(newX, newZ)) {
       this.position.x = newX;
       this.position.z = newZ;
     } else {
-      // Try sliding along one axis (check ALL hull points)
-      const slideX = this.position.x + dx;
-      if (allPointsInWater(slideX, this.position.z)) {
-        this.position.x = slideX;
+      // Try sliding along one axis
+      if (allPointsInWater(this.position.x + dx, this.position.z)) {
+        this.position.x += dx;
+        this.speed *= 0.5;
+      } else if (allPointsInWater(this.position.x, this.position.z + dz)) {
+        this.position.z += dz;
         this.speed *= 0.5;
       } else {
-        const slideZ = this.position.z + dz;
-        if (allPointsInWater(this.position.x, slideZ)) {
-          this.position.z = slideZ;
-          this.speed *= 0.5;
-        } else {
-          // Can't move at all — push back toward water center
-          this.speed *= -0.3;
-        }
+        // Can't move — bounce back
+        this.speed *= -0.3;
       }
     }
 
