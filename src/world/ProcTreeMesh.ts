@@ -9,6 +9,7 @@ import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Material } from "@babylonjs/core/Materials/material";
+import { Constants } from "@babylonjs/core/Engines/constants";
 import { ProcTree, TREE_PRESETS } from "./ProcTree";
 import type { TreeProperties } from "./ProcTree";
 
@@ -93,11 +94,13 @@ export function createProcTreeMesh(
   twigVD.indices = twigIndices;
   twigVD.applyToMesh(twigMesh);
 
-  // Apply leaf texture with alpha to the leaf material
+  // Apply leaf texture with alpha cutout to the leaf material
   if (leafMaterial instanceof StandardMaterial && !leafMaterial.diffuseTexture) {
     const leafTex = getLeafTexture(scene);
     leafMaterial.diffuseTexture = leafTex;
     leafMaterial.useAlphaFromDiffuseTexture = true;
+    leafMaterial.transparencyMode = Material.MATERIAL_ALPHATEST;
+    leafMaterial.alphaCutOff = 0.4;
     leafMaterial.backFaceCulling = false;
   }
   twigMesh.material = leafMaterial;
