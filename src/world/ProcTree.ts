@@ -353,8 +353,8 @@ export class ProcTree {
       uvsTwig.push([0, 1], [1, 1], [1, 0], [0, 0]);
       uvsTwig.push([0, 1], [1, 1], [1, 0], [0, 0]);
     } else {
-      this.createTwigs(branch.child0);
-      this.createTwigs(branch.child1);
+      this.createTwigs(branch.child0!);
+      this.createTwigs(branch.child1!);
     }
   }
 
@@ -386,9 +386,9 @@ export class ProcTree {
       const axis3 = normalize(cross(tangent, normalize(addVec(scaleVec(axis1, -1), scaleVec(axis2, -1)))));
       const dir: Vec3 = [axis2[0], 0, axis2[2]];
       const centerloc = addVec(branch.head, scaleVec(dir, -this.properties.maxRadius / 2));
-      const ring0 = branch.ring0 = [];
-      const ring1 = branch.ring1 = [];
-      const ring2 = branch.ring2 = [];
+      const ring0: number[] = branch.ring0 = [];
+      const ring1: number[] = branch.ring1 = [];
+      const ring2: number[] = branch.ring2 = [];
       let scale = this.properties.radiusFalloffRate;
       if (branch.child0.type === "trunk" || branch.type === "trunk") scale = 1 / this.properties.taperRate;
 
@@ -399,7 +399,7 @@ export class ProcTree {
       const d1 = vecAxisAngle(tangent, axis2, 1.57);
       const d2 = normalize(cross(tangent, axis));
       const s = 1 / dot(d1, d2);
-      for (let i = 1; i < segments / 2; i++) {
+      for (let i = 1; i < (segments >> 1); i++) {
         let vec = vecAxisAngle(tangent, axis2, segmentAngle * i);
         ring0.push(start + i); ring2.push(start + i);
         vec = scaleInDirection(vec, d2, s);
@@ -408,16 +408,16 @@ export class ProcTree {
       const linch1 = verts.length;
       ring0.push(linch1); ring1.push(linch1);
       verts.push(addVec(centerloc, scaleVec(tangent, -radius * scale)));
-      for (let i = segments / 2 + 1; i < segments; i++) {
+      for (let i = (segments >> 1) + 1; i < segments; i++) {
         const vec = vecAxisAngle(tangent, axis1, segmentAngle * i);
         ring0.push(verts.length); ring1.push(verts.length);
         verts.push(addVec(centerloc, scaleVec(vec, radius * scale)));
       }
       ring1.push(linch0); ring2.push(linch1);
       const start2 = verts.length - 1;
-      for (let i = 1; i < segments / 2; i++) {
+      for (let i = 1; i < (segments >> 1); i++) {
         const vec = vecAxisAngle(tangent, axis3, segmentAngle * i);
-        ring1.push(start2 + i); ring2.push(start2 + (segments / 2 - i));
+        ring1.push(start2 + i); ring2.push(start2 + ((segments >> 1) - i));
         verts.push(addVec(centerloc, scaleVec(vec, radius * scale)));
       }
 
