@@ -1,8 +1,4 @@
-import { Engine } from "@babylonjs/core/Engines/engine";
-import { Scene } from "@babylonjs/core/scene";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
-import { Color3 } from "@babylonjs/core/Maths/math.color";
+import * as THREE from "three";
 
 import { WaterSystem } from "./world/WaterSystem";
 import { Environment } from "./world/Environment";
@@ -27,9 +23,11 @@ import {
 import { distance2D, lerp } from "./utils/helpers";
 
 export class GameEngine {
-  private engine: Engine;
-  private scene!: Scene;
-  private camera!: FreeCamera;
+  private renderer: THREE.WebGLRenderer;
+  private scene!: THREE.Scene;
+  private camera!: THREE.PerspectiveCamera;
+  private clock: THREE.Clock;
+
   private waterSystem!: WaterSystem;
   private environment!: Environment;
   private wakeEffect!: WakeEffect;
@@ -53,32 +51,46 @@ export class GameEngine {
     // Adapt canvas to device pixel ratio for crisp rendering
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 
-    this.engine = new Engine(canvas, true, {
-      preserveDrawingBuffer: false,
-      stencil: true,
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
       antialias: true,
-      adaptToDeviceRatio: true,
+      alpha: true,
+      stencil: true,
     });
 
-    // 1/dpr = native device resolution, capped at 2.5x to avoid GPU overload
-    this.engine.setHardwareScalingLevel(1 / dpr);
+    this.renderer.setPixelRatio(dpr);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
+
+    this.clock = new THREE.Clock();
 
     this.init();
   }
 
   private init(): void {
     this.updateLoadingBar(10, "Creando escena...");
-    this.scene = new Scene(this.engine);
+    this.scene = new THREE.Scene();
 
     // Camera
-    this.camera = new FreeCamera(
-      "camera",
-      new Vector3(0, CAMERA_HEIGHT, -CAMERA_DISTANCE),
-      this.scene
+    this.camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      0.5,
+      800
     );
-    this.camera.setTarget(Vector3.Zero());
-    this.camera.minZ = 0.5;
-    this.camera.maxZ = 800;
+    this.camera.position.set(0, CAMERA_HEIGHT, -CAMERA_DISTANCE);
+    this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+    // Default ambient light (WeatherSystem will manage these later)
+    const ambientLight = new THREE.AmbientLight(0x8899aa, 0.6);
+    this.scene.add(ambientLight);
+
+    // Default directional light (sun stand-in)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    directionalLight.position.set(100, 150, 50);
+    directionalLight.castShadow = false;
+    this.scene.add(directionalLight);
 
     // Weather system handles sky, lights, fog, rain
     this.weatherSystem = new WeatherSystem(this.scene);
@@ -117,16 +129,16 @@ export class GameEngine {
 
     this.updateLoadingBar(85, "Configurando controles...");
 
-    // Controls
-    this.controls = new MobileControls(this.scene);
+    // Controls — pass scene as any until MobileControls is migrated
+    this.controls = new MobileControls(this.scene as any);
 
     // Initialize dock passengers
     this.randomizeDockPassengers();
 
     this.updateLoadingBar(95, "Preparando interfaz...");
 
-    // UI
-    this.ui = new GameUI(this.scene);
+    // UI — pass scene as any until GameUI is migrated
+    this.ui = new GameUI(this.scene as any);
     this.ui.onPlayClick(() => this.startGame());
     this.ui.onWeatherChange((preset) => this.weatherSystem.setWeather(preset as any));
 
@@ -141,14 +153,22 @@ export class GameEngine {
       }
     }, 500);
 
-    // Start render loop
-    this.engine.runRenderLoop(() => this.gameLoop());
+    // Start render loop via requestAnimationFrame
+    this.clock.start();
+    this.animate();
 
     // Handle resize
     window.addEventListener("resize", () => {
-      this.engine.resize();
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
     });
   }
+
+  private animate = (): void => {
+    requestAnimationFrame(this.animate);
+    this.gameLoop();
+  };
 
   private updateLoadingBar(percent: number, text: string): void {
     const bar = document.getElementById("loadingBar");
@@ -189,7 +209,7 @@ export class GameEngine {
   }
 
   private gameLoop(): void {
-    const dt = this.engine.getDeltaTime() / 1000;
+    const dt = this.clock.getDelta();
 
     if (this.gameStarted && !this.gameOver) {
       this.gameTime += dt;
@@ -264,7 +284,7 @@ export class GameEngine {
       this.waterSystem.update(dt);
     }
 
-    this.scene.render();
+    this.renderer.render(this.scene, this.camera);
   }
 
   private checkDocks(actionPressed: boolean): void {
@@ -344,7 +364,7 @@ export class GameEngine {
     }
   }
 
-  private cameraLookTarget = Vector3.Zero();
+  private cameraLookTarget = new THREE.Vector3(0, 0, 0);
 
   private updateCamera(dt: number, angleOffset: number, pitchOffset: number): void {
     // Camera behind and slightly above the boat — third-person chase cam
@@ -391,7 +411,7 @@ export class GameEngine {
       lookZ,
       CAMERA_LERP * 2
     );
-    this.camera.setTarget(this.cameraLookTarget);
+    this.camera.lookAt(this.cameraLookTarget);
   }
 
   private updateLocationName(): void {

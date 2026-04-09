@@ -1,9 +1,5 @@
 import { GameEngine } from "./GameEngine";
 
-// Import side-effects needed by BabylonJS
-import "@babylonjs/core/Meshes/meshBuilder";
-import "@babylonjs/core/Materials/standardMaterial";
-
 window.addEventListener("DOMContentLoaded", () => {
   const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 

@@ -1,39 +1,26 @@
-import { Scene } from "@babylonjs/core/scene";
-import { Mesh } from "@babylonjs/core/Meshes/mesh";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
-import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { Texture } from "@babylonjs/core/Materials/Textures/texture";
-import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
-import { WaterMaterial } from "@babylonjs/materials/water/waterMaterial";
+import * as THREE from 'three';
+import { Water } from 'three/examples/jsm/objects/Water.js';
 import {
   RIVER_MAP,
   WATER_LEVEL,
   WORLD_SIZE,
-  COLORS,
   type RiverSegment,
 } from "../utils/constants";
-import { getPointOnPath, hexToColor3 } from "../utils/helpers";
+import { getPointOnPath } from "../utils/helpers";
 
 export class WaterSystem {
-  private scene: Scene;
-  private waterMeshes: Mesh[] = [];
-  private waterMaterial: WaterMaterial | null = null;
+  private scene: THREE.Scene;
+  private waterMeshes: Water[] = [];
   private time = 0;
   private riverCollisionMap: boolean[][] = [];
   private mapResolution = 400;
+  private normalTexture: THREE.CanvasTexture | null = null;
 
-  // Meshes to add to the water render list (reflection/refraction)
-  private renderListMeshes: Mesh[] = [];
-
-  constructor(scene: Scene) {
+  constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.buildCollisionMap();
-    this.createBumpTexture();
+    this.normalTexture = this.createBumpTexture();
     this.createRiverMeshes();
-    // Riverbed removed — WaterMaterial handles underwater via refraction/color blend
   }
 
   private buildCollisionMap(): void {
@@ -107,43 +94,15 @@ export class WaterSystem {
   }
 
   /**
-   * Attempt to load a real water normal map from a CDN.
-   * Falls back to a high-quality procedural normal map if loading fails.
+   * Create a procedural normal map as a CanvasTexture for the Water shader.
    */
-  private createBumpTexture(): Texture | DynamicTexture {
-    // Try loading a proper water normal map from BabylonJS assets
-    try {
-      const tex = new Texture(
-        "https://assets.babylonjs.com/textures/waterbump.png",
-        this.scene,
-        false, // no mipmap generation issues
-        false, // not inverted Y
-        Texture.TRILINEAR_SAMPLINGMODE,
-        () => {
-          // Loaded successfully
-          console.log("Water bump texture loaded from CDN");
-        },
-        () => {
-          // Failed — will use fallback (already set below)
-          console.warn("CDN water bump failed, using procedural");
-        }
-      );
-      tex.wrapU = Texture.WRAP_ADDRESSMODE;
-      tex.wrapV = Texture.WRAP_ADDRESSMODE;
-      tex.uScale = 6;
-      tex.vScale = 6;
-      return tex;
-    } catch {
-      // Fallback to procedural
-    }
-    return this.createProceduralBumpTexture();
-  }
-
-  /** High-quality procedural normal map with multi-octave noise */
-  private createProceduralBumpTexture(): DynamicTexture {
+  private createBumpTexture(): THREE.CanvasTexture {
     const size = 512;
-    const tex = new DynamicTexture("waterBump", size, this.scene, true);
-    const ctx = tex.getContext();
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+
     // Fill with a base color first, then read back
     ctx.fillStyle = "rgb(128,128,255)";
     ctx.fillRect(0, 0, size, size);
@@ -243,68 +202,25 @@ export class WaterSystem {
     }
 
     ctx.putImageData(imgData, 0, 0);
-    tex.update(false);
-    tex.wrapU = Texture.WRAP_ADDRESSMODE;
-    tex.wrapV = Texture.WRAP_ADDRESSMODE;
-    return tex;
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
   }
 
   private createRiverMeshes(): void {
-    // Create the WaterMaterial (with smaller render targets for mobile perf)
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || "ontouchstart" in window;
-    const rtSize = isMobile ? 256 : 512;
+    if (!this.normalTexture) return;
 
-    this.waterMaterial = new WaterMaterial(
-      "waterMaterial",
-      this.scene,
-      new Vector2(rtSize, rtSize)
-    );
-
-    // Bump texture — try CDN first, fallback to procedural normal map
-    this.waterMaterial.bumpTexture = this.createBumpTexture();
-    this.waterMaterial.bumpHeight = 0.6;
-    this.waterMaterial.bumpSuperimpose = true;
-    this.waterMaterial.bumpAffectsReflection = true;
-
-    // Wave properties — Delta river: gentle current, not ocean
-    this.waterMaterial.windForce = 5;
-    this.waterMaterial.windDirection = new Vector2(0.6, 0.8);
-    this.waterMaterial.waveHeight = 0.08;
-    this.waterMaterial.waveLength = 0.15;
-    this.waterMaterial.waveSpeed = 15;
-    this.waterMaterial.waveCount = 8;
-
-    // Water colors — Delta Tigre: brown muddy river water (from real photos)
-    this.waterMaterial.waterColor = new Color3(0.35, 0.28, 0.15);
-    this.waterMaterial.waterColor2 = new Color3(0.25, 0.2, 0.1);
-    this.waterMaterial.colorBlendFactor = 0.45;
-    this.waterMaterial.colorBlendFactor2 = 0.35;
-    this.waterMaterial.diffuseColor = new Color3(0.4, 0.32, 0.18);
-
-    // Fresnel — more reflection at shallow angles
-    this.waterMaterial.fresnelSeparate = true;
-
-    // Specular — warm sun glints on brown water
-    this.waterMaterial.specularColor = new Color3(0.4, 0.35, 0.25);
-    this.waterMaterial.specularPower = 64;
-
-    // Use world coordinates so all river strips share the same wave pattern
-    this.waterMaterial.useWorldCoordinatesForWaveDeformation = true;
-
-    // Performance: limit lights
-    this.waterMaterial.maxSimultaneousLights = 2;
-
-    // Clip plane: avoids rendering artifacts below the water surface
-    this.waterMaterial.disableClipPlane = false;
-
-    // Create river strip meshes using the shared WaterMaterial
+    // Create river strip meshes, each as a Water object
     for (const river of RIVER_MAP) {
-      const mesh = this.createRiverStrip(river);
-      this.waterMeshes.push(mesh);
+      const water = this.createRiverStrip(river);
+      this.waterMeshes.push(water);
+      this.scene.add(water);
     }
   }
 
-  private createRiverStrip(river: RiverSegment): Mesh {
+  private createRiverStrip(river: RiverSegment): Water {
     const samples = river.points.length * 8;
     const positions: number[] = [];
     const indices: number[] = [];
@@ -342,104 +258,65 @@ export class WaterSystem {
       }
     }
 
-    const mesh = new Mesh("river_" + river.name, this.scene);
-    const vertexData = new VertexData();
-    vertexData.positions = positions;
-    vertexData.indices = indices;
-    vertexData.normals = normals;
-    vertexData.uvs = uvs;
-    vertexData.applyToMesh(mesh);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(normals), 3));
+    geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2));
+    geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
 
-    // Apply the shared WaterMaterial
-    mesh.material = this.waterMaterial;
+    // Detect mobile for smaller reflection render targets
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || "ontouchstart" in window;
+    const rtSize = isMobile ? 256 : 512;
 
-    return mesh;
+    const water = new Water(geometry, {
+      textureWidth: rtSize,
+      textureHeight: rtSize,
+      waterNormals: this.normalTexture!,
+      sunDirection: new THREE.Vector3(0.7, 0.8, 0.6).normalize(),
+      sunColor: 0xffffff,
+      waterColor: 0x2d5a3f, // Delta brown-green
+      distortionScale: 3.7,
+      fog: false,
+    });
+
+    // Set the 'size' uniform to control UV tiling in the Water shader
+    (water.material as THREE.ShaderMaterial).uniforms['size'].value = 6.0;
+
+    water.name = "river_" + river.name;
+    water.rotation.x = 0; // Water geometry is already in the XZ plane
+
+    return water;
   }
 
-  /** Add a mesh to the water's reflection/refraction render list */
-  public addToRenderList(mesh: Mesh): void {
-    this.renderListMeshes.push(mesh);
-    if (this.waterMaterial) {
-      this.waterMaterial.addToRenderList(mesh);
-    }
+  /**
+   * Add a mesh to the water's reflection render list.
+   * Three.js Water handles reflections internally via onBeforeRender —
+   * it renders the entire scene from a mirrored camera. No explicit
+   * render list management is needed.
+   */
+  public addToRenderList(_mesh: THREE.Mesh): void {
+    // Three.js Water renders the full scene for reflections automatically.
+    // This method is kept for API compatibility but is a no-op.
   }
 
-  /** Add all scene meshes to the water render list (call after environment is built) */
+  /**
+   * Add all scene meshes to the water render list.
+   * Three.js Water handles this automatically — kept for API compatibility.
+   */
   public addSceneToRenderList(): void {
-    if (!this.waterMaterial) return;
-
-    for (const mesh of this.scene.meshes) {
-      // Don't add water meshes to their own render list
-      if (mesh.material === this.waterMaterial) continue;
-      // Don't add riverbed meshes
-      if (mesh.name.startsWith("riverbed_")) continue;
-      // Don't reflect skybox
-      if (mesh.name === "sky") continue;
-      // Don't reflect grass (cross-billboard shader breaks in reflections)
-      if (mesh.name === "grassClump") continue;
-      // Don't reflect river bank boxes (fragmented dark reflections)
-      if (mesh.name.startsWith("bank_")) continue;
-      // Don't reflect wake trail ribbons
-      if (mesh.name.endsWith("Trail")) continue;
-      this.waterMaterial.addToRenderList(mesh);
-    }
-  }
-
-  private createRiverBed(): void {
-    for (const river of RIVER_MAP) {
-      const samples = river.points.length * 6;
-      const positions: number[] = [];
-      const indices: number[] = [];
-      const normals: number[] = [];
-      const colors: number[] = [];
-
-      for (let i = 0; i <= samples; i++) {
-        const t = i / samples;
-        const [x, z] = getPointOnPath(river.points, t);
-
-        const t2 = Math.min(1, t + 0.01);
-        const [x2, z2] = getPointOnPath(river.points, t2);
-        const dx = x2 - x;
-        const dz = z2 - z;
-        const len = Math.sqrt(dx * dx + dz * dz) || 1;
-        const nx = -dz / len;
-        const nz = dx / len;
-
-        const halfW = river.width / 2 + 1;
-
-        positions.push(x + nx * halfW, WATER_LEVEL - 1.5, z + nz * halfW);
-        normals.push(0, 1, 0);
-        colors.push(0.15, 0.25, 0.18, 1);
-
-        positions.push(x - nx * halfW, WATER_LEVEL - 1.5, z - nz * halfW);
-        normals.push(0, 1, 0);
-        colors.push(0.12, 0.22, 0.15, 1);
-
-        if (i < samples) {
-          const vi = i * 2;
-          indices.push(vi, vi + 1, vi + 2);
-          indices.push(vi + 1, vi + 3, vi + 2);
-        }
-      }
-
-      const mesh = new Mesh("riverbed_" + river.name, this.scene);
-      const vertexData = new VertexData();
-      vertexData.positions = positions;
-      vertexData.indices = indices;
-      vertexData.normals = normals;
-      vertexData.colors = colors;
-      vertexData.applyToMesh(mesh);
-
-      const mat = new StandardMaterial("riverbedMat_" + river.name, this.scene);
-      mat.diffuseColor = hexToColor3(COLORS.waterDeep);
-      mat.specularColor = Color3.Black();
-      mesh.material = mat;
-    }
+    // Three.js Water renders the full scene for reflections automatically.
+    // No explicit render list needed.
   }
 
   public update(deltaTime: number): void {
     this.time += deltaTime;
-    // WaterMaterial handles its own animation internally - no manual update needed
+    // Update the time uniform on all Water meshes so the shader animates
+    for (const water of this.waterMeshes) {
+      const material = water.material as THREE.ShaderMaterial;
+      if (material.uniforms && material.uniforms['time']) {
+        material.uniforms['time'].value = this.time;
+      }
+    }
   }
 
   /** Get wave height at a position for boat bobbing */
