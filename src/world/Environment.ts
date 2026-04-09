@@ -15,6 +15,7 @@ import {
 } from "../utils/constants";
 import { hexToColor3, seededRandom, isPointInRiver } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
+import { quickTree } from "./QuickTreeGenerator";
 
 export class Environment {
   private scene: Scene;
@@ -264,108 +265,25 @@ export class Environment {
     treeNode.rotation.y = rng() * Math.PI * 2;
   }
 
-  // Tree type 2: Regular/eucalyptus - bigger rounder canopy with stacked boxes
+  // Tree type 2: Regular/eucalyptus — uses QuickTreeGenerator (community extension)
+  // Generates organic randomized-sphere canopy + tapered cylinder trunk, flat-shaded
   private createRegularTree(x: number, z: number, seed: number): void {
     const rng = seededRandom(seed);
-    const treeNode = new TransformNode(`tree_${seed}`, this.scene);
-    treeNode.position.set(x, WATER_LEVEL, z);
 
-    const height = 3 + rng() * 5; // 3-8
-    const trunkWidth = 0.3 + rng() * 0.25;
-
-    // Trunk
-    const trunk = MeshBuilder.CreateBox(
-      `trunk_${seed}`,
-      { width: trunkWidth, height: height, depth: trunkWidth },
-      this.scene
-    );
-    trunk.material = this.createMat(`trunkMat_${seed}`, COLORS.wood);
-    trunk.parent = treeNode;
-    trunk.position.y = height / 2;
-
-    // Leaves - stacked cubes for rounder/bigger canopy
     const leafColors = [COLORS.leaves, COLORS.leavesDark, COLORS.leavesLight];
-    const leafSize = 2 + rng() * 2;
-
-    // Bottom wide layer
-    const leaf1 = MeshBuilder.CreateBox(
-      `leaf1_${seed}`,
-      { width: leafSize, height: leafSize * 0.5, depth: leafSize },
-      this.scene
-    );
-    leaf1.material = this.createMat(
-      `leafMat1_${seed}`,
+    const trunkMat = this.createMat(`qtrunkMat_${seed}`, COLORS.wood);
+    const leafMat = this.createMat(
+      `qleafMat_${seed}`,
       leafColors[Math.floor(rng() * 3)]
     );
-    leaf1.parent = treeNode;
-    leaf1.position.y = height - 0.2;
 
-    // Middle layer - slightly offset for organic look
-    const leaf2 = MeshBuilder.CreateBox(
-      `leaf2_${seed}`,
-      {
-        width: leafSize * 0.95,
-        height: leafSize * 0.55,
-        depth: leafSize * 0.95,
-      },
-      this.scene
-    );
-    leaf2.material = this.createMat(
-      `leafMat2_${seed}`,
-      leafColors[Math.floor(rng() * 3)]
-    );
-    leaf2.parent = treeNode;
-    leaf2.position.set(
-      (rng() - 0.5) * 0.5,
-      height + leafSize * 0.4,
-      (rng() - 0.5) * 0.5
-    );
+    const sizeBranch = 3 + rng() * 3;   // canopy diameter 3-6
+    const sizeTrunk = 2.5 + rng() * 4;  // trunk height 2.5-6.5
+    const radius = 2 + rng() * 1.5;     // trunk base radius 2-3.5
 
-    // Top layer - smaller
-    const leaf3 = MeshBuilder.CreateBox(
-      `leaf3_${seed}`,
-      {
-        width: leafSize * 0.65,
-        height: leafSize * 0.5,
-        depth: leafSize * 0.65,
-      },
-      this.scene
-    );
-    leaf3.material = this.createMat(
-      `leafMat3_${seed}`,
-      leafColors[Math.floor(rng() * 3)]
-    );
-    leaf3.parent = treeNode;
-    leaf3.position.set(
-      (rng() - 0.5) * 0.3,
-      height + leafSize * 0.8,
-      (rng() - 0.5) * 0.3
-    );
-
-    // Extra side cluster for volume (on some trees)
-    if (rng() > 0.3) {
-      const sideLeaf = MeshBuilder.CreateBox(
-        `leaf4_${seed}`,
-        {
-          width: leafSize * 0.6,
-          height: leafSize * 0.45,
-          depth: leafSize * 0.6,
-        },
-        this.scene
-      );
-      sideLeaf.material = this.createMat(
-        `leafMat4_${seed}`,
-        leafColors[Math.floor(rng() * 3)]
-      );
-      sideLeaf.parent = treeNode;
-      sideLeaf.position.set(
-        (rng() - 0.5) * leafSize * 0.7,
-        height + leafSize * 0.15,
-        (rng() - 0.5) * leafSize * 0.7
-      );
-    }
-
-    treeNode.rotation.y = rng() * Math.PI * 2;
+    const tree = quickTree(sizeBranch, sizeTrunk, radius, trunkMat, leafMat, this.scene);
+    tree.position.set(x, WATER_LEVEL, z);
+    tree.rotation.y = rng() * Math.PI * 2;
   }
 
   /** Compute approximate distance from a point to the nearest river edge */
