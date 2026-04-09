@@ -249,19 +249,19 @@ export class WaterSystem {
     this.waterMaterial.waveSpeed = 15;
     this.waterMaterial.waveCount = 8;
 
-    // Water colors — Delta Tigre: brown-green murky river water
-    this.waterMaterial.waterColor = new Color3(0.18, 0.3, 0.2);
-    this.waterMaterial.waterColor2 = new Color3(0.12, 0.22, 0.14);
-    this.waterMaterial.colorBlendFactor = 0.35;
-    this.waterMaterial.colorBlendFactor2 = 0.25;
-    this.waterMaterial.diffuseColor = new Color3(0.25, 0.35, 0.2);
+    // Water colors — Delta Tigre: brown muddy river water (from real photos)
+    this.waterMaterial.waterColor = new Color3(0.35, 0.28, 0.15);
+    this.waterMaterial.waterColor2 = new Color3(0.25, 0.2, 0.1);
+    this.waterMaterial.colorBlendFactor = 0.45;
+    this.waterMaterial.colorBlendFactor2 = 0.35;
+    this.waterMaterial.diffuseColor = new Color3(0.4, 0.32, 0.18);
 
     // Fresnel — more reflection at shallow angles
     this.waterMaterial.fresnelSeparate = true;
 
-    // Specular — subtle sun glints
-    this.waterMaterial.specularColor = new Color3(0.3, 0.3, 0.25);
-    this.waterMaterial.specularPower = 128;
+    // Specular — warm sun glints on brown water
+    this.waterMaterial.specularColor = new Color3(0.4, 0.35, 0.25);
+    this.waterMaterial.specularPower = 64;
 
     // Use world coordinates so all river strips share the same wave pattern
     this.waterMaterial.useWorldCoordinatesForWaveDeformation = true;
