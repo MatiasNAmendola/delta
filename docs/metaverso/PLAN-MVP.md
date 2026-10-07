@@ -64,10 +64,12 @@ local, ya hay assets y la mecánica de la lancha colectiva funciona.
 | Renderer | **Babylon.js** (ya está; Apache-2.0, permisiva) | No reescribir lo que funciona | three.js / PlayCanvas (MIT) detrás de una interfaz `Renderer` |
 | Formato del mundo | **World DSL propio en JSON** + JSON Schema | Abierto, versionable, editable por IA y por humanos | Export a glTF + extensiones |
 | Lógica | **ECS** (miniplex o becsy, MIT) | Componer comportamientos declarativos | Sistemas en WASM |
-| Estado compartido | **Yjs** (CRDT, MIT) sobre WebSocket | Edición colaborativa del mundo + offline gratis | Servidor autoritativo Colyseus (MIT) para gameplay competitivo |
-| Gameplay en vivo | Peer-host simple o Colyseus | Grupos de 2–6 personas | Shards por región |
+| Estado compartido del mundo | **Yjs + Hocuspocus** (CRDT, MIT) | Edición colaborativa del mundo + offline gratis | Loro / Automerge |
+| Gameplay en vivo | **Colyseus** + `@colyseus/schema` (MIT) | Movimiento y física con servidor autoritativo; `orion3dgames/t5c` ya muestra Babylon + Colyseus | Shards por región |
 | IA | LLM con **tool calling** sobre el DSL (proveedor intercambiable) | La IA nunca toca el runtime directo | Modelos locales para NPCs |
-| Scripts "escape hatch" | **quickjs-emscripten** (MIT) en sandbox, con límites de CPU/memoria | Mecánicas que el DSL no cubre, sin romper seguridad | Componentes WASM |
+| Scripts "escape hatch" | **quickjs-emscripten** (MIT) en sandbox, con límites de CPU/memoria | Mecánicas que el DSL no cubre, sin romper seguridad | Luau (el lenguaje de Roblox, MIT) |
+| NPCs | Árboles de comportamiento **mistreevous** (JSON) + navmesh **recast-navigation-js** | La IA escribe árboles y diálogos como datos, no código | Memoria y conversación al estilo **ai-town** |
+| Física | **Havok** (incluido en Babylon) o **Rapier** (Apache-2.0, determinista) | Rapier si el servidor tiene que simular igual que el cliente | cannon-es (MIT, no determinista) |
 | Assets | glTF/GLB + **gltf-transform** + meshopt/KTX2 | Ya usado en el repo (`@gltf-transform/cli`) | Generación text-to-3D curada |
 | Distribución | PWA por link + GitHub Pages/Cloudflare | Cero instalación | Portales web (Poki, CrazyGames), Discord Activities |
 
@@ -75,7 +77,8 @@ local, ya hay assets y la mecánica de la lancha colectiva funciona.
 
 ## 4. El World DSL (v0)
 
-Principio: **la IA compone, el runtime ejecuta**. La IA produce *patches* (JSON Patch / operaciones
+Principio: **la IA compone, el runtime ejecuta**. Referencia a estudiar antes de cerrar el esquema:
+**MML** (`mml-io/mml`, MIT), un lenguaje declarativo tipo HTML para mundos 3D multijugador. La IA produce *patches* (JSON Patch / operaciones
 Yjs) sobre un documento validado por esquema. Nunca escribe código del motor.
 
 ```jsonc
@@ -146,7 +149,7 @@ costo de IA por hora jugada.
 | **0. Refactor a datos** | 1–2 sem | `world.json` + loader; `constants.ts` reemplazado por el documento; el Delta actual se carga desde JSON | Mismo juego, cero regresiones, mundo 100% en datos |
 | **1. Runtime ECS + DSL v0** | 2–3 sem | 10 componentes, JSON Schema, validador, tests | Editar el JSON a mano cambia el juego en caliente |
 | **2. Agente** | 2–3 sem | Chat in-game, `query/patch/preview`, deshacer | 20 pedidos de prueba con ≥80% de patches válidos |
-| **3. Multijugador privado** | 2–3 sem | Yjs + y-websocket, salas por invitación, persistencia | 4 dispositivos editando y jugando a la vez sin divergencia |
+| **3. Multijugador privado** | 2–3 sem | Yjs + Hocuspocus para el mundo, Colyseus para movimiento, salas por invitación, persistencia | 4 dispositivos editando y jugando a la vez sin divergencia |
 | **4. Pulido + piloto** | 2 sem | 5–10 familias/grupos reales | Métricas de §5 medidas |
 | 5. (post-MVP) Escape hatch | — | Scripts QuickJS sandbox | Mecánica nueva sin tocar el motor |
 
@@ -157,7 +160,9 @@ Total estimado: **9–13 semanas** con 1–2 personas, usando agentes de código
 Es el costo oculto más grande de Roblox. Para el MVP lo acotamos por diseño:
 
 - **Mundos privados por invitación** (familia/amigos): no hay contacto con desconocidos.
-- Chat de texto con filtro (p. ej. `obscenity`, MIT) y sin enlaces; voz desactivada por defecto.
+- Chat de texto con filtro (`obscenity` + `2Toad/Profanity`, que cubre español; ambos MIT), frases
+  predefinidas para menores y sin enlaces; voz desactivada por defecto. Los filtros de palabras no alcanzan
+  solos: se suma un clasificador del lado servidor.
 - Los pedidos a la IA pasan por un clasificador de contenido; el validador rechaza patches fuera de
   política (texto ofensivo en carteles, etc.).
 - Sin datos personales de menores: cuentas creadas por un adulto, avatares sin foto.
@@ -191,5 +196,5 @@ marketplace). Lo que conviene **no repetir** y lo que sí rescatar:
 
 1. Aprobar este plan y el primer mundo ("Delta").
 2. Fase 0: extraer `RIVER_MAP`, `DOCK_LOCATIONS` y la generación de `Environment.ts` a `world.json` + JSON Schema.
-3. Elegir ECS (miniplex vs. becsy) con una prueba de 1 día.
+3. Elegir ECS (miniplex vs. becsy) con una prueba de 1 día, y leer MML y `orion3dgames/t5c` como referencias.
 4. Prototipo del agente con 3 herramientas (`query`, `patch`, `preview`) sobre el mundo actual.
