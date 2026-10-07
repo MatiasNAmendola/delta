@@ -2,8 +2,8 @@
 
 > Estado: propuesta v0.1 · Fecha: 2026-10-07
 > Contexto: conversación sobre UGC (Roblox, UEFN, Minecraft) vs. desarrollo propio, y la idea de
-> "el navegador es la consola, la IA es el Studio". Catálogo de proyectos MIT relevados en
-> [`CATALOGO-MIT.md`](./CATALOGO-MIT.md).
+> "el navegador es la consola, la IA es el Studio". Catálogo de proyectos MIT y Apache-2.0 relevados en
+> [`CATALOGO-OPEN-SOURCE.md`](./CATALOGO-OPEN-SOURCE.md).
 
 ## 1. Qué queremos probar
 
@@ -73,7 +73,7 @@ local, ya hay assets y la mecánica de la lancha colectiva funciona.
 | Assets | glTF/GLB + **gltf-transform** + meshopt/KTX2 | Ya usado en el repo (`@gltf-transform/cli`) | Generación text-to-3D curada |
 | Distribución | PWA por link + GitHub Pages/Cloudflare | Cero instalación | Portales web (Poki, CrazyGames), Discord Activities |
 
-> El catálogo (`CATALOGO-MIT.md`) lista las alternativas MIT verificadas para cada capa.
+> El catálogo (`CATALOGO-OPEN-SOURCE.md`) lista las alternativas MIT y Apache-2.0 verificadas para cada capa.
 
 ## 4. El World DSL (v0)
 
@@ -127,6 +127,27 @@ natural** que se le pasa a la IA como documentación de herramientas.
 - `world.preview(patch)`: aplicar en una copia, sacar captura y devolver diff legible ("agregué 4 caballos").
 
 Todo patch es **reversible** (historial = deshacer) y visible para los demás jugadores.
+
+## 4.b Arte y assets: el hueco de calidad actual
+
+Hoy casi todo el mundo se dibuja **con cajas desde el código** (`MeshBuilder.CreateBox` en `Environment.ts`):
+cada árbol, casa y muelle se arma con varias cajas y un material propio. Solo la lancha es un modelo real
+(`public/models/lancha-optimized.glb`, generado con Tripo3D). Esto explica buena parte de la falta de calidad
+y también del costo de rendimiento (miles de mallas y materiales sueltos).
+
+Propuesta de pipeline (todas las herramientas son gratuitas):
+
+| Paso | Herramienta | Notas |
+|---|---|---|
+| Kit base de assets | Packs CC0 (Kenney, Quaternius, Poly Pizza) | Estilo low-poly consistente desde el día 1, uso comercial libre |
+| Modelos propios low-poly/voxel | **Blockbench** (GPL-3.0) o **MagicaVoxel** (freeware) | Ideales para el estilo "Minecraft/Roblox"; curva de aprendizaje baja |
+| Modelos y animación avanzados | **Blender** (GPL) | Estándar de la industria; exporta glTF. La GPL cubre al programa, **no** a los modelos que se crean con él |
+| Modelado asistido por IA | Tripo / Meshy (servicios) o TRELLIS / TripoSR (self-host) + `blender-mcp` | Para prototipos; siempre pasar por limpieza y reducción de polígonos |
+| Optimización | `gltf-transform` (ya en el repo) + meshopt + KTX2 | Presupuesto por asset (p. ej. ≤ 5k triángulos, texturas ≤ 1k) |
+| Uso en el motor | Prefabs del World Doc que referencian `.glb` + **instancing** | Un árbol = un modelo instanciado cientos de veces, no 3 cajas × 600 |
+
+Para el agente de IA, la biblioteca curada de assets es lo que hace posible `assets.search(text)`: la IA elige
+entre modelos buenos en lugar de generar geometría de baja calidad.
 
 ## 5. Alcance del MVP (lo que el usuario puede hacer)
 
