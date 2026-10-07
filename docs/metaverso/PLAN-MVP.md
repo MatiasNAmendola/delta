@@ -61,7 +61,7 @@ local, ya hay assets y la mecánica de la lancha colectiva funciona.
 
 | Decisión | Elección MVP | Por qué | Alternativa futura |
 |---|---|---|---|
-| Renderer | **Babylon.js** (ya está; Apache-2.0, permisiva) | No reescribir lo que funciona | three.js / PlayCanvas (MIT) detrás de una interfaz `Renderer` |
+| Renderer | **Babylon.js** (ya está; Apache-2.0, permisiva) | Medido en [`MOTORES.md`](./MOTORES.md): el cuello de botella es la escena (~1.550 draw calls), no el motor; instanciar da ~100x, cambiar a three.js ~2,3x | three.js / PlayCanvas (MIT) detrás de una interfaz `Renderer` |
 | Formato del mundo | **World DSL propio en JSON** + JSON Schema | Abierto, versionable, editable por IA y por humanos | Export a glTF + extensiones |
 | Lógica | **ECS** (miniplex o becsy, MIT) | Componer comportamientos declarativos | Sistemas en WASM |
 | Estado compartido del mundo | **Yjs + Hocuspocus** (CRDT, MIT) | Edición colaborativa del mundo + offline gratis | Loro / Automerge |
@@ -168,6 +168,7 @@ costo de IA por hora jugada.
 | Fase | Duración | Entregable | Criterio de salida |
 |---|---|---|---|
 | **0. Refactor a datos** ✅ hecho | 1–2 sem | `world.json` + loader; `constants.ts` reemplazado por el documento; el Delta actual se carga desde JSON | Mismo juego, cero regresiones, mundo 100% en datos |
+| **0.5 Calidad y rendimiento de la escena** | 1–2 sem | Thin instances para árboles/casas, materiales compartidos y congelados, render list mínima del agua, assets glTF del kit base (§4.b), escalado adaptativo | < 100 draw calls por frame (hoy ~1.550); 30 fps estables en un Android barato real |
 | **1. Runtime ECS + DSL v0** | 2–3 sem | 10 componentes, JSON Schema, validador, tests | Editar el JSON a mano cambia el juego en caliente |
 | **2. Agente** | 2–3 sem | Chat in-game, `query/patch/preview`, deshacer | 20 pedidos de prueba con ≥80% de patches válidos |
 | **3. Multijugador privado** | 2–3 sem | Yjs + Hocuspocus para el mundo, Colyseus para movimiento, salas por invitación, persistencia | 4 dispositivos editando y jugando a la vez sin divergencia |

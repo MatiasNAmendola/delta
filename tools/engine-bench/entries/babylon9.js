@@ -1,0 +1,13 @@
+import { Engine } from "@babylonjs/core/Engines/engine";
+import { Scene } from "@babylonjs/core/scene";
+import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
+import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
+import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
+import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { Vector3, Matrix } from "@babylonjs/core/Maths/math.vector";
+import "@babylonjs/core/Meshes/thinInstanceMesh";
+const c=document.querySelector("canvas"); const e=new Engine(c,true); const s=new Scene(e);
+new FreeCamera("c",new Vector3(0,5,-10),s); new HemisphericLight("l",new Vector3(0,1,0),s);
+const b=CreateBox("b",{},s); b.material=new StandardMaterial("m",s);
+b.thinInstanceAdd(Matrix.Translation(1,0,0));
+e.runRenderLoop(()=>s.render());
