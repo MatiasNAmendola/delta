@@ -63,7 +63,7 @@ local, ya hay assets y la mecánica de la lancha colectiva funciona.
 |---|---|---|---|
 | Renderer | **Babylon.js** (ya está; Apache-2.0, permisiva) | No reescribir lo que funciona | three.js / PlayCanvas (MIT) detrás de una interfaz `Renderer` |
 | Formato del mundo | **World DSL propio en JSON** + JSON Schema | Abierto, versionable, editable por IA y por humanos | Export a glTF + extensiones |
-| Lógica | **ECS** (miniplex/koota, MIT) | Componer comportamientos declarativos | Sistemas en WASM |
+| Lógica | **ECS** (miniplex o becsy, MIT) | Componer comportamientos declarativos | Sistemas en WASM |
 | Estado compartido | **Yjs** (CRDT, MIT) sobre WebSocket | Edición colaborativa del mundo + offline gratis | Servidor autoritativo Colyseus (MIT) para gameplay competitivo |
 | Gameplay en vivo | Peer-host simple o Colyseus | Grupos de 2–6 personas | Shards por región |
 | IA | LLM con **tool calling** sobre el DSL (proveedor intercambiable) | La IA nunca toca el runtime directo | Modelos locales para NPCs |
@@ -191,5 +191,5 @@ marketplace). Lo que conviene **no repetir** y lo que sí rescatar:
 
 1. Aprobar este plan y el primer mundo ("Delta").
 2. Fase 0: extraer `RIVER_MAP`, `DOCK_LOCATIONS` y la generación de `Environment.ts` a `world.json` + JSON Schema.
-3. Elegir ECS (miniplex vs. koota) con una prueba de 1 día.
+3. Elegir ECS (miniplex vs. becsy) con una prueba de 1 día.
 4. Prototipo del agente con 3 herramientas (`query`, `patch`, `preview`) sobre el mundo actual.
