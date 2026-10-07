@@ -19,6 +19,12 @@ import {
 } from "./utils/constants";
 import { findDock, type Dock, type WorldDoc } from "./world/WorldDoc";
 import { distance2D, lerp } from "./utils/helpers";
+import {
+  defaultPolicy,
+  nextResolution,
+  type ResolutionPolicy,
+  type ResolutionState,
+} from "./utils/AdaptiveResolution";
 
 export class GameEngine {
   private engine: Engine;
@@ -39,14 +45,14 @@ export class GameEngine {
   private currentTargetDock = 0;
   private dockPassengers: Map<string, number> = new Map();
   private nearDock: string | null = null;
+  private resolutionPolicy: ResolutionPolicy;
+  private resolution: ResolutionState;
+  private fpsWindowTime = 0;
 
   constructor(
     private canvas: HTMLCanvasElement,
     private readonly world: WorldDoc
   ) {
-    // Adapt canvas to device pixel ratio for crisp rendering
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-
     this.engine = new Engine(canvas, true, {
       preserveDrawingBuffer: false,
       stencil: true,
@@ -54,8 +60,11 @@ export class GameEngine {
       adaptToDeviceRatio: true,
     });
 
-    // 1/dpr = native device resolution, capped at 2.5x to avoid GPU overload
-    this.engine.setHardwareScalingLevel(1 / dpr);
+    // Start sharp (capped pixel ratio) and let FPS drive the resolution
+    const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    this.resolutionPolicy = defaultPolicy(window.devicePixelRatio || 1, isTouch);
+    this.resolution = { level: this.resolutionPolicy.minLevel, goodWindows: 0 };
+    this.engine.setHardwareScalingLevel(this.resolution.level);
 
     this.init();
   }
@@ -158,6 +167,18 @@ export class GameEngine {
     });
   }
 
+  /** Every 2 s, lower or raise the render resolution based on FPS. */
+  private adaptResolution(dt: number): void {
+    this.fpsWindowTime += dt;
+    if (this.fpsWindowTime < 2) return;
+    this.fpsWindowTime = 0;
+    const next = nextResolution(this.resolution, this.engine.getFps(), this.resolutionPolicy);
+    if (next.level !== this.resolution.level) {
+      this.engine.setHardwareScalingLevel(next.level);
+    }
+    this.resolution = next;
+  }
+
   private updateLoadingBar(percent: number, text: string): void {
     const bar = document.getElementById("loadingBar");
     const loadText = document.getElementById("loadingText");
@@ -198,6 +219,7 @@ export class GameEngine {
 
   private gameLoop(): void {
     const dt = this.engine.getDeltaTime() / 1000;
+    this.adaptResolution(dt);
 
     if (this.gameStarted && !this.gameOver) {
       this.gameTime += dt;

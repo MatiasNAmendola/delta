@@ -168,7 +168,7 @@ costo de IA por hora jugada.
 | Fase | Duración | Entregable | Criterio de salida |
 |---|---|---|---|
 | **0. Refactor a datos** ✅ hecho | 1–2 sem | `world.json` + loader; `constants.ts` reemplazado por el documento; el Delta actual se carga desde JSON | Mismo juego, cero regresiones, mundo 100% en datos |
-| **0.5 Calidad y rendimiento de la escena** | 1–2 sem | Thin instances para árboles/casas, materiales compartidos y congelados, render list mínima del agua, assets glTF del kit base (§4.b), escalado adaptativo | < 100 draw calls por frame (hoy ~1.550); 30 fps estables en un Android barato real |
+| **0.5 Calidad y rendimiento de la escena** 🟡 en curso (draw calls 1.554 → 42; bundle 476 → 416 KB; resolución adaptativa; falta kit de assets y prueba en Android real) | 1–2 sem | Thin instances para árboles/casas, materiales compartidos y congelados, render list mínima del agua, assets glTF del kit base (§4.b), escalado adaptativo | < 100 draw calls por frame (hoy ~1.550); 30 fps estables en un Android barato real |
 | **1. Runtime ECS + DSL v0** | 2–3 sem | 10 componentes, JSON Schema, validador, tests | Editar el JSON a mano cambia el juego en caliente |
 | **2. Agente** | 2–3 sem | Chat in-game, `query/patch/preview`, deshacer | 20 pedidos de prueba con ≥80% de patches válidos |
 | **3. Multijugador privado** | 2–3 sem | Yjs + Hocuspocus para el mundo, Colyseus para movimiento, salas por invitación, persistencia | 4 dispositivos editando y jugando a la vez sin divergencia |
@@ -213,6 +213,19 @@ marketplace). Lo que conviene **no repetir** y lo que sí rescatar:
 - ✅ Rescatar: amigos, presencia en mapa, palco con capacidad limitada (6 personas, solo por
   invitación): el mismo patrón de "salas chicas por invitación" de este MVP. También el sistema de
   logros y el HUD con interacciones contextuales.
+
+## 9.b Lo que aprendimos de otros metaversos
+
+Ver [`ARQUITECTURAS-METAVERSO.md`](./ARQUITECTURAS-METAVERSO.md) (Hubs, Third Room, Hyperfy, MML, Decentraland,
+vircadia-web, noa, T5C, Roblox y otros, leídos desde su código). Lo que entra al plan:
+
+- **Presupuestos de contenido por mundo**, validados por el World Doc (al estilo de los límites por parcela de
+  Decentraland y los umbrales de Hubs/Roblox): triángulos, entidades, materiales, texturas y peso por zona.
+- **Tiers de calidad automáticos** para celulares baratos (escala de render, sin sombras, materiales simples,
+  texturas de 512) además de la resolución adaptativa que ya está.
+- **Mundo partido en chunks** con carga por anillos alrededor del jugador (con histéresis) cuando los mundos
+  crezcan; el Delta real importado de OSM es el primer candidato.
+- **Scripts de usuario en un worker aislado** y **salas autoritativas con filtro por zona** (como T5C con Colyseus).
 
 ## 10. Próximos pasos concretos
 
