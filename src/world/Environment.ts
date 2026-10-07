@@ -3,8 +3,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
@@ -13,28 +12,30 @@ import { WATER_LEVEL, COLORS } from "../utils/constants";
 import { degToRad, type Dock, type ScatterRule, type WorldDoc } from "./WorldDoc";
 import { hexToColor3, seededRandom, clamp } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
+import { InstancedBoxBatch, propTransform } from "./InstancedBatch";
 
 export class Environment {
   private scene: Scene;
   private world: WorldDoc;
-  private dockMeshes: Map<string, TransformNode> = new Map();
+  private props: PropBatches;
+  /** Static meshes worth showing in the water reflection/refraction passes. */
+  private reflectedMeshes: AbstractMesh[] = [];
 
   constructor(scene: Scene, waterSystem: WaterSystem, world: WorldDoc) {
     this.scene = scene;
     this.world = world;
     this.createGround(waterSystem);
     this.createSkybox();
+    this.props = createPropBatches(scene);
     for (const rule of world.scatter) {
       this.scatter(rule, waterSystem);
     }
-    this.createDocks();
-  }
-
-  private createMat(name: string, color: string): StandardMaterial {
-    const mat = new StandardMaterial(name, this.scene);
-    mat.diffuseColor = hexToColor3(color);
-    mat.specularColor = new Color3(0.05, 0.05, 0.05);
-    return mat;
+    for (const dock of world.docks) {
+      this.addDock(dock);
+    }
+    for (const batch of Object.values(this.props)) {
+      this.reflectedMeshes.push(batch.build());
+    }
   }
 
   /** Simple value noise for coherent terrain patterns */
@@ -92,6 +93,7 @@ export class Environment {
     );
     ground.position.y = WATER_LEVEL - 0.3;
     ground.receiveShadows = true;
+    this.reflectedMeshes.push(ground);
 
     // Displace vertices to create terrain elevation
     this.displaceTerrainVertices(ground, waterSystem, subdivisions);
@@ -427,6 +429,9 @@ export class Environment {
     skyMat.disableLighting = true;
     sky.material = skyMat;
     sky.infiniteDistance = true;
+    sky.isPickable = false;
+    skyMat.freeze();
+    this.reflectedMeshes.push(sky);
 
     // Set clear color
     this.scene.clearColor = new Color4(0.53, 0.81, 0.92, 1);
@@ -436,155 +441,60 @@ export class Environment {
     this.scene.fogColor = new Color3(0.6, 0.78, 0.85);
   }
 
-  private createTree(x: number, z: number, seed: number): void {
+  /** Blocky Minecraft-style tree: one trunk and two leaf layers. */
+  private addTree(x: number, z: number, seed: number): void {
     const rng = seededRandom(seed);
-    const treeNode = new TransformNode(`tree_${seed}`, this.scene);
-    treeNode.position.set(x, WATER_LEVEL, z);
+    const p = this.props;
 
     const height = 2 + rng() * 3;
     const trunkWidth = 0.3 + rng() * 0.2;
-
-    // Trunk with bark-like texture
-    const trunk = MeshBuilder.CreateBox(
-      `trunk_${seed}`,
-      { width: trunkWidth, height: height, depth: trunkWidth },
-      this.scene
-    );
-    const trunkMat = new StandardMaterial(`trunkMat_${seed}`, this.scene);
     const barkShade = 0.08 + rng() * 0.06;
-    trunkMat.diffuseColor = new Color3(
-      0.35 + barkShade,
-      0.22 + barkShade * 0.5,
-      0.1 + barkShade * 0.3
-    );
-    trunkMat.specularColor = new Color3(0.02, 0.02, 0.02);
-    trunk.material = trunkMat;
-    trunk.parent = treeNode;
-    trunk.position.y = height / 2;
+    const trunkColor = new Color3(0.35 + barkShade, 0.22 + barkShade * 0.5, 0.1 + barkShade * 0.3);
 
-    // Leaves - blocky Minecraft style with varied greens
     const leafSize = 1.5 + rng() * 1.5;
-
-    // Bottom leaf layer
-    const leaf1 = MeshBuilder.CreateBox(
-      `leaf1_${seed}`,
-      { width: leafSize, height: leafSize * 0.6, depth: leafSize },
-      this.scene
-    );
-    const leafMat1 = new StandardMaterial(`leafMat1_${seed}`, this.scene);
     const g1 = 0.35 + rng() * 0.3;
-    leafMat1.diffuseColor = new Color3(0.1 + rng() * 0.1, g1, 0.08 + rng() * 0.08);
-    leafMat1.emissiveColor = new Color3(0.02, 0.06, 0.02);
-    leafMat1.specularColor = new Color3(0.03, 0.03, 0.03);
-    leaf1.material = leafMat1;
-    leaf1.parent = treeNode;
-    leaf1.position.y = height;
-
-    // Top leaf layer
-    const leaf2 = MeshBuilder.CreateBox(
-      `leaf2_${seed}`,
-      {
-        width: leafSize * 0.7,
-        height: leafSize * 0.5,
-        depth: leafSize * 0.7,
-      },
-      this.scene
-    );
-    const leafMat2 = new StandardMaterial(`leafMat2_${seed}`, this.scene);
+    const leaf1Color = new Color3(0.1 + rng() * 0.1, g1, 0.08 + rng() * 0.08);
     const g2 = 0.4 + rng() * 0.25;
-    leafMat2.diffuseColor = new Color3(0.12 + rng() * 0.08, g2, 0.1 + rng() * 0.06);
-    leafMat2.emissiveColor = new Color3(0.02, 0.05, 0.02);
-    leafMat2.specularColor = new Color3(0.03, 0.03, 0.03);
-    leaf2.material = leafMat2;
-    leaf2.parent = treeNode;
-    leaf2.position.y = height + leafSize * 0.5;
+    const leaf2Color = new Color3(0.12 + rng() * 0.08, g2, 0.1 + rng() * 0.06);
 
-    // Random rotation for variety
-    treeNode.rotation.y = rng() * Math.PI * 2;
+    const parent = propTransform(x, WATER_LEVEL, z, rng() * Math.PI * 2);
+    p.trunks.add(parent, [trunkWidth, height, trunkWidth], [0, height / 2, 0], trunkColor);
+    p.leavesLow.add(parent, [leafSize, leafSize * 0.6, leafSize], [0, height, 0], leaf1Color);
+    p.leavesHigh.add(
+      parent,
+      [leafSize * 0.7, leafSize * 0.5, leafSize * 0.7],
+      [0, height + leafSize * 0.5, 0],
+      leaf2Color
+    );
   }
 
-  private createHouse(
-    x: number,
-    z: number,
-    seed: number,
-    near_river: boolean
-  ): void {
+  /** Delta house; next to the water it stands on stilts. */
+  private addHouse(x: number, z: number, seed: number, onStilts: boolean): void {
     const rng = seededRandom(seed);
-    const houseNode = new TransformNode(`house_${seed}`, this.scene);
-    houseNode.position.set(x, WATER_LEVEL, z);
-    houseNode.rotation.y = rng() * Math.PI * 2;
+    const p = this.props;
+    const parent = propTransform(x, WATER_LEVEL, z, rng() * Math.PI * 2);
 
     const w = 2 + rng() * 2;
     const h = 1.5 + rng() * 1.5;
     const d = 2 + rng() * 2;
 
-    // Stilts (Delta houses are often raised on stilts)
-    if (near_river) {
+    if (onStilts) {
       for (let sx = -1; sx <= 1; sx += 2) {
         for (let sz = -1; sz <= 1; sz += 2) {
-          const stilt = MeshBuilder.CreateBox(
-            `stilt_${seed}_${sx}_${sz}`,
-            { width: 0.2, height: 1.5, depth: 0.2 },
-            this.scene
-          );
-          stilt.material = this.createMat(`stiltMat_${seed}`, COLORS.wood);
-          stilt.parent = houseNode;
-          stilt.position.set((sx * w) / 2.5, 0.75, (sz * d) / 2.5);
+          p.stilts.add(parent, [0.2, 1.5, 0.2], [(sx * w) / 2.5, 0.75, (sz * d) / 2.5], COLOR.wood);
         }
       }
     }
+    const baseY = onStilts ? 1.5 : 0;
 
-    const baseY = near_river ? 1.5 : 0;
+    const wallColor = WALL_COLORS[Math.floor(rng() * WALL_COLORS.length)];
+    p.walls.add(parent, [w, h, d], [0, baseY + h / 2, 0], wallColor);
 
-    // Walls with slightly warm tones
-    const walls = MeshBuilder.CreateBox(
-      `walls_${seed}`,
-      { width: w, height: h, depth: d },
-      this.scene
-    );
-    const wallColors = ["#d4c5a0", "#c9b896", "#b8a882", "#e0d5b8"];
-    const wallMat = new StandardMaterial(`wallMat_${seed}`, this.scene);
-    wallMat.diffuseColor = hexToColor3(
-      wallColors[Math.floor(rng() * wallColors.length)]
-    );
-    wallMat.specularColor = new Color3(0.03, 0.03, 0.03);
-    walls.material = wallMat;
-    walls.parent = houseNode;
-    walls.position.y = baseY + h / 2;
+    const roofColor = ROOF_COLORS[Math.floor(rng() * ROOF_COLORS.length)];
+    p.roofs.add(parent, [w + 0.5, 0.3, d + 0.5], [0, baseY + h + 0.15, 0], roofColor);
+    p.roofs.add(parent, [w * 0.5, 0.5, d + 0.3], [0, baseY + h + 0.5, 0], roofColor);
 
-    // Roof
-    const roofColors = [COLORS.roof, COLORS.roofBlue, "#8b4513", "#2a6a3a"];
-    const roof = MeshBuilder.CreateBox(
-      `roof_${seed}`,
-      { width: w + 0.5, height: 0.3, depth: d + 0.5 },
-      this.scene
-    );
-    roof.material = this.createMat(
-      `roofMat_${seed}`,
-      roofColors[Math.floor(rng() * roofColors.length)]
-    );
-    roof.parent = houseNode;
-    roof.position.y = baseY + h + 0.15;
-
-    // Roof peak
-    const peak = MeshBuilder.CreateBox(
-      `peak_${seed}`,
-      { width: w * 0.5, height: 0.5, depth: d + 0.3 },
-      this.scene
-    );
-    peak.material = roof.material;
-    peak.parent = houseNode;
-    peak.position.y = baseY + h + 0.5;
-
-    // Door
-    const door = MeshBuilder.CreateBox(
-      `door_${seed}`,
-      { width: 0.6, height: 1.0, depth: 0.05 },
-      this.scene
-    );
-    door.material = this.createMat(`doorMat_${seed}`, COLORS.woodDark);
-    door.parent = houseNode;
-    door.position.set(0, baseY + 0.5, d / 2 + 0.03);
+    p.doors.add(parent, [0.6, 1.0, 0.05], [0, baseY + 0.5, d / 2 + 0.03], COLOR.woodDark);
   }
 
   /**
@@ -614,113 +524,66 @@ export class Environment {
       const seed = i * rule.instanceSeed.stride + rule.instanceSeed.offset;
       switch (rule.prefab) {
         case "tree":
-          this.createTree(x, z, seed);
+          this.addTree(x, z, seed);
           break;
         case "house":
-          // Delta houses next to the water stand on stilts
-          this.createHouse(x, z, seed, nearWater);
+          this.addHouse(x, z, seed, nearWater);
           break;
       }
     }
   }
 
-  private createDocks(): void {
-    for (const dock of this.world.docks) {
-      const dockNode = this.createDockMesh(dock);
-      this.dockMeshes.set(dock.name, dockNode);
-    }
-  }
+  /** Bus-boat stop: platform on posts, sign and a small shelter. */
+  private addDock(dock: Dock): void {
+    const p = this.props;
+    const parent = propTransform(dock.x, WATER_LEVEL, dock.z, degToRad(dock.rotationDeg));
 
-  private createDockMesh(dock: Dock): TransformNode {
-    const node = new TransformNode(`dock_${dock.name}`, this.scene);
-    node.position.set(dock.x, WATER_LEVEL, dock.z);
-    node.rotation.y = degToRad(dock.rotationDeg);
-
-    // Dock platform
-    const platform = MeshBuilder.CreateBox(
-      `dockPlat_${dock.name}`,
-      { width: 3, height: 0.3, depth: 5 },
-      this.scene
-    );
-    platform.material = this.createMat(`dockMat_${dock.name}`, COLORS.dock);
-    platform.parent = node;
-    platform.position.y = 0.3;
-
-    // Support posts
+    p.dockPlatforms.add(parent, [3, 0.3, 5], [0, 0.3, 0], COLOR.dock);
     for (let i = -1; i <= 1; i += 2) {
       for (let j = -1; j <= 1; j += 2) {
-        const post = MeshBuilder.CreateBox(
-          `dockPost_${dock.name}_${i}_${j}`,
-          { width: 0.25, height: 1.5, depth: 0.25 },
-          this.scene
-        );
-        post.material = this.createMat(
-          `postMat_${dock.name}_${i}`,
-          COLORS.woodDark
-        );
-        post.parent = node;
-        post.position.set(i * 1.2, -0.2, j * 2);
+        p.dockPosts.add(parent, [0.25, 1.5, 0.25], [i * 1.2, -0.2, j * 2], COLOR.woodDark);
       }
     }
-
-    // Sign post
-    const signPost = MeshBuilder.CreateBox(
-      `signPost_${dock.name}`,
-      { width: 0.15, height: 2.0, depth: 0.15 },
-      this.scene
-    );
-    signPost.material = this.createMat(`signPostMat_${dock.name}`, "#666666");
-    signPost.parent = node;
-    signPost.position.set(1.3, 1.2, 0);
-
-    // Sign
-    const sign = MeshBuilder.CreateBox(
-      `sign_${dock.name}`,
-      { width: 1.5, height: 0.6, depth: 0.1 },
-      this.scene
-    );
-    const signMat = new StandardMaterial(`signMat_${dock.name}`, this.scene);
-    signMat.diffuseColor = new Color3(0.9, 0.85, 0.7);
-    signMat.emissiveColor = new Color3(0.15, 0.12, 0.08);
-    sign.material = signMat;
-    sign.parent = node;
-    sign.position.set(1.3, 2.1, 0);
-
-    // Waiting area roof (small shelter)
-    const shelter = MeshBuilder.CreateBox(
-      `shelter_${dock.name}`,
-      { width: 2.5, height: 0.1, depth: 2.5 },
-      this.scene
-    );
-    shelter.material = this.createMat(
-      `shelterMat_${dock.name}`,
-      COLORS.roofBlue
-    );
-    shelter.parent = node;
-    shelter.position.set(-0.5, 2.2, -1);
-
-    // Shelter posts
+    p.dockPosts.add(parent, [0.15, 2.0, 0.15], [1.3, 1.2, 0], COLOR.signPost);
+    p.signs.add(parent, [1.5, 0.6, 0.1], [1.3, 2.1, 0], COLOR.sign);
+    p.dockPlatforms.add(parent, [2.5, 0.1, 2.5], [-0.5, 2.2, -1], COLOR.roofBlue);
     for (let i = -1; i <= 1; i += 2) {
-      const sp = MeshBuilder.CreateBox(
-        `shelterPost_${dock.name}_${i}`,
-        { width: 0.1, height: 1.8, depth: 0.1 },
-        this.scene
-      );
-      sp.material = this.createMat(`spMat_${dock.name}_${i}`, "#888888");
-      sp.parent = node;
-      sp.position.set(-0.5 + i * 1, 1.3, -2);
+      p.dockPosts.add(parent, [0.1, 1.8, 0.1], [-0.5 + i * 1, 1.3, -2], COLOR.shelterPost);
     }
-
-    return node;
   }
 
-  public getDockNode(name: string): TransformNode | undefined {
-    return this.dockMeshes.get(name);
-  }
-
-  public highlightDock(name: string, highlight: boolean): void {
-    const node = this.dockMeshes.get(name);
-    if (!node) return;
-    // Could add glow or color change - for now handled by UI indicators
+  /** Static meshes worth showing in the water reflection/refraction passes. */
+  public getReflectedMeshes(): AbstractMesh[] {
+    return this.reflectedMeshes;
   }
 }
+
+const COLOR = {
+  wood: hexToColor3(COLORS.wood),
+  woodDark: hexToColor3(COLORS.woodDark),
+  dock: hexToColor3(COLORS.dock),
+  roofBlue: hexToColor3(COLORS.roofBlue),
+  signPost: hexToColor3("#666666"),
+  shelterPost: hexToColor3("#888888"),
+  sign: new Color3(0.9, 0.85, 0.7),
+};
+const WALL_COLORS = ["#d4c5a0", "#c9b896", "#b8a882", "#e0d5b8"].map(hexToColor3);
+const ROOF_COLORS = [COLORS.roof, COLORS.roofBlue, "#8b4513", "#2a6a3a"].map(hexToColor3);
+
+/** One draw call per kind of prop part, shared by every instance in the world. */
+function createPropBatches(scene: Scene) {
+  const matte = new Color3(0.03, 0.03, 0.03);
+  return {
+    trunks: new InstancedBoxBatch("trunks", scene, { specular: new Color3(0.02, 0.02, 0.02) }),
+    leavesLow: new InstancedBoxBatch("leavesLow", scene, { specular: matte, emissive: new Color3(0.02, 0.06, 0.02) }),
+    leavesHigh: new InstancedBoxBatch("leavesHigh", scene, { specular: matte, emissive: new Color3(0.02, 0.05, 0.02) }),
+    stilts: new InstancedBoxBatch("stilts", scene),
+    walls: new InstancedBoxBatch("walls", scene, { specular: matte }),
+    roofs: new InstancedBoxBatch("roofs", scene),
+    doors: new InstancedBoxBatch("doors", scene),
+    dockPlatforms: new InstancedBoxBatch("dockPlatforms", scene),
+    dockPosts: new InstancedBoxBatch("dockPosts", scene),
+    signs: new InstancedBoxBatch("signs", scene, { emissive: new Color3(0.15, 0.12, 0.08) }),
+  };
+}
+type PropBatches = ReturnType<typeof createPropBatches>;

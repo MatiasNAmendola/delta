@@ -1,5 +1,6 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
@@ -337,17 +338,19 @@ export class WaterSystem {
   }
 
   /** Add all scene meshes to the water render list (call after environment is built) */
-  public addSceneToRenderList(): void {
+  /**
+   * Meshes rendered into the water reflection and refraction passes. Each
+   * one is drawn twice more per frame, so only add what is worth seeing in
+   * the water (static world batches, the boat), never effects like the wake.
+   */
+  public addToReflections(meshes: AbstractMesh[]): void {
     if (!this.waterMaterial) return;
-
-    for (const mesh of this.scene.meshes) {
-      // Don't add water meshes to their own render list
+    for (const mesh of meshes) {
       if (mesh.material === this.waterMaterial) continue;
-      // Don't add riverbed meshes
-      if (mesh.name.startsWith("riverbed_")) continue;
       this.waterMaterial.addToRenderList(mesh);
     }
   }
+
 
   private createRiverBed(): void {
     for (const river of this.world.rivers) {
