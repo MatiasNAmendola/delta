@@ -15,6 +15,8 @@ export interface WorldInfo {
   name: string;
   /** Side of the square world in meters; origin at the center. */
   size: number;
+  /** Credits for the data the world was built from (e.g. OpenStreetMap). */
+  attribution?: string;
 }
 
 export interface WorldRules {
@@ -71,6 +73,7 @@ export class WorldValidationError extends Error {
   }
 }
 
+const OPTIONAL_KEYS = new Set(["$schema", "attribution"]);
 const ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const SCATTER_PREFABS: readonly ScatterPrefab[] = ["tree", "house"];
 
@@ -86,11 +89,14 @@ export function parseWorld(input: unknown): WorldDoc {
 
   if (doc.version !== "0.1") issues.push(`$.version: expected "0.1", got ${JSON.stringify(doc.version)}`);
 
-  const world = v.object(doc.world, "$.world", ["id", "name", "size"]);
+  const world = v.object(doc.world, "$.world", ["id", "name", "size", "attribution"]);
   if (world) {
     v.id(world.id, "$.world.id");
     v.name(world.name, "$.world.name");
     v.number(world.size, "$.world.size", { min: 50, max: 4000 });
+    if (world.attribution !== undefined && (typeof world.attribution !== "string" || world.attribution.length > 200)) {
+      issues.push("$.world.attribution: expected a string of at most 200 characters");
+    }
   }
 
   const rules = v.object(doc.rules, "$.rules", [
@@ -199,7 +205,7 @@ class Checker {
       if (!allowed.includes(key)) this.issues.push(`${path}.${key}: unknown property`);
     }
     for (const key of allowed) {
-      if (key !== "$schema" && !(key in obj)) this.issues.push(`${path}.${key}: required`);
+      if (!OPTIONAL_KEYS.has(key) && !(key in obj)) this.issues.push(`${path}.${key}: required`);
     }
     return obj;
   }

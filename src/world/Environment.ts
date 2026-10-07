@@ -85,7 +85,8 @@ export class Environment {
 
   private createGround(waterSystem: WaterSystem): void {
     // More subdivisions for vertex displacement (hills/terrain)
-    const subdivisions = 64;
+    // ~12 world units per terrain quad (64 for the original 800-unit Delta)
+    const subdivisions = Math.min(256, Math.max(64, Math.round(this.world.world.size / 12.5)));
     const ground = MeshBuilder.CreateGround(
       "ground",
       { width: this.world.world.size, height: this.world.world.size, subdivisions, updatable: true },
