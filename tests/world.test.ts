@@ -82,6 +82,24 @@ describe("parseWorld rejects broken documents", () => {
     expect(issues).toContain("$.dragons: unknown property");
   });
 
+  it("rivers still require a name", () => {
+    const doc = clone(deltaWorld) as Record<string, any>;
+    delete doc.rivers[0].name;
+    expect(issuesOf(doc)).toContain("$.rivers[0].name: required");
+  });
+
+  it("water areas: valid rings pass, broken rings and over-budget documents fail", () => {
+    const ok = clone(deltaWorld) as Record<string, any>;
+    ok.waterAreas = [{ id: "laguna", outer: [[0, 0], [10, 0], [10, 10], [0, 10]], holes: [[[4, 4], [6, 4], [5, 6]]] }];
+    expect(issuesOf(ok)).toEqual([]);
+    const bad = clone(ok);
+    bad.waterAreas[0].holes[0] = [[1, 1], [2, 2]];
+    expect(issuesOf(bad)).toContain("$.waterAreas[0].holes[0]: expected at least 3 item(s)");
+    const huge = clone(ok);
+    huge.waterAreas[0].outer = Array.from({ length: 60_001 }, (_, i) => [Math.cos(i) * 100, Math.sin(i) * 100]);
+    expect(issuesOf(huge).some((i) => i.includes("exceed the budget"))).toBe(true);
+  });
+
   it("rivers need at least two points", () => {
     const doc = clone(deltaWorld);
     doc.rivers[0].points = [[0, 0]];
@@ -98,6 +116,7 @@ describe("schema and runtime validator agree", () => {
     ["spread > 1", (d) => (d.scatter[0].spread = 2)],
     ["missing rules", (d) => delete d.rules],
     ["3D point", (d) => (d.rivers[0].points[0] = [1, 2, 3])],
+    ["water area without holes field", (d) => (d.waterAreas = [{ id: "a", outer: [[0, 0], [1, 0], [0, 1]] }])],
   ];
   for (const [name, mutate] of mutations) {
     it(`both reject: ${name}`, () => {

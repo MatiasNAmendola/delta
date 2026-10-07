@@ -56,15 +56,28 @@ export interface ScatterRule {
   instanceSeed: { stride: number; offset: number };
 }
 
+/** A body of water with its real shape: outer ring plus islands as holes. */
+export interface WaterArea {
+  id: string;
+  name?: string;
+  outer: Vec2[];
+  holes: Vec2[][];
+}
+
 export interface WorldDoc {
   version: "0.1";
   world: WorldInfo;
   rules: WorldRules;
   spawn: { dock: string; offset: Vec2 };
   rivers: River[];
+  /** Optional real water shapes; navigable water = rivers ∪ waterAreas. */
+  waterAreas?: WaterArea[];
   docks: Dock[];
   scatter: ScatterRule[];
 }
+
+/** Content budget: total vertices across all water areas (keeps big imports playable on phones). */
+export const MAX_WATER_AREA_VERTICES = 60_000;
 
 export class WorldValidationError extends Error {
   constructor(public readonly issues: string[]) {
@@ -73,7 +86,6 @@ export class WorldValidationError extends Error {
   }
 }
 
-const OPTIONAL_KEYS = new Set(["$schema", "attribution"]);
 const ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const SCATTER_PREFABS: readonly ScatterPrefab[] = ["tree", "house"];
 
@@ -83,13 +95,13 @@ export function parseWorld(input: unknown): WorldDoc {
   const v = new Checker(issues);
 
   const doc = v.object(input, "$", [
-    "$schema", "version", "world", "rules", "spawn", "rivers", "docks", "scatter",
-  ]);
+    "$schema", "version", "world", "rules", "spawn", "rivers", "waterAreas", "docks", "scatter",
+  ], ["$schema", "waterAreas"]);
   if (!doc) throw new WorldValidationError(issues);
 
   if (doc.version !== "0.1") issues.push(`$.version: expected "0.1", got ${JSON.stringify(doc.version)}`);
 
-  const world = v.object(doc.world, "$.world", ["id", "name", "size", "attribution"]);
+  const world = v.object(doc.world, "$.world", ["id", "name", "size", "attribution"], ["attribution"]);
   if (world) {
     v.id(world.id, "$.world.id");
     v.name(world.name, "$.world.name");
@@ -153,6 +165,30 @@ export function parseWorld(input: unknown): WorldDoc {
     issues.push(`$.spawn.dock: no dock with id "${spawn.dock}"`);
   }
 
+  if (doc.waterAreas !== undefined) {
+    const areaIds = new Set<string>();
+    let vertices = 0;
+    v.array(doc.waterAreas, "$.waterAreas", 0).forEach((a, i) => {
+      const p = `$.waterAreas[${i}]`;
+      const area = v.object(a, p, ["id", "name", "outer", "holes"], ["name"]);
+      if (!area) return;
+      if (v.id(area.id, `${p}.id`)) v.unique(areaIds, area.id as string, `${p}.id`);
+      if (area.name !== undefined) v.name(area.name, `${p}.name`);
+      const rings: Array<[unknown, string]> = [[area.outer, `${p}.outer`]];
+      v.array(area.holes, `${p}.holes`, 0).forEach((h, j) => rings.push([h, `${p}.holes[${j}]`]));
+      for (const [ring, rp] of rings) {
+        const pts = v.array(ring, rp, 3);
+        vertices += pts.length;
+        pts.forEach((pt, k) => {
+          if (v.vec2(pt, `${rp}[${k}]`)) inBounds((pt as Vec2)[0], (pt as Vec2)[1], `${rp}[${k}]`);
+        });
+      }
+    });
+    if (vertices > MAX_WATER_AREA_VERTICES) {
+      issues.push(`$.waterAreas: ${vertices} vertices exceed the budget of ${MAX_WATER_AREA_VERTICES}`);
+    }
+  }
+
   const scatterIds = new Set<string>();
   v.array(doc.scatter, "$.scatter", 0).forEach((s, i) => {
     const p = `$.scatter[${i}]`;
@@ -195,7 +231,7 @@ type Obj = Record<string, unknown>;
 class Checker {
   constructor(private issues: string[]) {}
 
-  object(value: unknown, path: string, allowed: string[]): Obj | null {
+  object(value: unknown, path: string, allowed: string[], optional: string[] = []): Obj | null {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       this.issues.push(`${path}: expected an object`);
       return null;
@@ -205,7 +241,7 @@ class Checker {
       if (!allowed.includes(key)) this.issues.push(`${path}.${key}: unknown property`);
     }
     for (const key of allowed) {
-      if (!OPTIONAL_KEYS.has(key) && !(key in obj)) this.issues.push(`${path}.${key}: required`);
+      if (!optional.includes(key) && !(key in obj)) this.issues.push(`${path}.${key}: required`);
     }
     return obj;
   }

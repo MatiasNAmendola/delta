@@ -1,0 +1,10 @@
+{
+  "$comment": "Parameters of the real Delta world. Used by update-map.sh (and its fetch/import steps).",
+  "bbox": { "south": -34.43, "west": -58.66, "north": -34.27, "east": -58.42 },
+  "origin": { "lat": -34.35, "lon": -58.54 },
+  "size": 2800,
+  "metersPerUnit": 8,
+  "id": "delta-tigre-real",
+  "name": "Delta de Tigre (OpenStreetMap)",
+  "output": "src/world/data/delta-real.world.json"
+}

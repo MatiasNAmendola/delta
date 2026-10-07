@@ -9,13 +9,15 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "world:import": "tsx scripts/osm/import.ts"
+    "world:import": "tsx scripts/osm/import.ts",
+    "map:update": "bash scripts/osm/update-map.sh"
   },
   "dependencies": {
     "@babylonjs/core": "^7.0.0",
     "@babylonjs/gui": "^7.0.0",
     "@babylonjs/loaders": "^7.54.3",
-    "@babylonjs/materials": "^7.0.0"
+    "@babylonjs/materials": "^7.0.0",
+    "earcut": "^3.2.4"
   },
   "devDependencies": {
     "@gltf-transform/cli": "^4.3.0",

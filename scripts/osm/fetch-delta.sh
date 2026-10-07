@@ -15,6 +15,9 @@ ENDPOINT="${OVERPASS_URL:-https://overpass-api.de/api/interpreter}"
 QUERY="[out:json][timeout:180];
 (
   way[\"waterway\"~\"^(river|canal|stream|ditch|tidal_channel)$\"](${BBOX});
+  way[\"natural\"=\"water\"](${BBOX});
+  relation[\"natural\"=\"water\"](${BBOX});
+  way[\"waterway\"=\"riverbank\"](${BBOX});
   nwr[\"amenity\"=\"ferry_terminal\"](${BBOX});
   nwr[\"man_made\"=\"pier\"][\"name\"](${BBOX});
   nwr[\"public_transport\"=\"stop_position\"][\"ferry\"=\"yes\"](${BBOX});
@@ -22,5 +25,5 @@ QUERY="[out:json][timeout:180];
 out geom;"
 
 echo "Querying ${ENDPOINT} for bbox ${BBOX}..."
-curl -sS --fail --data-urlencode "data=${QUERY}" "${ENDPOINT}" -o "${OUT}"
+curl -sS --fail --connect-timeout 20 --max-time 300 --data-urlencode "data=${QUERY}" "${ENDPOINT}" -o "${OUT}"
 echo "Saved $(wc -c < "${OUT}") bytes to scripts/osm/${OUT}"

@@ -6,7 +6,7 @@
  * Map data © OpenStreetMap contributors, ODbL 1.0. A world built from it must
  * keep the attribution in `world.attribution`.
  */
-import { parseWorld, type Dock, type River, type Vec2, type WorldDoc } from "../../src/world/WorldDoc";
+import { parseWorld, type Dock, type River, type Vec2, type WaterArea, type WorldDoc } from "../../src/world/WorldDoc";
 
 export interface LatLon {
   lat: number;
@@ -14,13 +14,18 @@ export interface LatLon {
 }
 
 export interface OverpassElement {
-  type: "node" | "way" | "relation";
+  /** "area" is not an Overpass type: hot_to_overpass.py uses it for already-assembled polygons. */
+  type: "node" | "way" | "relation" | "area";
   id: number;
   tags?: Record<string, string>;
   lat?: number;
   lon?: number;
   geometry?: LatLon[];
   bounds?: { minlat: number; minlon: number; maxlat: number; maxlon: number };
+  /** Relation members, as returned by Overpass `out geom`. */
+  members?: Array<{ type: string; role: string; geometry?: LatLon[] }>;
+  /** For type "area": outer ring first, then holes. */
+  rings?: LatLon[][];
 }
 
 export interface ImportOptions {
@@ -42,6 +47,10 @@ export interface ImportOptions {
   confluenceStops: number;
   /** Minimum distance between stops, in world units. */
   minStopSpacing: number;
+  /** Douglas-Peucker tolerance for water polygon rings, in world units. */
+  areaSimplifyTolerance: number;
+  /** Water polygons and islands smaller than this (square world units) are dropped. */
+  minWaterAreaSize: number;
 }
 
 export const DEFAULT_OPTIONS: ImportOptions = {
@@ -53,6 +62,8 @@ export const DEFAULT_OPTIONS: ImportOptions = {
   stopMergeRadiusM: 1000,
   confluenceStops: 12,
   minStopSpacing: 150,
+  areaSimplifyTolerance: 0.75,
+  minWaterAreaSize: 6,
 };
 
 /** Typical widths (meters) when OSM has no `width` tag. */
@@ -228,7 +239,15 @@ function dataCenter(elements: OverpassElement[]): LatLon {
 
 export interface ImportResult {
   world: WorldDoc;
-  report: { rivers: number; docks: number; terminals: number; droppedUnnamed: number; droppedShort: number };
+  report: {
+    rivers: number;
+    docks: number;
+    terminals: number;
+    waterAreas: number;
+    waterAreaVertices: number;
+    droppedUnnamed: number;
+    droppedShort: number;
+  };
 }
 
 /**
@@ -244,7 +263,9 @@ export function osmToWorld(
 ): ImportResult {
   const origin = opts.origin ?? dataCenter(elements);
   const half = world.size / 2;
-  const report = { rivers: 0, docks: 0, terminals: 0, droppedUnnamed: 0, droppedShort: 0 };
+  const report = {
+    rivers: 0, docks: 0, terminals: 0, waterAreas: 0, waterAreaVertices: 0, droppedUnnamed: 0, droppedShort: 0,
+  };
 
   // Group waterway ways by name (and type), so connected pieces join up
   const groups = new Map<string, { name: string; type: string; widthM: number | null; ways: LatLon[][] }>();
@@ -285,6 +306,8 @@ export function osmToWorld(
   }
   // Widest rivers first: they are the main navigation routes
   rivers.sort((a, b) => b.width - a.width || polylineLength(b.points) - polylineLength(a.points));
+
+  const waterAreas = extractWaterAreas(elements, origin, half, opts);
 
   const dockIds = new Set<string>();
   const docks: Dock[] = [];
@@ -367,6 +390,7 @@ export function osmToWorld(
     rules: base.rules,
     spawn: { dock: spawnDock.id, offset: spawnOffset },
     rivers,
+    ...(waterAreas.length > 0 ? { waterAreas } : {}),
     docks,
     // Same vegetation density as the base world, capped so cheap phones cope
     scatter: base.scatter.map((s) => ({
@@ -375,8 +399,134 @@ export function osmToWorld(
     })),
   };
   report.rivers = rivers.length;
+  report.waterAreas = waterAreas.length;
+  report.waterAreaVertices = waterAreas.reduce((n, a) => n + a.outer.length + a.holes.reduce((m, h) => m + h.length, 0), 0);
   report.docks = docks.length;
   return { world: parseWorld(doc), report };
+}
+
+/** Water bodies worth showing and navigating; ponds, pools and wetlands are skipped. */
+function isNavigableWater(tags: Record<string, string>): boolean {
+  if (tags.waterway === "riverbank") return true;
+  if (tags.natural !== "water") return false;
+  return tags.water === undefined || ["river", "canal", "harbour", "oxbow", "lagoon", "stream"].includes(tags.water);
+}
+
+const samePt = (a: LatLon, b: LatLon) => a.lat === b.lat && a.lon === b.lon;
+const openRing = (ring: LatLon[]) => (ring.length > 1 && samePt(ring[0], ring[ring.length - 1]) ? ring.slice(0, -1) : ring);
+
+/** Rings of every polygon in an element: [[outer, ...holes], ...]. */
+export function elementPolygons(el: OverpassElement): LatLon[][][] {
+  if (el.type === "area" && el.rings && el.rings.length > 0) return [el.rings.map(openRing)];
+  if (el.type === "way" && el.geometry && el.geometry.length >= 4 && samePt(el.geometry[0], el.geometry[el.geometry.length - 1])) {
+    return [[openRing(el.geometry)]];
+  }
+  if (el.type === "relation" && el.members) {
+    const byRole = (role: string) =>
+      joinWays(el.members!.filter((m) => m.type === "way" && m.role === role && m.geometry).map((m) => m.geometry!))
+        .filter((r) => r.length >= 4 && samePt(r[0], r[r.length - 1]))
+        .map(openRing);
+    const outers = byRole("outer");
+    const inners = byRole("inner");
+    const polys = outers.map((o) => [o]);
+    for (const inner of inners) {
+      const owner = polys.find((poly) => pointInRing(inner[0], poly[0]));
+      if (owner) owner.push(inner);
+    }
+    return polys;
+  }
+  return [];
+}
+
+function pointInRing(p: LatLon, ring: LatLon[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i], b = ring[j];
+    if ((a.lat > p.lat) !== (b.lat > p.lat) && p.lon < ((b.lon - a.lon) * (p.lat - a.lat)) / (b.lat - a.lat) + a.lon) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** Sutherland-Hodgman clipping of a closed ring against the square ±half. */
+export function clipRingToSquare(ring: Vec2[], half: number): Vec2[] {
+  const edges: Array<[(p: Vec2) => boolean, (a: Vec2, b: Vec2) => Vec2]> = [
+    [(p) => p[0] >= -half, (a, b) => lerpAt(a, b, (-half - a[0]) / (b[0] - a[0]))],
+    [(p) => p[0] <= half, (a, b) => lerpAt(a, b, (half - a[0]) / (b[0] - a[0]))],
+    [(p) => p[1] >= -half, (a, b) => lerpAt(a, b, (-half - a[1]) / (b[1] - a[1]))],
+    [(p) => p[1] <= half, (a, b) => lerpAt(a, b, (half - a[1]) / (b[1] - a[1]))],
+  ];
+  let out = ring;
+  for (const [inside, cut] of edges) {
+    const input = out;
+    out = [];
+    for (let i = 0; i < input.length; i++) {
+      const cur = input[i];
+      const prev = input[(i + input.length - 1) % input.length];
+      if (inside(cur)) {
+        if (!inside(prev)) out.push(cut(prev, cur));
+        out.push(cur);
+      } else if (inside(prev)) {
+        out.push(cut(prev, cur));
+      }
+    }
+    if (out.length === 0) break;
+  }
+  return out;
+}
+
+const lerpAt = (a: Vec2, b: Vec2, t: number): Vec2 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+
+export function ringArea(ring: Vec2[]): number {
+  let sum = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    sum += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
+  }
+  return Math.abs(sum) / 2;
+}
+
+/** Douglas-Peucker for closed rings: split at the point farthest from the first one. */
+function simplifyRing(ring: Vec2[], tolerance: number): Vec2[] {
+  if (ring.length <= 4) return ring.slice();
+  let far = 0, farDist = -1;
+  for (let i = 1; i < ring.length; i++) {
+    const d = Math.hypot(ring[i][0] - ring[0][0], ring[i][1] - ring[0][1]);
+    if (d > farDist) { farDist = d; far = i; }
+  }
+  const a = simplify(ring.slice(0, far + 1), tolerance);
+  const b = simplify([...ring.slice(far), ring[0]], tolerance);
+  return [...a, ...b.slice(1, -1)];
+}
+
+export function extractWaterAreas(
+  elements: OverpassElement[],
+  origin: LatLon,
+  half: number,
+  opts: ImportOptions
+): WaterArea[] {
+  const ids = new Set<string>();
+  const areas: WaterArea[] = [];
+  const prepare = (ring: LatLon[]): Vec2[] | null => {
+    const projected = ring.map((p) => project(p, origin, opts.metersPerUnit));
+    const clipped = clipRingToSquare(projected, half);
+    if (clipped.length < 3) return null;
+    const simplified = simplifyRing(clipped, opts.areaSimplifyTolerance).map(([x, z]) => [round2(x), round2(z)] as Vec2);
+    if (simplified.length < 3 || ringArea(simplified) < opts.minWaterAreaSize) return null;
+    return simplified;
+  };
+  for (const el of elements) {
+    if (!el.tags || !isNavigableWater(el.tags)) continue;
+    for (const poly of elementPolygons(el)) {
+      const outer = prepare(poly[0]);
+      if (!outer) continue;
+      const holes = poly.slice(1).map(prepare).filter((h): h is Vec2[] => h !== null);
+      const name = el.tags.name?.trim();
+      const id = uniqueId(name ? `agua-${slugify(name)}` : `agua-${el.type}-${el.id}`, ids);
+      areas.push({ id, ...(name ? { name } : {}), outer, holes });
+    }
+  }
+  return areas;
 }
 
 interface Confluence {
