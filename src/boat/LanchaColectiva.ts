@@ -1,5 +1,6 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
@@ -36,6 +37,8 @@ export class LanchaColectiva {
   private time = 0;
   private bobPhase = 0;
   private modelContainer: TransformNode | null = null;
+  /** Called once the GLB model replaced the fallback boat. */
+  public onModelLoaded: (() => void) | null = null;
 
   constructor(
     scene: Scene,
@@ -103,11 +106,17 @@ export class LanchaColectiva {
       this.meshes = [];
 
       this.modelLoaded = true;
+      this.onModelLoaded?.();
       console.log("Lancha GLB model loaded successfully");
     } catch (error) {
       console.warn("Could not load GLB model, using fallback:", error);
       // Keep the fallback blocky boat
     }
+  }
+
+  /** Meshes currently making up the boat (fallback blocks or GLB model). */
+  public getMeshes(): AbstractMesh[] {
+    return this.rootNode.getChildMeshes(false);
   }
 
   private createMat(name: string, color: string): StandardMaterial {

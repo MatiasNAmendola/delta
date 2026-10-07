@@ -117,8 +117,12 @@ export class GameEngine {
     // Wake effect
     this.wakeEffect = new WakeEffect(this.scene);
 
-    // Add all scene meshes to water reflection/refraction
-    this.waterSystem.addSceneToRenderList();
+    // Only the static world and the boat are reflected by the water
+    this.waterSystem.addToReflections(this.environment.getReflectedMeshes());
+    this.waterSystem.addToReflections(this.boat.getMeshes());
+    this.boat.onModelLoaded = () => {
+      this.waterSystem.addToReflections(this.boat.getMeshes());
+    };
 
     this.updateLoadingBar(85, "Configurando controles...");
 
