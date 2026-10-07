@@ -16,13 +16,8 @@ import {
   CAMERA_HEIGHT,
   CAMERA_DISTANCE,
   CAMERA_LERP,
-  GAME_DURATION,
-  DOCK_LOCATIONS,
-  PICKUP_RADIUS,
-  SCORE_PER_PASSENGER,
-  TIME_BONUS,
-  RIVER_MAP,
 } from "./utils/constants";
+import { findDock, type Dock, type WorldDoc } from "./world/WorldDoc";
 import { distance2D, lerp } from "./utils/helpers";
 
 export class GameEngine {
@@ -45,7 +40,10 @@ export class GameEngine {
   private dockPassengers: Map<string, number> = new Map();
   private nearDock: string | null = null;
 
-  constructor(private canvas: HTMLCanvasElement) {
+  constructor(
+    private canvas: HTMLCanvasElement,
+    private readonly world: WorldDoc
+  ) {
     // Adapt canvas to device pixel ratio for crisp rendering
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 
@@ -97,21 +95,23 @@ export class GameEngine {
     this.updateLoadingBar(30, "Generando ríos del Delta...");
 
     // Create water system
-    this.waterSystem = new WaterSystem(this.scene);
+    this.waterSystem = new WaterSystem(this.scene, this.world);
 
     this.updateLoadingBar(50, "Construyendo islas y vegetación...");
 
     // Create environment
-    this.environment = new Environment(this.scene, this.waterSystem);
+    this.environment = new Environment(this.scene, this.waterSystem, this.world);
 
     this.updateLoadingBar(70, "Preparando la lancha colectiva...");
 
-    // Create boat at Estación Fluvial Tigre
-    const startDock = DOCK_LOCATIONS[0];
+    // Create boat at the world's spawn dock
+    const startDock = findDock(this.world, this.world.spawn.dock);
+    const [offsetX, offsetZ] = this.world.spawn.offset;
     this.boat = new LanchaColectiva(
       this.scene,
-      startDock.x + 5,
-      startDock.z
+      startDock.x + offsetX,
+      startDock.z + offsetZ,
+      this.world.rules.boatCapacity
     );
 
     // Wake effect
@@ -131,7 +131,7 @@ export class GameEngine {
     this.updateLoadingBar(95, "Preparando interfaz...");
 
     // UI
-    this.ui = new GameUI(this.scene);
+    this.ui = new GameUI(this.scene, this.world);
     this.ui.onPlayClick(() => this.startGame());
 
     this.updateLoadingBar(100, "¡Listo!");
@@ -162,9 +162,9 @@ export class GameEngine {
   }
 
   private randomizeDockPassengers(): void {
-    for (const dock of DOCK_LOCATIONS) {
+    for (const dock of this.world.docks) {
       this.dockPassengers.set(
-        dock.name,
+        dock.id,
         Math.floor(Math.random() * 6) + 1
       );
     }
@@ -185,11 +185,11 @@ export class GameEngine {
 
   private pickNextTarget(): void {
     // Pick a random dock that has passengers or is different from current
-    const available = DOCK_LOCATIONS.filter((d, i) => {
+    const available = this.world.docks.filter((d, i) => {
       return i !== this.currentTargetDock;
     });
     const idx = Math.floor(Math.random() * available.length);
-    this.currentTargetDock = DOCK_LOCATIONS.indexOf(available[idx]);
+    this.currentTargetDock = this.world.docks.indexOf(available[idx]);
   }
 
   private gameLoop(): void {
@@ -199,7 +199,7 @@ export class GameEngine {
       this.gameTime += dt;
 
       // Check timer
-      const timeLeft = GAME_DURATION - this.gameTime;
+      const timeLeft = this.world.rules.durationSec - this.gameTime;
       if (timeLeft <= 0) {
         this.endGame();
         return;
@@ -249,7 +249,7 @@ export class GameEngine {
       this.updateLocationName();
 
       // Update next stop indicator
-      const targetDock = DOCK_LOCATIONS[this.currentTargetDock];
+      const targetDock = this.world.docks[this.currentTargetDock];
       const dist = distance2D(
         this.boat.position.x,
         this.boat.position.z,
@@ -268,7 +268,7 @@ export class GameEngine {
   private checkDocks(actionPressed: boolean): void {
     this.nearDock = null;
 
-    for (const dock of DOCK_LOCATIONS) {
+    for (const dock of this.world.docks) {
       const dist = distance2D(
         this.boat.position.x,
         this.boat.position.z,
@@ -276,7 +276,7 @@ export class GameEngine {
         dock.z
       );
 
-      if (dist < PICKUP_RADIUS) {
+      if (dist < this.world.rules.pickupRadius) {
         this.nearDock = dock.name;
 
         // Auto-slow near dock
@@ -294,17 +294,17 @@ export class GameEngine {
     }
   }
 
-  private handleDockAction(dock: (typeof DOCK_LOCATIONS)[number]): void {
-    const waitingPassengers = this.dockPassengers.get(dock.name) || 0;
+  private handleDockAction(dock: Dock): void {
+    const waitingPassengers = this.dockPassengers.get(dock.id) || 0;
 
     if (this.boat.passengers > 0) {
       // Drop off passengers
       const dropped = this.boat.dropPassengers();
-      const points = dropped * SCORE_PER_PASSENGER;
+      const points = dropped * this.world.rules.scorePerPassenger;
 
       // Bonus for target dock
-      const isTarget = DOCK_LOCATIONS[this.currentTargetDock].name === dock.name;
-      const bonus = isTarget ? TIME_BONUS * dropped : 0;
+      const isTarget = this.world.docks[this.currentTargetDock].id === dock.id;
+      const bonus = isTarget ? this.world.rules.timeBonusPerPassenger * dropped : 0;
 
       this.score += points + bonus;
       this.totalDelivered += dropped;
@@ -316,7 +316,7 @@ export class GameEngine {
 
       // Regenerate passengers at this dock
       this.dockPassengers.set(
-        dock.name,
+        dock.id,
         Math.floor(Math.random() * 5) + 1
       );
 
@@ -324,14 +324,14 @@ export class GameEngine {
     } else if (waitingPassengers > 0) {
       // Pick up passengers
       const picked = this.boat.addPassengers(waitingPassengers);
-      this.dockPassengers.set(dock.name, waitingPassengers - picked);
+      this.dockPassengers.set(dock.id, waitingPassengers - picked);
 
       this.ui.showNotification(
         `🚏 ${dock.name}\n👥 ${picked} pasajeros subieron`,
         2000
       );
 
-      if (this.currentTargetDock === DOCK_LOCATIONS.indexOf(dock as any)) {
+      if (this.currentTargetDock === this.world.docks.indexOf(dock)) {
         this.pickNextTarget();
       }
     } else {
@@ -393,7 +393,7 @@ export class GameEngine {
     let nearestRiver = "Delta de Tigre";
     let minDist = Infinity;
 
-    for (const river of RIVER_MAP) {
+    for (const river of this.world.rivers) {
       for (const point of river.points) {
         const dist = distance2D(
           this.boat.position.x,

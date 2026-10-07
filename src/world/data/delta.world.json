@@ -1,0 +1,287 @@
+{
+  "$schema": "../schema/world.schema.json",
+  "version": "0.1",
+  "world": {
+    "id": "delta-tigre",
+    "name": "Delta de Tigre",
+    "size": 800
+  },
+  "rules": {
+    "durationSec": 300,
+    "boatCapacity": 20,
+    "pickupRadius": 8,
+    "scorePerPassenger": 100,
+    "timeBonusPerPassenger": 50
+  },
+  "spawn": {
+    "dock": "estacion-fluvial-tigre",
+    "offset": [5, 0]
+  },
+  "rivers": [
+    {
+      "id": "rio-lujan",
+      "name": "Río Luján",
+      "width": 28,
+      "points": [
+        [-400, 0],
+        [-300, 10],
+        [-200, -5],
+        [-100, 15],
+        [0, 5],
+        [100, -10],
+        [200, 5],
+        [300, -5],
+        [400, 0]
+      ]
+    },
+    {
+      "id": "rio-tigre",
+      "name": "Río Tigre",
+      "width": 20,
+      "points": [
+        [-50, 10],
+        [-60, 60],
+        [-40, 120],
+        [-55, 180],
+        [-30, 240],
+        [-45, 300],
+        [-20, 370]
+      ]
+    },
+    {
+      "id": "rio-sarmiento",
+      "name": "Río Sarmiento",
+      "width": 18,
+      "points": [
+        [-200, -5],
+        [-220, 50],
+        [-250, 110],
+        [-230, 170],
+        [-260, 230],
+        [-240, 290],
+        [-270, 350]
+      ]
+    },
+    {
+      "id": "rio-capitan",
+      "name": "Río Capitán",
+      "width": 16,
+      "points": [
+        [100, -10],
+        [110, -70],
+        [90, -130],
+        [120, -190],
+        [95, -250],
+        [115, -310]
+      ]
+    },
+    {
+      "id": "rio-san-antonio",
+      "name": "Río San Antonio",
+      "width": 16,
+      "points": [
+        [200, 5],
+        [220, 60],
+        [250, 120],
+        [230, 180],
+        [260, 240],
+        [240, 300]
+      ]
+    },
+    {
+      "id": "arroyo-abra-vieja",
+      "name": "Arroyo Abra Vieja",
+      "width": 12,
+      "points": [
+        [-55, 180],
+        [-100, 185],
+        [-150, 175],
+        [-230, 170]
+      ]
+    },
+    {
+      "id": "canal-de-la-seccion",
+      "name": "Canal de la Sección",
+      "width": 12,
+      "points": [
+        [0, -80],
+        [30, -90],
+        [60, -100],
+        [90, -130]
+      ]
+    },
+    {
+      "id": "rio-reconquista",
+      "name": "Río Reconquista",
+      "width": 22,
+      "points": [
+        [-300, 10],
+        [-280, -50],
+        [-310, -110],
+        [-290, -170],
+        [-320, -230],
+        [-300, -290]
+      ]
+    },
+    {
+      "id": "arroyo-espera",
+      "name": "Arroyo Espera",
+      "width": 10,
+      "points": [
+        [-40, 120],
+        [10, 130],
+        [60, 115],
+        [100, 120],
+        [150, 110],
+        [220, 120]
+      ]
+    },
+    {
+      "id": "rio-carapachay",
+      "name": "Río Carapachay",
+      "width": 15,
+      "points": [
+        [-100, 15],
+        [-80, 70],
+        [-110, 130],
+        [-90, 190],
+        [-120, 250]
+      ]
+    }
+  ],
+  "docks": [
+    {
+      "id": "estacion-fluvial-tigre",
+      "name": "Estación Fluvial Tigre",
+      "x": -300,
+      "z": 10,
+      "rotationDeg": 0
+    },
+    {
+      "id": "tres-bocas",
+      "name": "Tres Bocas",
+      "x": -50,
+      "z": 10,
+      "rotationDeg": 90
+    },
+    {
+      "id": "rio-tigre-norte",
+      "name": "Río Tigre Norte",
+      "x": -60,
+      "z": 60,
+      "rotationDeg": 0
+    },
+    {
+      "id": "sarmiento-sur",
+      "name": "Sarmiento Sur",
+      "x": -220,
+      "z": 50,
+      "rotationDeg": 180
+    },
+    {
+      "id": "san-antonio",
+      "name": "San Antonio",
+      "x": 200,
+      "z": 5,
+      "rotationDeg": 0
+    },
+    {
+      "id": "arroyo-espera",
+      "name": "Arroyo Espera",
+      "x": -40,
+      "z": 120,
+      "rotationDeg": 45
+    },
+    {
+      "id": "capitan-sur",
+      "name": "Capitán Sur",
+      "x": 100,
+      "z": -10,
+      "rotationDeg": -90
+    },
+    {
+      "id": "sarmiento-centro",
+      "name": "Sarmiento Centro",
+      "x": -250,
+      "z": 110,
+      "rotationDeg": 60
+    },
+    {
+      "id": "tigre-alto",
+      "name": "Tigre Alto",
+      "x": -30,
+      "z": 240,
+      "rotationDeg": 0
+    },
+    {
+      "id": "capitan-norte",
+      "name": "Capitán Norte",
+      "x": 110,
+      "z": -70,
+      "rotationDeg": 180
+    },
+    {
+      "id": "reconquista",
+      "name": "Reconquista",
+      "x": -280,
+      "z": -50,
+      "rotationDeg": -45
+    },
+    {
+      "id": "san-antonio-arriba",
+      "name": "San Antonio Arriba",
+      "x": 250,
+      "z": 120,
+      "rotationDeg": 90
+    },
+    {
+      "id": "abra-vieja",
+      "name": "Abra Vieja",
+      "x": -55,
+      "z": 180,
+      "rotationDeg": 0
+    },
+    {
+      "id": "carapachay",
+      "name": "Carapachay",
+      "x": -90,
+      "z": 190,
+      "rotationDeg": 30
+    },
+    {
+      "id": "centro-delta",
+      "name": "Centro Delta",
+      "x": 0,
+      "z": 5,
+      "rotationDeg": 0
+    }
+  ],
+  "scatter": [
+    {
+      "id": "arboles",
+      "prefab": "tree",
+      "seed": 42,
+      "attempts": 600,
+      "spread": 0.9,
+      "nearWaterDistance": 10,
+      "inlandChance": 0.3,
+      "instanceSeed": {
+        "stride": 7,
+        "offset": 13
+      }
+    },
+    {
+      "id": "casas",
+      "prefab": "house",
+      "seed": 123,
+      "attempts": 80,
+      "spread": 0.85,
+      "nearWaterDistance": 12,
+      "inlandChance": 0.15,
+      "instanceSeed": {
+        "stride": 13,
+        "offset": 7
+      }
+    }
+  ]
+}

@@ -16,7 +16,6 @@ import {
   BOAT_WIDTH,
   WATER_LEVEL,
   COLORS,
-  MAX_PASSENGERS,
 } from "../utils/constants";
 import { hexToColor3, clamp } from "../utils/helpers";
 import { WaterSystem } from "../world/WaterSystem";
@@ -38,7 +37,12 @@ export class LanchaColectiva {
   private bobPhase = 0;
   private modelContainer: TransformNode | null = null;
 
-  constructor(scene: Scene, startX: number, startZ: number) {
+  constructor(
+    scene: Scene,
+    startX: number,
+    startZ: number,
+    private readonly capacity: number
+  ) {
     this.scene = scene;
     this.position = new Vector3(startX, WATER_LEVEL + 0.6, startZ);
     this.rootNode = new TransformNode("lancha", scene);
@@ -263,11 +267,11 @@ export class LanchaColectiva {
   }
 
   public canPickup(): boolean {
-    return this.passengers < MAX_PASSENGERS;
+    return this.passengers < this.capacity;
   }
 
   public addPassengers(count: number): number {
-    const space = MAX_PASSENGERS - this.passengers;
+    const space = this.capacity - this.passengers;
     const actual = Math.min(count, space);
     this.passengers += actual;
     return actual;
