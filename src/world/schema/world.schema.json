@@ -43,6 +43,11 @@
           "minimum": 50,
           "maximum": 4000,
           "description": "Lado del mundo cuadrado, en metros. El origen está en el centro."
+        },
+        "attribution": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Créditos de los datos usados (p. ej. OpenStreetMap, obligatorio por ODbL)."
         }
       }
     },
