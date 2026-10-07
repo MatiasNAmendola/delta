@@ -1,0 +1,13 @@
+import { Engine } from "bjs7/Engines/engine";
+import { Scene } from "bjs7/scene";
+import { FreeCamera } from "bjs7/Cameras/freeCamera";
+import { HemisphericLight } from "bjs7/Lights/hemisphericLight";
+import { CreateBox } from "bjs7/Meshes/Builders/boxBuilder";
+import { StandardMaterial } from "bjs7/Materials/standardMaterial";
+import { Vector3, Matrix } from "bjs7/Maths/math.vector";
+import "bjs7/Meshes/thinInstanceMesh";
+const c=document.querySelector("canvas"); const e=new Engine(c,true); const s=new Scene(e);
+new FreeCamera("c",new Vector3(0,5,-10),s); new HemisphericLight("l",new Vector3(0,1,0),s);
+const b=CreateBox("b",{},s); b.material=new StandardMaterial("m",s);
+b.thinInstanceAdd(Matrix.Translation(1,0,0));
+e.runRenderLoop(()=>s.render());
