@@ -1,11 +1,14 @@
-# Catálogo de proyectos open source para un metaverso web abierto
+# Catálogo de proyectos open source (MIT y Apache-2.0) para un metaverso web abierto
 
 > Relevamiento: 2026-10-07 · Acompaña a [`PLAN-MVP.md`](./PLAN-MVP.md)
 
 ## Resumen
 
-- **151 repositorios únicos con licencia MIT verificada**, en cuatro capas: motores y mundos, plataformas y
-  multijugador, avatares/ECS/IA, e infraestructura. Hay unas 30 repeticiones entre capas (p. ej. Yjs o
+- **151 repositorios únicos con licencia MIT verificada**, en cuatro capas (A–D): motores y mundos, plataformas y
+  multijugador, avatares/ECS/IA, e infraestructura.
+- **179 repositorios con licencia Apache-2.0 verificada** (sección E), que cubren las mismas capas. Apache-2.0 es
+  igual de permisiva que MIT y además otorga licencia de patentes; a cambio exige conservar `NOTICE`, el texto de
+  la licencia y marcar los archivos modificados (ver el final de la sección E). Hay unas 30 repeticiones entre capas (p. ej. Yjs o
   three-mesh-bvh aparecen en dos).
 - Se incluyeron a propósito proyectos chicos o abandonados: sirven como referencia de código aunque no se
   adopten. La columna "Último commit" indica cuáles siguen vivos.
@@ -20,20 +23,21 @@
    línea era solo el copyright, se leyó el texto completo para confirmar la redacción MIT. En unos pocos
    repos sin `LICENSE` en la raíz se tomó el campo `license` de `package.json`; esos casos están señalados.
 3. Fecha del último commit de la rama por defecto, con un `git fetch` superficial.
-4. Una muestra de 10 hallazgos (luau, sbox-public, TRELLIS, mml, t5c, DivineVoxelEngine, obscenity,
-   quickjs-emscripten, miniplex, mistreevous) se volvió a verificar de forma independiente: los 10 coinciden.
+4. Se volvieron a verificar de forma independiente muestras de cada lista: 10 MIT (luau, sbox-public, TRELLIS, mml,
+   t5c, DivineVoxelEngine, obscenity, quickjs-emscripten, miniplex, mistreevous) y 8 Apache-2.0 (sentinel,
+   tigerbeetle, BabylonJS/Editor, openfga, agents-js, blockly, js-sdk-toolchain, javy). Coinciden todas.
 
 > ⚠️ Una licencia MIT en el código **no cubre** pesos de modelos, assets ni servicios externos (p. ej.
 > TRELLIS, Ready Player Me). Eso se revisa aparte antes de usarlo.
 
-## Mapa: capacidad de metaverso → opción MIT recomendada
+## Mapa: capacidad de metaverso → opción recomendada (MIT o Apache-2.0)
 
-| Capacidad | Recomendación MVP | Alternativas MIT | Nota |
+| Capacidad | Recomendación MVP | Alternativas MIT / Apache-2.0 | Nota |
 |---|---|---|---|
 | Render 3D web | Babylon.js (ya en el repo, **Apache-2.0**) | three.js, playcanvas/engine, galacean, Orillusion | Si se quiere todo MIT: PlayCanvas (motor + editor abiertos) |
 | Mundo voxel/bloques | DivineVoxelEngine (sobre Babylon) | noa, voxelize, minecraft-web-client | voxelize ya trae multijugador |
 | Generación procedural | simplex-noise + wavefunctioncollapse | THREE.Terrain | Base del generador que maneja la IA |
-| Editor de mundos | Editor propio sobre el World DSL | playcanvas/editor, supersplat, frame.js | La conversación con la IA es el editor principal |
+| Editor de mundos | Editor propio sobre el World DSL | playcanvas/editor, supersplat, frame.js; **BabylonJS/Editor** (Apache) | La conversación con la IA es el editor principal |
 | Formato de mundo declarativo | World DSL propio (JSON) | **MML** (mml-io) como referencia fuerte | MML: HTML para mundos 3D multijugador |
 | ECS / lógica | miniplex o becsy | arancini, ecsy | koota es ISC (equivalente) |
 | Física | Rapier (**Apache-2.0**, determinista) vía wrapper MIT | cannon-es, three-mesh-bvh | cannon-es no es determinista |
@@ -45,16 +49,18 @@
 | Herramientas para el agente (MCP) | threejs-devtools-mcp / playcanvas editor-mcp-server como modelo | blender-mcp, mcp-threejs, scene-language | El de Babylon (mcp-for-babylon) es Apache-2.0 |
 | Servidor autoritativo | Colyseus + @colyseus/schema | boardgame.io, rune, lightyear | **t5c** es un RPG Babylon + Colyseus de ejemplo |
 | Sync colaborativo del mundo | Yjs + Hocuspocus (o y-sweet) | Automerge, Loro, Jazz, PartyKit | Dos capas: CRDT para el mundo, netcode para movimiento |
-| Voz y P2P | PeerJS o Trystero (salas chicas) | simple-peer, threejs-webrtc | Salas grandes necesitan SFU (LiveKit/mediasoup, no MIT) |
+| Voz y P2P | PeerJS o Trystero (salas chicas) | simple-peer, threejs-webrtc; **LiveKit** + agents-js (Apache) | Salas grandes y NPCs con voz: LiveKit |
 | Backend y cuentas | PocketBase + better-auth | lucia (ahora solo guía) | |
-| Sandbox de scripts generados | quickjs-emscripten | sebastianwessel/quickjs, SandboxJS, Luau (Roblox, MIT) | Límites de memoria y tiempo |
-| Moderación | obscenity + 2Toad/Profanity (español) + nsfwjs | leo-profanity, badwords | Clasificador del lado servidor: detoxify (Apache) |
+| Sandbox de scripts generados | quickjs-emscripten | sebastianwessel/quickjs, SandboxJS, Luau (MIT); Javy, Wasmtime, endo/SES (Apache) | Límites de memoria y tiempo |
+| Moderación | obscenity + 2Toad/Profanity (español) + nsfwjs | leo-profanity, badwords; detoxify, **Roblox/sentinel**, gpt-oss-safeguard (Apache) | Capas: filtro en cliente + clasificador en servidor |
 | Pipeline de assets | glTF-Transform + meshoptimizer + ktx-parse | gltfjsx, loaders.gl | Ya hay `@gltf-transform/cli` en el repo |
 | Texto/imagen → 3D | TripoSR / TRELLIS (self-host) | shap-e | Necesita GPU; revisar licencias de pesos |
 | UI dentro del mundo | pmndrs/uikit + troika-three-text | three-mesh-ui | |
 | WebXR | pmndrs/xr, aframe | immersive-web-sdk, IWER | Fuera del alcance del MVP |
 | PWA / i18n | vite-plugin-pwa + workbox, i18next | lingui, rosetta | El repo ya es PWA |
-| Economía / inventario | **Hueco**: no hay librería MIT madura en TS | formance ledger (Go) | Fuera del MVP; desarrollo propio |
+| Economía / inventario | Fuera del MVP | formance ledger (MIT, Go); **TigerBeetle** (Apache) como libro mayor | No hay librería madura en TS |
+| Permisos e identidad | PocketBase + better-auth | OpenFGA, Ory Kratos (Apache) | Permisos finos por mundo/sala post-MVP |
+| Scripting visual para chicos | Post-MVP | **Blockly** (Apache) | Bloques que generan el World DSL |
 
 ## Lecciones de plataformas que murieron
 
@@ -403,3 +409,219 @@ Total: **60 repos MIT verificados** (todos con LICENSE comprobado, salvo near-me
 - **Moderación para niños por capas**: obscenity (EN, robusto ante evasiones) + 2Toad/Profanity (multi-idioma, incluido español) en cliente y servidor, más NSFWJS para texturas. Ninguna lista basta sola: hace falta una allowlist o chat predefinido para menores y un clasificador de servidor (detoxify/tfjs toxicity son Apache) como segunda capa.
 - **Voz**: P2P (PeerJS + PositionalAudio de three, ver AidanNelson/threejs-webrtc) sirve para unas 6-8 personas. Para más hace falta SFU, y las buenas (LiveKit, Apache-2.0; mediasoup, ISC) no son MIT pero sí son permisivas. VAD de ricky0123 es ISC.
 - **Huecos MIT**: no hay librería MIT madura de economía/inventario en TS (shopkeepr está abandonado; Formance ledger está en Go). Conviene construir un ledger propio sobre Postgres/PocketBase. Text-to-3D MIT existe (TRELLIS, TripoSR), pero requiere GPU propia y auditar las licencias de pesos y dependencias. Los validadores y herramientas KTX oficiales de Khronos son Apache.
+
+---
+
+## E. Proyectos Apache-2.0
+
+Verificación (2026-10-07): licencia leída del fichero LICENSE en `raw.githubusercontent.com/<repo>/HEAD` y fecha del último commit en HEAD vía `git fetch --depth 1` (script `tools/verify_repo.sh`; salidas brutas en `research/F_verify.txt` y `F_verify2.txt`). "Dual" = MIT o Apache-2.0 a elección; elegimos el que más convenga.
+
+### Repos Apache-2.0 verificados (179)
+
+| Repo | Licencia (verificada) | Último commit | Qué nos da | Capacidad metaverso | Encaje MVP |
+|---|---|---|---|---|---|
+| **Renderizado y motores** ||||||
+| [BabylonJS/Babylon.js](https://github.com/BabylonJS/Babylon.js) | Apache-2.0 | 2026-10-07 | Motor WebGL2/WebGPU que ya usa nuestra PWA | Render | alta: es nuestra base actual |
+| [BabylonJS/Editor](https://github.com/BabylonJS/Editor) | Apache-2.0 | 2026-09-29 | Editor de escenas de escritorio para Babylon (inspector, proyectos, scripts) | Editor | alta: referencia/fork para nuestro editor de mundos |
+| [BabylonJS/Exporters](https://github.com/BabylonJS/Exporters) | Apache-2.0 | 2026-04-23 | Exportadores 3ds Max/Maya → glTF/.babylon | Pipeline assets | baja: herramienta de creador de escritorio |
+| [BabylonJS/Documentation](https://github.com/BabylonJS/Documentation) | Apache-2.0 | 2026-10-05 | Docs y ejemplos de Babylon, reutilizables como contexto RAG para la IA | Docs/IA | media: alimenta al asistente IA |
+| [pandaGaume/mcp-for-babylon](https://github.com/pandaGaume/mcp-for-babylon) | Apache-2.0 | 2026-04-05 | Servidor MCP para que un LLM manipule una escena Babylon | IA / text-to-world | alta: puente directo LLM→escena |
+| [google/filament](https://github.com/google/filament) | Apache-2.0 | 2026-10-07 | Renderizador PBR móvil/WASM de Google | Render | baja: ya tenemos Babylon; útil como referencia PBR |
+| [google/model-viewer](https://github.com/google/model-viewer) | Apache-2.0 | 2026-10-06 | Web component `<model-viewer>` para previsualizar glTF/AR | Assets / XR | media: preview de assets en tienda/catálogo |
+| [CesiumGS/cesium](https://github.com/CesiumGS/cesium) | Apache-2.0 | 2026-10-06 | Globo 3D y streaming 3D Tiles en web | Render / mundos grandes | baja: solo si hay mundos geoespaciales |
+| [CesiumGS/cesium-native](https://github.com/CesiumGS/cesium-native) | Apache-2.0 | 2026-10-07 | Librería C++ de 3D Tiles para motores | Render / streaming | baja: lado nativo |
+| [NASA-AMMOS/3DTilesRendererJS](https://github.com/NASA-AMMOS/3DTilesRendererJS) | Apache-2.0 | 2026-10-07 | Streaming LOD de 3D Tiles en JS | Streaming de mundos | media: patrón de LOD/streaming para mundos enormes |
+| [shader-slang/slang](https://github.com/shader-slang/slang) | Apache-2.0 WITH LLVM-exception | 2026-10-07 | Lenguaje de shaders que compila a WGSL/SPIR-V/HLSL | Render / shaders | media: shaders portables WebGPU |
+| [google/swiftshader](https://github.com/google/swiftshader) | Apache-2.0 | 2026-09-16 | Vulkan/GL por CPU | Render / CI | baja: tests de render headless |
+| [KhronosGroup/Vulkan-Samples](https://github.com/KhronosGroup/Vulkan-Samples) | Apache-2.0 | 2026-09-21 | Ejemplos oficiales Vulkan | Render | baja: solo referencia |
+| [RenderKit/embree](https://github.com/RenderKit/embree) | Apache-2.0 | 2026-10-06 | Ray tracing CPU de Intel | Bake de iluminación | baja: pipeline offline de lightmaps |
+| [RenderKit/oidn](https://github.com/RenderKit/oidn) | Apache-2.0 | 2026-08-14 | Denoiser de imágenes (Open Image Denoise) | Bake de iluminación | baja: bake offline |
+| [o3de/o3de](https://github.com/o3de/o3de) | Dual Apache-2.0 / MIT | 2026-10-02 | Open 3D Engine (Linux Foundation), motor AAA con editor | Motor/editor | baja: no es web; referencia de arquitectura |
+| [bevyengine/bevy](https://github.com/bevyengine/bevy) | Dual MIT / Apache-2.0 | 2026-10-07 | Motor ECS en Rust con build WASM/WebGPU | Motor / ECS | baja: otra pila; referencia de ECS |
+| [gfx-rs/wgpu](https://github.com/gfx-rs/wgpu) | Dual MIT / Apache-2.0 | 2026-10-07 | Implementación WebGPU en Rust (Firefox) | Render / WebGPU | baja: base de motores Rust/WASM |
+| [EmbarkStudios/kajiya](https://github.com/EmbarkStudios/kajiya) | Dual MIT / Apache-2.0 | 2025-07-07 | Renderer experimental de GI en tiempo real | Render | baja: investigación |
+| [TheCherno/Hazel](https://github.com/TheCherno/Hazel) | Apache-2.0 | 2023-10-27 | Motor/editor educativo C++ (pequeño) | Motor/editor | baja: didáctico, inactivo |
+| [libgdx/libgdx](https://github.com/libgdx/libgdx) | Apache-2.0 | 2026-10-06 | Framework de juegos Java con salida web | Motor | baja: otra pila |
+| [AmbientRun/Ambient](https://github.com/AmbientRun/Ambient) | Dual MIT / Apache-2.0 | 2025-01-07 | Runtime multijugador con WASM y ECS (inactivo) | Plataforma UGC | media: diseño de referencia (WASM + ECS + red) |
+| **Voxel / mundos** ||||||
+| [cubzh/cubzh](https://github.com/cubzh/cubzh) | Apache-2.0 | 2026-03-01 | Plataforma UGC voxel con scripting Lua y mundos | Voxel / UGC | alta: el análogo más cercano al producto |
+| [MovingBlocks/Terasology](https://github.com/MovingBlocks/Terasology) | Apache-2.0 | 2026-09-29 | Juego voxel moddable (Java) | Voxel | baja: referencia de generación de terreno y mods |
+| [MovingBlocks/gestalt](https://github.com/MovingBlocks/gestalt) | Apache-2.0 | 2026-09-26 | Framework de módulos/ECS con sandbox de mods (poco conocido) | Scripting / mods | baja: patrones de sandbox de módulos |
+| [MovingBlocks/DestinationSol](https://github.com/MovingBlocks/DestinationSol) | Apache-2.0 | 2026-08-23 | Juego espacial moddable sobre gestalt | Ejemplo UGC | baja: ejemplo pequeño |
+| [Minestom/Minestom](https://github.com/Minestom/Minestom) | Apache-2.0 | 2026-10-05 | Servidor Minecraft desde cero, sin vanilla | Servidor voxel | baja: diseño de servidor de chunks |
+| [cuberite/cuberite](https://github.com/cuberite/cuberite) | Apache-2.0 | 2025-12-16 | Servidor voxel en C++ con plugins Lua | Servidor voxel | baja: referencia |
+| [feather-rs/feather](https://github.com/feather-rs/feather) | Apache-2.0 | 2024-02-19 | Servidor voxel en Rust con ECS (inactivo) | Servidor voxel | baja: referencia |
+| [MetaDyn/WorldGen](https://github.com/MetaDyn/WorldGen) | Apache-2.0 | 2025-11-10 | Generación de mundos 3D a partir de texto/imagen | Text-to-world | media: prototipo de prompt→mundo |
+| **Plataformas sociales / mundos virtuales** ||||||
+| [matrix-org/thirdroom](https://github.com/matrix-org/thirdroom) | Apache-2.0 | 2023-07-11 | Mundos 3D sobre Matrix con WebSG/WASM (archivado) | Social VR | media: diseño de scripting WASM y federación |
+| [overte-org/overte](https://github.com/overte-org/overte) | Apache-2.0 | 2026-10-04 | Fork vivo de High Fidelity: dominios, avatares, audio espacial | Social VR | media: arquitectura de servidor de dominios |
+| [vircadia/vircadia](https://github.com/vircadia/vircadia) | Apache-2.0 | 2025-07-02 | Cliente/servidor nativo de mundos virtuales (ex-HiFi) | Social VR | baja: nativo |
+| [vircadia/vircadia-web](https://github.com/vircadia/vircadia-web) | Apache-2.0 | 2025-12-15 | Cliente web Babylon.js para dominios Vircadia | Social VR web | alta: mismo motor que nosotros |
+| [croquet/worldcore](https://github.com/croquet/worldcore) | Apache-2.0 | 2025-06-06 | Framework de mundos multijugador con modelo replicado determinista | Netcode / mundos | media: alternativa de sincronía replicada |
+| [croquet/microverse](https://github.com/croquet/microverse) | Apache-2.0 | 2025-10-30 | Mundos 3D colaborativos con "behaviors" editables en vivo | Social / editor | media: edición en vivo multiusuario |
+| [decentraland/sdk](https://github.com/decentraland/sdk) | Apache-2.0 | 2025-07-28 | SDK de escenas TS de Decentraland | Scripting UGC | media: modelo de API de escenas |
+| [decentraland/js-sdk-toolchain](https://github.com/decentraland/js-sdk-toolchain) | Apache-2.0 | 2026-09-30 | SDK7 actual: ECS, CLI, inspector de escenas | Scripting / editor | alta: API de escenas por ECS en TS lista para estudiar |
+| [decentraland/unity-explorer](https://github.com/decentraland/unity-explorer) | Apache-2.0 | 2026-10-07 | Cliente explorador actual de Decentraland | Cliente mundo | baja: Unity |
+| [decentraland/catalyst](https://github.com/decentraland/catalyst) | Apache-2.0 | 2026-09-17 | Servidores de contenido/escenas federados | Contenido / hosting | media: almacenamiento por hash de contenido |
+| [decentraland/builder](https://github.com/decentraland/builder) | Apache-2.0 | 2026-10-06 | Builder web de escenas y wearables | Editor | media: UX de editor web |
+| **Multijugador / netcode / servidores** ||||||
+| [heroiclabs/nakama](https://github.com/heroiclabs/nakama) | Apache-2.0 | 2026-09-22 | Backend de juego: cuentas, matchmaking, chat, ligas, partidas autoritativas | Servidor / social | alta: backend completo autoalojable |
+| [heroiclabs/nakama-js](https://github.com/heroiclabs/nakama-js) | Apache-2.0 | 2026-06-02 | Cliente JS/TS de Nakama | Cliente red | alta: va con Nakama |
+| [heroiclabs/nakama-common](https://github.com/heroiclabs/nakama-common) | Apache-2.0 | 2026-09-18 | Tipos del runtime (TS/Go) para lógica de servidor | Scripting servidor | media: lógica server en TS |
+| [heroiclabs/nakama-godot](https://github.com/heroiclabs/nakama-godot) | Apache-2.0 | 2026-09-22 | Cliente Godot de Nakama | Cliente red | baja: otro motor |
+| [rivet-gg/rivet](https://github.com/rivet-gg/rivet) | Apache-2.0 | 2026-10-06 | Actores con estado y orquestación de servidores de juego | Servidor / hosting | alta: salas por mundo como actores |
+| [timetocode/nengi](https://github.com/timetocode/nengi) | Apache-2.0 | 2022-03-21 | Netcode JS con interpolación y predicción en cliente | Netcode | media: pequeño y en TS, aunque inactivo |
+| [lance-gg/lance](https://github.com/lance-gg/lance) | Apache-2.0 | 2024-05-11 | Motor multijugador JS con extrapolación y sincronía de física | Netcode | media: referencia de sincronía de física |
+| [xiaonanln/goworld](https://github.com/xiaonanln/goworld) | Apache-2.0 | 2022-08-14 | Servidor de juego distribuido en Go con espacios/AOI | Servidor MMO | baja: inactivo; diseño AOI |
+| [name5566/leaf](https://github.com/name5566/leaf) | Apache-2.0 | 2022-10-21 | Framework pequeño de servidor de juegos en Go | Servidor | baja: inactivo |
+| [asynkron/protoactor-go](https://github.com/asynkron/protoactor-go) | Apache-2.0 | 2026-01-18 | Actores distribuidos en Go | Servidor | baja: alternativa a actores |
+| [googleforgames/agones](https://github.com/googleforgames/agones) | Apache-2.0 | 2026-10-05 | Servidores dedicados de juego en Kubernetes | Hosting | media: cuando escalemos instancias |
+| [googleforgames/open-match](https://github.com/googleforgames/open-match) | Apache-2.0 | 2024-07-10 | Framework de matchmaking | Matchmaking | baja: inactivo, Nakama ya lo cubre |
+| [googleforgames/quilkin](https://github.com/googleforgames/quilkin) | Apache-2.0 | 2026-10-05 | Proxy UDP para tráfico de juego | Red / anti-DDoS | baja: fase de escalado |
+| [googleforgames/open-saves](https://github.com/googleforgames/open-saves) | Apache-2.0 | 2025-06-26 | Almacenamiento de partidas/estado | Persistencia | baja: dependiente de GCP |
+| [uNetworking/uWebSockets.js](https://github.com/uNetworking/uWebSockets.js) | Apache-2.0 | 2026-10-03 | Servidor WebSocket muy rápido para Node | Transporte | alta: capa WS del servidor de salas |
+| [uNetworking/uWebSockets](https://github.com/uNetworking/uWebSockets) | Apache-2.0 | 2026-10-05 | Núcleo C++ de uWS | Transporte | baja: lo usamos vía .js |
+| [centrifugal/centrifugo](https://github.com/centrifugal/centrifugo) | Apache-2.0 | 2026-10-06 | Servidor pub/sub en tiempo real (WS/SSE/WebTransport) | Tiempo real | media: chat/presencia escalable |
+| [nats-io/nats-server](https://github.com/nats-io/nats-server) | Apache-2.0 | 2026-10-07 | Bus de mensajes ligero | Backbone servidor | media: comunicar salas/servicios |
+| [supabase/realtime](https://github.com/supabase/realtime) | Apache-2.0 | 2026-10-07 | Broadcast, presencia y cambios de Postgres | Tiempo real | media: presencia/lobby rápida |
+| [apache/pulsar](https://github.com/apache/pulsar) | Apache-2.0 | 2026-10-07 | Streaming de eventos distribuido | Analítica / eventos | baja: escala grande |
+| [google/flatbuffers](https://github.com/google/flatbuffers) | Apache-2.0 | 2026-09-14 | Serialización binaria sin copia (TS incluido) | Protocolo red | media: snapshots compactos |
+| **CRDT / sincronización de estado** ||||||
+| [liveblocks/liveblocks](https://github.com/liveblocks/liveblocks) | Apache-2.0 (salvo `liveblocks-server` y CLI: AGPL) | 2026-10-05 | Presencia, almacenamiento CRDT y comentarios | CRDT / colaboración | media: usar solo los paquetes cliente Apache |
+| [rocicorp/mono](https://github.com/rocicorp/mono) | Apache-2.0 | 2026-10-07 | Zero/Replicache: sincronía cliente-servidor optimista | Sync de estado | media: inventarios/datos de mundo |
+| [electric-sql/electric](https://github.com/electric-sql/electric) | Apache-2.0 | 2026-10-06 | Sync de Postgres en tiempo real hacia clientes | Sync de estado | media: datos persistentes del mundo |
+| [instantdb/instant](https://github.com/instantdb/instant) | Apache-2.0 | 2026-09-28 | Base de datos en tiempo real con presencia | Sync / BaaS | media: prototipado rápido |
+| **Voz / WebRTC / audio espacial** ||||||
+| [livekit/livekit](https://github.com/livekit/livekit) | Apache-2.0 | 2026-10-07 | SFU WebRTC (voz, vídeo, datos) | Voz | alta: chat de voz por proximidad |
+| [livekit/client-sdk-js](https://github.com/livekit/client-sdk-js) | Apache-2.0 | 2026-10-07 | SDK de navegador de LiveKit | Voz | alta: va con LiveKit |
+| [livekit/components-js](https://github.com/livekit/components-js) | Apache-2.0 | 2026-09-25 | Componentes React/JS de UI de llamadas | Voz UI | media: UI de voz |
+| [livekit/node-sdks](https://github.com/livekit/node-sdks) | Apache-2.0 | 2026-09-21 | SDK de servidor (tokens, salas) | Voz backend | alta: emitir tokens de sala |
+| [livekit/egress](https://github.com/livekit/egress) | Apache-2.0 | 2026-10-07 | Grabación/streaming de salas | Voz / moderación | media: grabar para revisar denuncias |
+| [livekit/agents](https://github.com/livekit/agents) | Apache-2.0 | 2026-10-07 | Agentes de voz en tiempo real (STT-LLM-TTS) en Python | NPC de voz | alta: NPC que hablan |
+| [livekit/agents-js](https://github.com/livekit/agents-js) | Apache-2.0 | 2026-10-07 | Lo mismo en TypeScript/Node | NPC de voz | alta: misma pila TS |
+| [jitsi/jitsi-videobridge](https://github.com/jitsi/jitsi-videobridge) | Apache-2.0 | 2026-10-05 | SFU WebRTC de Jitsi | Voz | baja: alternativa a LiveKit |
+| [jitsi/lib-jitsi-meet](https://github.com/jitsi/lib-jitsi-meet) | Apache-2.0 | 2026-10-06 | Cliente JS de bajo nivel para Jitsi | Voz | baja: alternativa |
+| [jitsi/jitsi-meet](https://github.com/jitsi/jitsi-meet) | Apache-2.0 | 2026-10-07 | App completa de videoconferencia | Voz / eventos | baja: eventos en vivo |
+| [OpenVidu/openvidu](https://github.com/OpenVidu/openvidu) | Apache-2.0 | 2026-10-07 | Plataforma WebRTC (ahora sobre LiveKit) | Voz | baja: capa extra |
+| [Kurento/kurento](https://github.com/Kurento/kurento) | Apache-2.0 | 2026-04-19 | Servidor multimedia WebRTC con filtros | Voz / medios | baja: legado |
+| [resonance-audio/resonance-audio-web-sdk](https://github.com/resonance-audio/resonance-audio-web-sdk) | Apache-2.0 | 2018-04-26 | Audio espacial ambisónico en Web Audio | Audio espacial | media: espacializar voces (antiguo pero estable) |
+| [resonance-audio/resonance-audio](https://github.com/resonance-audio/resonance-audio) | Apache-2.0 | 2022-09-08 | Núcleo C++ de Resonance Audio | Audio espacial | baja: nativo |
+| [GoogleChrome/omnitone](https://github.com/GoogleChrome/omnitone) | Apache-2.0 | 2026-09-18 | Decodificador ambisónico y binaural para web | Audio espacial | media: audio ambiente 360 |
+| [google/songbird](https://github.com/google/songbird) | Apache-2.0 | 2018-04-26 | Audio espacial web basado en Omnitone (pequeño, archivado) | Audio espacial | baja: reemplazado por Resonance |
+| **Física** ||||||
+| [dimforge/rapier](https://github.com/dimforge/rapier) | Apache-2.0 | 2026-10-06 | Motor de física 2D/3D determinista en Rust | Física | alta: física determinista para red |
+| [dimforge/rapier.js](https://github.com/dimforge/rapier.js) | Apache-2.0 | 2026-07-12 | Bindings WASM/JS de Rapier | Física | alta: física en navegador y servidor |
+| [dimforge/parry](https://github.com/dimforge/parry) | Apache-2.0 | 2026-10-06 | Detección de colisiones y consultas geométricas | Física | media: raycasts/colisiones del servidor |
+| [dimforge/nalgebra](https://github.com/dimforge/nalgebra) | Apache-2.0 | 2026-09-30 | Álgebra lineal en Rust | Matemáticas | baja: dependencia |
+| [google-deepmind/mujoco](https://github.com/google-deepmind/mujoco) | Apache-2.0 | 2026-10-07 | Física de cuerpos articulados (tiene build WASM) | Física / personajes | baja: ragdolls/robots avanzados |
+| [google/brax](https://github.com/google/brax) | Apache-2.0 | 2026-10-07 | Física diferenciable en JAX | Entrenar locomoción | baja: investigación |
+| [Genesis-Embodied-AI/Genesis](https://github.com/Genesis-Embodied-AI/Genesis) | Apache-2.0 | 2026-10-06 | Simulador físico generativo para IA encarnada | Física / IA | baja: investigación |
+| **Avatares / animación / captura** ||||||
+| [theatre-js/theatre](https://github.com/theatre-js/theatre) | Apache-2.0 (`@theatre/core`; `@theatre/studio` es AGPL) | 2024-04-11 | Secuenciador de animación y cinemáticas para web | Animación | media: solo el core en runtime |
+| [google-ai-edge/mediapipe](https://github.com/google-ai-edge/mediapipe) | Apache-2.0 | 2026-10-07 | Seguimiento de cara, manos y pose en navegador | Avatares | alta: avatar animado por la webcam |
+| [tensorflow/tfjs-models](https://github.com/tensorflow/tfjs-models) | Apache-2.0 | 2026-03-28 | Modelos JS: pose, face-landmarks, toxicity | Avatares / moderación | alta: clasificador de toxicidad en cliente |
+| [tensorflow/tfjs](https://github.com/tensorflow/tfjs) | Apache-2.0 | 2026-04-06 | ML en navegador (WebGL/WebGPU/WASM) | Runtime IA | media: base de tfjs-models |
+| [open-mmlab/mmpose](https://github.com/open-mmlab/mmpose) | Apache-2.0 | 2025-08-04 | Estimación de pose 2D/3D | Mocap | baja: lado servidor |
+| [open-mmlab/mmhuman3d](https://github.com/open-mmlab/mmhuman3d) | Apache-2.0 | 2024-09-19 | Recuperación de cuerpo humano paramétrico | Mocap / avatares | baja: investigación |
+| [openxrlab/xrmocap](https://github.com/openxrlab/xrmocap) | Apache-2.0 | 2025-07-01 | Mocap multivista (poco conocido) | Mocap | baja: estudio de captura |
+| [openxrlab/xrprimer](https://github.com/openxrlab/xrprimer) | Apache-2.0 | 2025-07-01 | Base de cámaras y geometría para XR (poco conocido) | XR / visión | baja |
+| [openxrlab/xrfeitoria](https://github.com/openxrlab/xrfeitoria) | Apache-2.0 | 2025-09-14 | Render sintético en Blender/Unreal (poco conocido) | Datos sintéticos | baja |
+| [Unity-Technologies/ml-agents](https://github.com/Unity-Technologies/ml-agents) | Apache-2.0 | 2026-10-07 | Entrenamiento de comportamientos de agentes por RL | NPC | baja: atado a Unity; ideas de RL |
+| **NPC / agentes LLM / text-to-world** ||||||
+| [joonspk-research/generative_agents](https://github.com/joonspk-research/generative_agents) | Apache-2.0 | 2023-08-11 | Agentes generativos con memoria, reflexión y planificación (Smallville) | NPC | media: arquitectura de memoria de NPC |
+| [OpenBMB/AgentVerse](https://github.com/OpenBMB/AgentVerse) | Apache-2.0 | 2024-09-09 | Simulación multi-agente LLM | NPC | baja: inactivo |
+| [letta-ai/letta](https://github.com/letta-ai/letta) | Apache-2.0 | 2026-09-10 | Agentes con memoria persistente (ex-MemGPT) | NPC | media: NPC que recuerdan a cada jugador |
+| [mem0ai/mem0](https://github.com/mem0ai/mem0) | Apache-2.0 | 2026-10-07 | Capa de memoria para agentes | NPC | media: memoria ligera |
+| [huggingface/smolagents](https://github.com/huggingface/smolagents) | Apache-2.0 | 2026-10-06 | Agentes con herramientas que escriben código | IA creación | media: agente constructor de mundos |
+| [google/adk-js](https://github.com/google/adk-js) | Apache-2.0 | 2026-10-07 | Agent Development Kit en TypeScript | IA / agentes | media: orquestar NPC/asistente en TS |
+| [google/adk-python](https://github.com/google/adk-python) | Apache-2.0 | 2026-10-07 | ADK en Python | IA / agentes | baja |
+| [a2aproject/A2A](https://github.com/a2aproject/A2A) | Apache-2.0 | 2026-10-07 | Protocolo agente a agente | IA / interop | baja: futuro (NPC interoperables) |
+| [camel-ai/camel](https://github.com/camel-ai/camel) | Apache-2.0 | 2026-10-05 | Sociedades multi-agente con roles | NPC | baja |
+| [huggingface/transformers.js](https://github.com/huggingface/transformers.js) | Apache-2.0 | 2026-10-06 | Modelos de Hugging Face en navegador (ONNX/WebGPU) | IA en cliente | alta: STT, embeddings y clasificadores sin servidor |
+| [mlc-ai/web-llm](https://github.com/mlc-ai/web-llm) | Apache-2.0 | 2026-10-03 | LLM en navegador con WebGPU | NPC en cliente | media: NPC offline/baratos |
+| [mlc-ai/mlc-llm](https://github.com/mlc-ai/mlc-llm) | Apache-2.0 | 2026-10-07 | Compilador/runtime universal de LLM | IA | baja |
+| [vllm-project/vllm](https://github.com/vllm-project/vllm) | Apache-2.0 | 2026-10-07 | Servidor de inferencia LLM de alto rendimiento | IA backend | media: NPC autoalojados a escala |
+| [openai/gpt-oss](https://github.com/openai/gpt-oss) | Apache-2.0 | 2026-07-24 | Modelos de pesos abiertos de OpenAI (código de referencia) | IA | media: LLM autoalojable con licencia limpia |
+| [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 | 2026-10-06 | STT/TTS/VAD offline, incluido WASM | Voz NPC | alta: voz de NPC y subtítulos en navegador |
+| [huggingface/speech-to-speech](https://github.com/huggingface/speech-to-speech) | Apache-2.0 | 2026-10-07 | Pipeline modular VAD→STT→LLM→TTS | Voz NPC | media: alternativa a LiveKit Agents |
+| [allenai/Holodeck](https://github.com/allenai/Holodeck) | Apache-2.0 | 2024-08-26 | Generación de entornos 3D interiores desde texto con LLM | Text-to-world | media: patrón prompt→layout→assets |
+| [allenai/ai2thor](https://github.com/allenai/ai2thor) | Apache-2.0 | 2025-05-29 | Entornos 3D interactivos para agentes | IA encarnada | baja: Unity |
+| [threestudio-project/threestudio](https://github.com/threestudio-project/threestudio) | Apache-2.0 | 2024-12-16 | Framework de generación text-to-3D | Text-to-3D | baja: GPU pesada, inactivo |
+| [stepfun-ai/Step1X-3D](https://github.com/stepfun-ai/Step1X-3D) | Apache-2.0 | 2025-09-09 | Generación 3D de geometría y textura (código Apache; revisar licencia de pesos) | Text/imagen-to-3D | media: assets generados por IA |
+| [3DTopia/3DTopia-XL](https://github.com/3DTopia/3DTopia-XL) | Apache-2.0 | 2025-07-14 | Generación de assets 3D PBR | Text-to-3D | baja: investigación |
+| [nv-tlabs/GEN3C](https://github.com/nv-tlabs/GEN3C) | Apache-2.0 (código; pesos NVIDIA aparte) | 2026-06-15 | Vídeo/mundo con consistencia 3D | World model | baja: investigación |
+| [nerfstudio-project/gsplat](https://github.com/nerfstudio-project/gsplat) | Apache-2.0 | 2026-09-19 | Entrenamiento/rasterizado de Gaussian Splatting en CUDA | Captura→mundo | media: escanear lugares reales como splats |
+| **Scripting sandbox / WASM** ||||||
+| [Agoric/endo](https://github.com/Agoric/endo) | Apache-2.0 | 2026-10-02 | SES/Compartments: JS endurecido para código no confiable | Sandbox scripts | alta: aislar scripts UGC en JS |
+| [Agoric/agoric-sdk](https://github.com/Agoric/agoric-sdk) | Apache-2.0 | 2026-10-07 | Contratos inteligentes en JS endurecido (ERTP, ofertas) | Economía / sandbox | baja: modelo de activos digitales |
+| [bytecodealliance/wasmtime](https://github.com/bytecodealliance/wasmtime) | Apache-2.0 WITH LLVM-exception | 2026-10-07 | Runtime WASM con límite de fuel/epoch | Sandbox servidor | alta: ejecutar scripts UGC en el servidor |
+| [bytecodealliance/javy](https://github.com/bytecodealliance/javy) | Apache-2.0 WITH LLVM-exception | 2026-10-06 | Compila JS a WASM (QuickJS) | Sandbox scripts | alta: scripts JS de creadores → WASM |
+| [bytecodealliance/jco](https://github.com/bytecodealliance/jco) | Apache-2.0 WITH LLVM-exception | 2026-10-07 | Herramientas JS para el Component Model de WASM | Sandbox / plugins | media: plugins tipados |
+| [bytecodealliance/ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS) | Apache-2.0 WITH LLVM-exception | 2026-09-21 | JS → componente WASM | Sandbox scripts | media |
+| [bytecodealliance/wit-bindgen](https://github.com/bytecodealliance/wit-bindgen) | Dual Apache-2.0 (LLVM-exc.) / MIT | 2026-10-07 | Bindings WIT para la API de scripting | Sandbox / API | media: definir la API de scripts en WIT |
+| [bytecodealliance/wasm-micro-runtime](https://github.com/bytecodealliance/wasm-micro-runtime) | Apache-2.0 WITH LLVM-exception | 2026-09-30 | Runtime WASM diminuto (WAMR) | Sandbox | baja: embebido |
+| [WasmEdge/WasmEdge](https://github.com/WasmEdge/WasmEdge) | Apache-2.0 | 2026-10-06 | Runtime WASM (CNCF) con plugins de IA | Sandbox | baja: alternativa a wasmtime |
+| [wasmCloud/wasmCloud](https://github.com/wasmCloud/wasmCloud) | Apache-2.0 | 2026-10-06 | Plataforma distribuida de componentes WASM | Hosting scripts | baja |
+| [spinframework/spin](https://github.com/spinframework/spin) | Apache-2.0 WITH LLVM-exception | 2026-10-06 | Framework serverless WASM | Hosting scripts | baja |
+| [AssemblyScript/assemblyscript](https://github.com/AssemblyScript/assemblyscript) | Apache-2.0 | 2026-07-21 | Lenguaje tipo TS que compila a WASM | Scripting | media: scripts con sintaxis TS para creadores avanzados |
+| [WebAssembly/wabt](https://github.com/WebAssembly/wabt) | Apache-2.0 | 2026-10-05 | Herramientas binarias WASM (validar/inspeccionar) | Tooling | baja: validar módulos subidos |
+| [cloudflare/workerd](https://github.com/cloudflare/workerd) | Apache-2.0 | 2026-10-07 | Runtime de Workers con aislamiento V8 | Sandbox servidor | media: isolates para lógica de mundo |
+| [google/gvisor](https://github.com/google/gvisor) | Apache-2.0 | 2026-10-06 | Kernel en espacio de usuario para contenedores | Aislamiento infra | baja: defensa en profundidad |
+| [firecracker-microvm/firecracker](https://github.com/firecracker-microvm/firecracker) | Apache-2.0 | 2026-10-07 | microVMs (base de Lambda) | Aislamiento infra | baja |
+| [google/blockly](https://github.com/google/blockly) | Apache-2.0 | 2026-10-05 | Programación visual por bloques | Scripting para niños | alta: scripting sin código en el editor |
+| [google/blockly-samples](https://github.com/google/blockly-samples) | Apache-2.0 | 2026-10-05 | Plugins y ejemplos de Blockly | Scripting | media |
+| **Moderación / seguridad** ||||||
+| [unitaryai/detoxify](https://github.com/unitaryai/detoxify) | Apache-2.0 | 2026-03-26 | Clasificadores de toxicidad multilingües | Moderación chat | alta: filtro de chat en servidor |
+| [Roblox/sentinel](https://github.com/Roblox/sentinel) | Apache-2.0 | 2026-08-06 | Detección temprana de patrones de riesgo en conversaciones (Roblox) | Seguridad infantil | alta: diseñado para UGC con menores |
+| [roostorg/osprey](https://github.com/roostorg/osprey) | Apache-2.0 | 2026-10-06 | Motor de reglas de seguridad en tiempo real (de Discord, ROOST) | Moderación | media: reglas anti-abuso |
+| [roostorg/coop](https://github.com/roostorg/coop) | Apache-2.0 | 2026-10-07 | Herramienta de revisión de moderación (ROOST) | Moderación | media: cola de denuncias |
+| [openai/gpt-oss-safeguard](https://github.com/openai/gpt-oss-safeguard) | Apache-2.0 | 2026-01-14 | Modelo de razonamiento de seguridad que aplica una política propia | Moderación | media: aplicar nuestras propias normas |
+| [ibm-granite/granite-guardian](https://github.com/ibm-granite/granite-guardian) | Apache-2.0 | 2026-08-26 | Detector de riesgos para entradas/salidas de LLM | Seguridad IA | media: proteger NPC y asistente |
+| [NVIDIA/NeMo-Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) | Apache-2.0 | 2026-10-07 | Guardarraíles programables para LLM | Seguridad IA | media: limitar lo que dicen los NPC |
+| [guardrails-ai/guardrails](https://github.com/guardrails-ai/guardrails) | Apache-2.0 | 2026-08-26 | Validadores de salida de LLM | Seguridad IA | media |
+| [protectai/rebuff](https://github.com/protectai/rebuff) | Apache-2.0 | 2024-01-25 | Detector de inyección de prompts | Seguridad IA | baja: inactivo |
+| [bumble-tech/private-detector](https://github.com/bumble-tech/private-detector) | Apache-2.0 | 2023-11-05 | Clasificador de imágenes obscenas (Bumble, poco conocido) | Moderación imagen | media: filtrar texturas/imágenes subidas |
+| [conversationai/perspectiveapi](https://github.com/conversationai/perspectiveapi) | Apache-2.0 | 2021-03-23 | Docs y ejemplos de Perspective API (Jigsaw) | Moderación | baja: solo la API |
+| **Pipeline de assets (glTF/KTX/USD)** ||||||
+| [KhronosGroup/KTX-Software](https://github.com/KhronosGroup/KTX-Software) | Apache-2.0 | 2026-10-07 | Herramientas KTX2 y transcodificador (WASM) | Texturas | alta: texturas comprimidas para GPU |
+| [BinomialLLC/basis_universal](https://github.com/BinomialLLC/basis_universal) | Apache-2.0 | 2026-09-01 | Supercompresión de texturas Basis/UASTC | Texturas | alta: Babylon ya lo soporta |
+| [KhronosGroup/glTF-Validator](https://github.com/KhronosGroup/glTF-Validator) | Apache-2.0 | 2026-10-06 | Validador oficial de glTF (con build JS) | Validación de subidas | alta: validar todo asset UGC |
+| [KhronosGroup/glTF-Sample-Viewer](https://github.com/KhronosGroup/glTF-Sample-Viewer) | Apache-2.0 | 2026-10-06 | Visor de referencia glTF | Assets QA | media: referencia de render |
+| [KhronosGroup/glTF-Sample-Renderer](https://github.com/KhronosGroup/glTF-Sample-Renderer) | Apache-2.0 | 2026-10-06 | Renderer de referencia como librería | Assets QA | media: tests de conformidad |
+| [KhronosGroup/glTF-IBL-Sampler](https://github.com/KhronosGroup/glTF-IBL-Sampler) | Apache-2.0 | 2026-10-06 | Genera mapas IBL prefiltrados | Iluminación | media: entornos PBR |
+| [KhronosGroup/glTF-Blender-IO](https://github.com/KhronosGroup/glTF-Blender-IO) | Apache-2.0 | 2026-10-01 | Importador/exportador glTF de Blender | Herramientas creador | media: flujo Blender→plataforma |
+| [CesiumGS/gltf-pipeline](https://github.com/CesiumGS/gltf-pipeline) | Apache-2.0 | 2026-06-23 | Optimización glTF (Draco, separar/incrustar) | Pipeline | alta: procesar subidas en servidor |
+| [CesiumGS/obj2gltf](https://github.com/CesiumGS/obj2gltf) | Apache-2.0 | 2025-11-19 | Conversor de OBJ a glTF | Pipeline | media: importar OBJ |
+| [CesiumGS/3d-tiles-tools](https://github.com/CesiumGS/3d-tiles-tools) | Apache-2.0 | 2026-07-24 | Herramientas para empaquetar 3D Tiles | Pipeline | baja |
+| [google/draco](https://github.com/google/draco) | Apache-2.0 | 2026-09-24 | Compresión de mallas (decoder WASM) | Pipeline | alta: mallas más ligeras |
+| [AcademySoftwareFoundation/MaterialX](https://github.com/AcademySoftwareFoundation/MaterialX) | Apache-2.0 | 2026-10-05 | Estándar abierto de materiales | Materiales | baja: interop futura |
+| [GoogleChromeLabs/squoosh](https://github.com/GoogleChromeLabs/squoosh) | Apache-2.0 | 2024-08-19 | Códecs de imagen en WASM (AVIF, WebP...) | Pipeline 2D | media: miniaturas e iconos |
+| [alibaba/MNN](https://github.com/alibaba/MNN) | Apache-2.0 | 2026-09-30 | Inferencia ligera en el dispositivo | IA en móvil | baja |
+| **Identidad / economía / permisos** ||||||
+| [keycloak/keycloak](https://github.com/keycloak/keycloak) | Apache-2.0 | 2026-10-07 | IAM completo (OIDC, SSO, social login) | Identidad | media: pesado pero completo |
+| [ory/kratos](https://github.com/ory/kratos) | Apache-2.0 | 2026-07-29 | Gestión de identidad headless | Identidad | alta: cuentas sin UI impuesta |
+| [ory/hydra](https://github.com/ory/hydra) | Apache-2.0 | 2026-07-29 | Servidor OAuth2/OIDC | Identidad | media: "login con nuestra plataforma" |
+| [openfga/openfga](https://github.com/openfga/openfga) | Apache-2.0 | 2026-10-07 | Autorización tipo Zanzibar (ReBAC) | Permisos UGC | alta: quién puede editar o entrar en cada mundo |
+| [casbin/casbin](https://github.com/casbin/casbin) | Apache-2.0 | 2026-10-05 | Librería de control de acceso (ACL/RBAC/ABAC) | Permisos | media: más simple que OpenFGA |
+| [decentralized-identity/veramo](https://github.com/decentralized-identity/veramo) | Apache-2.0 | 2026-10-06 | DIDs y credenciales verificables en TS | Identidad portable | baja: futuro |
+| [openwallet-foundation/credo-ts](https://github.com/openwallet-foundation/credo-ts) | Apache-2.0 | 2026-10-07 | Framework de carteras SSI en TS | Identidad | baja |
+| [tigerbeetle/tigerbeetle](https://github.com/tigerbeetle/tigerbeetle) | Apache-2.0 | 2026-10-06 | Base de datos contable de doble entrada | Economía | alta: libro mayor de la moneda virtual |
+| [killbill/killbill](https://github.com/killbill/killbill) | Apache-2.0 | 2026-10-05 | Facturación y suscripciones | Economía | baja: pesado (Java) |
+| [openmeterio/openmeter](https://github.com/openmeterio/openmeter) | Apache-2.0 | 2026-10-07 | Medición de uso y facturación | Economía / cuotas IA | media: medir el gasto de IA por creador |
+| **XR** ||||||
+| [immersive-web/webxr-polyfill](https://github.com/immersive-web/webxr-polyfill) | Apache-2.0 | 2026-07-21 | Polyfill de WebXR | XR | media: compatibilidad WebXR |
+| [KhronosGroup/OpenXR-SDK-Source](https://github.com/KhronosGroup/OpenXR-SDK-Source) | Apache-2.0 | 2026-09-17 | Loader y capas de OpenXR | XR nativo | baja: solo nativo |
+| [KhronosGroup/OpenXR-SDK](https://github.com/KhronosGroup/OpenXR-SDK) | Apache-2.0 | 2026-09-02 | Headers y loader de OpenXR | XR nativo | baja |
+| [SceneView/sceneview-android](https://github.com/SceneView/sceneview-android) | Apache-2.0 | 2026-10-07 | AR/3D en Android sobre Filament + ARCore | XR móvil | baja: nativo |
+
+Nota sobre el recuento: la tabla tiene **179 repos verificados como Apache-2.0** (en solitario, con LLVM-exception o en dual con MIT). Los 29 conocidos de antemano se han confirmado todos, con dos matices: **AmbientRun/Ambient** es dual MIT/Apache (el fichero principal es `LICENSE-MIT`) y **theatre-js/theatre** solo es Apache en `@theatre/core` (el studio es AGPL).
+
+**Descartados o con salvedades (no cuentan en la tabla):** BabylonJS/BabylonNative (MIT), BabylonJS/havok (sin LICENSE en la raíz; el paquete npm es MIT), BabylonJS/Assets (CC), Igalia/wolvic (MPL-2.0), meta-quest/immersive-web-emulator, meta-quest/ProjectFlowerbed, meta-quest/webxr-first-steps y facebook/immersive-web-sdk (MIT), immersive-web/webxr-samples (licencia propia tipo MIT), Roblox/cube (RAIL solo para investigación), Roblox/voice-safety-classifier (CC), meta-llama/PurpleLlama y manycore-research/SpatialLM (Llama Community License), PixarAnimationStudios/OpenUSD (Apache-2.0 *modificada* "TOST": se puede usar, pero no es Apache puro), extism/extism (BSD-3), amark/gun (MIT/Zlib/Apache: elegible pero no se ha verificado el texto Apache), libp2p/js-libp2p, ipfs/helia y spruceid/siwe (dual MIT/Apache, no incluidos por ser marginales), google-ar/arcore-android-sdk y googlevr/cardboard (licencias mixtas por directorio), supertokens/supertokens-core (mixta), highfidelity/hifi (sin LICENSE en la raíz; ver vircadia/overte), kyutai-labs/moshi (dual pero con pesos CC-BY), facebook/ThreatExchange (BSD). **OpenSimulator** (opensimulator.org) es BSD-3, no Apache: compatible, pero va en otra sección. Sobre proyectos Mozilla: los de Mozilla Reality/Hubs son MPL-2.0 o MIT, así que **ninguno** es Apache.
+
+### Qué cambia al aceptar Apache-2.0
+
+- **Pasan a ser primera opción por encima de las alternativas MIT:** LiveKit (+ agents-js) para voz y NPC de voz, en lugar de mediasoup/pion; Nakama o Rivet como alternativa a Colyseus cuando haga falta un backend completo (cuentas, matchmaking, ligas); para el MVP alcanza Colyseus; Rapier.js para física determinista; Agoric/endo (SES) + Javy/Wasmtime para el sandbox de scripts UGC, en lugar de solo quickjs-emscripten; Blockly para el scripting visual; OpenFGA + Ory Kratos para permisos e identidad; TigerBeetle como libro mayor de la economía; Detoxify + Roblox/sentinel + gpt-oss-safeguard para moderación; y KTX-Software/Basis/Draco/glTF-Validator/gltf-pipeline como pipeline oficial de assets. Babylon.js ya era Apache, así que nuestra base no cambia.
+- **Fichero NOTICE (sección 4d):** si un proyecto Apache incluye un `NOTICE`, hay que redistribuir su contenido con nuestro producto (por ejemplo en una página "Licencias de terceros" de la PWA y en el bundle). Hay que generarlo en CI (p. ej. con `license-checker`/`cargo about`) para todo paquete Apache que entre en el build del cliente o en las imágenes del servidor.
+- **Concesión de patentes (sección 3):** cada contribuidor nos da una licencia de patentes perpetua sobre su contribución. Es una ventaja sobre MIT, que no dice nada de patentes, y es importante en codecs, compresión de texturas y WebRTC. Contrapartida: si demandamos a alguien alegando que el proyecto infringe una patente, perdemos esa licencia. La política interna debe ser no litigar patentes contra dependencias.
+- **Cabeceras y avisos de cambios (secciones 4a-4c):** hay que conservar las cabeceras de copyright/licencia de los ficheros copiados, incluir el texto de la Apache-2.0 y marcar los ficheros modificados ("Modified by ... 2026"). En forks (p. ej. BabylonJS/Editor, vircadia-web, nengi) lo práctico es añadir una línea de cambios en cada fichero tocado y conservar LICENSE/NOTICE en la raíz. El nombre y las marcas del proyecto original no se pueden usar para promocionarnos (sección 6).
+- **Compatibilidad y licencias "trampa":** Apache-2.0 es compatible con nuestro código MIT y con GPLv3, pero **no con GPLv2-only**. Además hay que revisar los paquetes uno a uno en los monorepos: el core de Theatre.js es Apache pero el studio es AGPL; Liveblocks es Apache salvo el servidor (AGPL); en Step1X-3D, GEN3C y gpt-oss el código es Apache, pero los pesos de los modelos pueden tener otra licencia; OpenUSD usa una Apache modificada. Las variantes "WITH LLVM-exception" (Wasmtime, Javy, Slang) son incluso más permisivas al distribuir binarios.
