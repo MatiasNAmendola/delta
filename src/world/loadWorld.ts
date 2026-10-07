@@ -2,7 +2,8 @@
 import { parseWorld, type WorldDoc } from "./WorldDoc";
 
 const worlds = import.meta.glob<{ default: unknown }>("./data/*.world.json", { eager: true });
-const DEFAULT_WORLD = "delta";
+/** The real Delta (OpenStreetMap). The hand-drawn proof of concept stays available as `?world=delta`. */
+const DEFAULT_WORLD = "delta-real";
 
 /** File name (without `.world.json`) of every world bundled with the game. */
 export function availableWorlds(): string[] {
@@ -11,7 +12,7 @@ export function availableWorlds(): string[] {
 
 /**
  * Loads and validates the world named by `?world=<name>` in the URL
- * (e.g. `?world=delta-real`), or the default Delta.
+ * (e.g. `?world=delta` for the original proof of concept), or the real Delta.
  */
 export function loadWorldFromUrl(search: string = window.location.search): WorldDoc {
   const requested = new URLSearchParams(search).get("world") ?? DEFAULT_WORLD;

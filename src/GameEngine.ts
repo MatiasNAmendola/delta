@@ -123,6 +123,9 @@ export class GameEngine {
       this.world.rules.boatCapacity
     );
 
+    // Start the camera behind the boat instead of flying in from the origin
+    this.updateCamera(0, 0, 0, true);
+
     // Wake effect
     this.wakeEffect = new WakeEffect(this.scene);
 
@@ -370,11 +373,14 @@ export class GameEngine {
 
   private cameraLookTarget = Vector3.Zero();
 
-  private updateCamera(dt: number, angleOffset: number, pitchOffset: number): void {
+  private updateCamera(dt: number, angleOffset: number, pitchOffset: number, snap = false): void {
     // Camera orbits around the boat based on boat rotation + user angle offset
     const cameraAngle = this.boat.rotation + Math.PI + angleOffset;
     const dist = CAMERA_DISTANCE * 0.6;
     const height = CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset;
+    // Snapping (lerp factor 1) jumps straight to the boat, e.g. at spawn
+    const follow = snap ? 1 : CAMERA_LERP;
+    const look = snap ? 1 : CAMERA_LERP * 2;
 
     const targetX = this.boat.position.x + Math.sin(cameraAngle) * dist;
     const targetZ = this.boat.position.z + Math.cos(cameraAngle) * dist;
@@ -382,34 +388,34 @@ export class GameEngine {
     this.camera.position.x = lerp(
       this.camera.position.x,
       targetX,
-      CAMERA_LERP
+      follow
     );
     this.camera.position.z = lerp(
       this.camera.position.z,
       targetZ,
-      CAMERA_LERP
+      follow
     );
     this.camera.position.y = lerp(
       this.camera.position.y,
       height,
-      CAMERA_LERP
+      follow
     );
 
     // Look at boat
     this.cameraLookTarget.x = lerp(
       this.cameraLookTarget.x,
       this.boat.position.x,
-      CAMERA_LERP * 2
+      look
     );
     this.cameraLookTarget.y = lerp(
       this.cameraLookTarget.y,
       this.boat.position.y + 2,
-      CAMERA_LERP * 2
+      look
     );
     this.cameraLookTarget.z = lerp(
       this.cameraLookTarget.z,
       this.boat.position.z,
-      CAMERA_LERP * 2
+      look
     );
     this.camera.setTarget(this.cameraLookTarget);
   }

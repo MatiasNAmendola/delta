@@ -6,6 +6,7 @@ import { parseWorld } from "../src/world/WorldDoc";
 import {
   DEFAULT_OPTIONS,
   clipToSquare,
+  estimateWidthM,
   joinWays,
   osmToWorld,
   project,
@@ -88,6 +89,13 @@ describe("osmToWorld", () => {
     expect(report.droppedUnnamed).toBe(1);
   });
 
+  it("estimates widths from the name when OSM has no width tag", () => {
+    expect(estimateWidthM("river", "Río Paraná de las Palmas")).toBe(600);
+    expect(estimateWidthM("river", "Arroyo Toro")).toBe(35); // arroyos tagged as rivers
+    expect(estimateWidthM("river", "Río Luján")).toBe(150);
+    expect(estimateWidthM("canal", "Zona sin nombre claro")).toBe(40);
+  });
+
   it("uses OSM width tags and default widths, never narrower than playable", () => {
     const lujan = world.rivers.find((r) => r.id === "rio-lujan")!;
     const espera = world.rivers.find((r) => r.id === "arroyo-espera")!;
@@ -96,8 +104,47 @@ describe("osmToWorld", () => {
   });
 
   it("imports named stops inside the world as docks and spawns at the Estación Fluvial", () => {
-    expect(world.docks.map((d) => d.name)).toEqual(["Estación Fluvial Tigre", "Muelle Espera"]);
+    expect(world.docks.map((d) => d.name).slice(0, 2)).toEqual(["Estación Fluvial Tigre", "Muelle Espera"]);
+    expect(report.terminals).toBe(2);
     expect(world.spawn.dock).toBe("estacion-fluvial-tigre");
+  });
+
+  it("starts the boat on the water next to the spawn terminal", () => {
+    const dock = world.docks.find((d) => d.id === world.spawn.dock)!;
+    const [x, z] = [dock.x + world.spawn.offset[0], dock.z + world.spawn.offset[1]];
+    const lujan = world.rivers.find((r) => r.id === "rio-lujan")!;
+    const onLine = lujan.points.slice(1).some((b, i) => {
+      const a = lujan.points[i];
+      const cross = (b[0] - a[0]) * (z - a[1]) - (b[1] - a[1]) * (x - a[0]);
+      const within = Math.min(a[0], b[0]) - 0.01 <= x && x <= Math.max(a[0], b[0]) + 0.01;
+      return within && Math.abs(cross) / Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.05;
+    });
+    expect(onLine).toBe(true);
+  });
+
+  it("adds a stop at the real confluence, on the bank of the main river", () => {
+    const stop = world.docks.find((d) => d.name === "Río Luján y Arroyo Espera")!;
+    expect(stop).toBeDefined();
+    const lujan = world.rivers.find((r) => r.id === "rio-lujan")!;
+    // Distance from the stop to the Luján center line: just past the bank
+    const distToLujan = Math.min(
+      ...lujan.points.slice(1).map((b, i) => {
+        const a = lujan.points[i];
+        const [dx, dz] = [b[0] - a[0], b[1] - a[1]];
+        const t = Math.max(0, Math.min(1, ((stop.x - a[0]) * dx + (stop.z - a[1]) * dz) / (dx * dx + dz * dz)));
+        return Math.hypot(stop.x - (a[0] + t * dx), stop.z - (a[1] + t * dz));
+      })
+    );
+    expect(distToLujan).toBeCloseTo(lujan.width / 2 + 3, 0);
+  });
+
+  it("merges ferry terminals that are next to each other", () => {
+    const cluster = [
+      stop(20, "Estación Fluvial Tigre", -0.1, -3.9),
+      stop(21, "Agencia de Turismo", -0.12, -3.88), // ~30 m away
+    ];
+    const { world: w } = osmToWorld([...elements, ...cluster], base, { id: "x", name: "x", size: 1200 }, { ...DEFAULT_OPTIONS, origin, confluenceStops: 0 });
+    expect(w.docks.map((d) => d.name)).toEqual(["Estación Fluvial Tigre", "Muelle Espera"]);
   });
 
   it("credits OpenStreetMap and scales vegetation to the new area", () => {
