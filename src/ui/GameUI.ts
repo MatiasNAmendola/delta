@@ -283,12 +283,20 @@ export class GameUI {
       <div class="instructions">
         🎮 <b>Objetivo:</b> Navegá por los ríos del Delta recogiendo y dejando pasajeros en las paradas.<br>
         ⭐ Ganá puntos por cada pasajero entregado.<br>
-        ⏱ Tenés 5 minutos para hacer la mayor cantidad de viajes.<br>
+        ⏱ Tenés ${Math.round(this.world.rules.durationSec / 60)} minutos para hacer la mayor cantidad de viajes.<br>
         🗺 Ríos: Luján, Tigre, Sarmiento, Capitán, San Antonio y más.<br>
         📱 En móvil: usá los botones táctiles o el giroscopio para manejar.
       </div>
       <button class="play-btn" id="playBtn">▶ JUGAR</button>
     `;
+    const attribution = this.world.world.attribution;
+    if (attribution) {
+      // Required by the data license (e.g. ODbL for OpenStreetMap)
+      const credit = document.createElement("div");
+      credit.textContent = `Mapa: ${attribution}`;
+      credit.style.cssText = "margin-top:12px;font-size:11px;opacity:0.7";
+      this.startScreenDiv.appendChild(credit);
+    }
     document.body.appendChild(this.startScreenDiv);
   }
 

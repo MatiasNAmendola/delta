@@ -36,6 +36,12 @@ export interface ImportOptions {
   minRiverLength: number;
   /** Keep waterways without a `name` tag. */
   includeUnnamed: boolean;
+  /** Ferry terminals closer than this (meters) are merged into one stop. */
+  stopMergeRadiusM: number;
+  /** Extra stops placed at real confluences of named rivers (0 = none). */
+  confluenceStops: number;
+  /** Minimum distance between stops, in world units. */
+  minStopSpacing: number;
 }
 
 export const DEFAULT_OPTIONS: ImportOptions = {
@@ -44,6 +50,9 @@ export const DEFAULT_OPTIONS: ImportOptions = {
   minRiverWidth: 8,
   minRiverLength: 20,
   includeUnnamed: false,
+  stopMergeRadiusM: 1000,
+  confluenceStops: 12,
+  minStopSpacing: 150,
 };
 
 /** Typical widths (meters) when OSM has no `width` tag. */
@@ -54,6 +63,24 @@ const DEFAULT_WIDTH_M: Record<string, number> = {
   stream: 30,
   ditch: 10,
 };
+
+/**
+ * Width when OSM has no `width` tag. In the Delta many arroyos are tagged
+ * `waterway=river`, so the name is a better hint than the tag.
+ */
+export function estimateWidthM(type: string, name: string): number {
+  if (/^r[ií]o paran[aá]/i.test(name)) return 600;
+  if (/^(arroyo|aguaje|zanja)\b/i.test(name)) return 35;
+  if (/^(canal|pasaje)\b/i.test(name)) return 40;
+  if (/^r[ií]o\b/i.test(name)) return 150;
+  return DEFAULT_WIDTH_M[type] ?? 30;
+}
+
+/** Waterway types worth navigating; e.g. `fairway` (shipping lanes) and `drain` are skipped. */
+const WATERWAY_TYPES = new Set(Object.keys(DEFAULT_WIDTH_M));
+
+/** Upper bound of placement attempts per prefab for big imported worlds. */
+const MAX_SCATTER_ATTEMPTS: Record<string, number> = { tree: 3000, house: 600 };
 
 const M_PER_DEG_LAT = 110_540;
 const M_PER_DEG_LON_EQUATOR = 111_320;
@@ -201,7 +228,7 @@ function dataCenter(elements: OverpassElement[]): LatLon {
 
 export interface ImportResult {
   world: WorldDoc;
-  report: { rivers: number; docks: number; droppedUnnamed: number; droppedShort: number };
+  report: { rivers: number; docks: number; terminals: number; droppedUnnamed: number; droppedShort: number };
 }
 
 /**
@@ -217,13 +244,13 @@ export function osmToWorld(
 ): ImportResult {
   const origin = opts.origin ?? dataCenter(elements);
   const half = world.size / 2;
-  const report = { rivers: 0, docks: 0, droppedUnnamed: 0, droppedShort: 0 };
+  const report = { rivers: 0, docks: 0, terminals: 0, droppedUnnamed: 0, droppedShort: 0 };
 
   // Group waterway ways by name (and type), so connected pieces join up
   const groups = new Map<string, { name: string; type: string; widthM: number | null; ways: LatLon[][] }>();
   for (const el of elements) {
     const type = el.tags?.waterway;
-    if (el.type !== "way" || !type || !el.geometry) continue;
+    if (el.type !== "way" || !type || !WATERWAY_TYPES.has(type) || !el.geometry) continue;
     const name = el.tags?.name?.trim();
     if (!name && !opts.includeUnnamed) {
       report.droppedUnnamed++;
@@ -240,7 +267,7 @@ export function osmToWorld(
   const riverIds = new Set<string>();
   const rivers: River[] = [];
   for (const group of groups.values()) {
-    const widthM = group.widthM ?? DEFAULT_WIDTH_M[group.type] ?? 30;
+    const widthM = group.widthM ?? estimateWidthM(group.type, group.name);
     const width = Math.min(200, Math.max(opts.minRiverWidth, widthM / opts.metersPerUnit));
     for (const chain of joinWays(group.ways)) {
       const projected = chain.map((p) => project(p, origin, opts.metersPerUnit));
@@ -260,27 +287,77 @@ export function osmToWorld(
   rivers.sort((a, b) => b.width - a.width || polylineLength(b.points) - polylineLength(a.points));
 
   const dockIds = new Set<string>();
-  const dockNames = new Set<string>();
   const docks: Dock[] = [];
+  const farFromDocks = (x: number, z: number, minDist: number) =>
+    docks.every((d) => Math.hypot(d.x - x, d.z - z) >= minDist);
+
+  // 1. Real ferry terminals, merging clusters (e.g. tour operators next to the main station)
+  const terminals: Array<{ name: string; x: number; z: number; main: boolean }> = [];
   for (const el of elements) {
     const t = el.tags ?? {};
     const isStop =
       t.amenity === "ferry_terminal" || t.man_made === "pier" ||
       (t.public_transport === "stop_position" && t.ferry === "yes");
     const name = t.name?.trim();
-    if (!isStop || !name || dockNames.has(name)) continue;
+    if (!isStop || !name) continue;
     const point = elementPoint(el);
     if (!point) continue;
     const [x, z] = project(point, origin, opts.metersPerUnit);
     if (Math.abs(x) > half || Math.abs(z) > half) continue;
-    dockNames.add(name);
-    docks.push({ id: uniqueId(slugify(name), dockIds), name, x: round2(x), z: round2(z), rotationDeg: 0 });
+    terminals.push({ name, x, z, main: /estaci[oó]n fluvial/i.test(name) });
+  }
+  terminals.sort((a, b) => Number(b.main) - Number(a.main));
+  const mergeDist = opts.stopMergeRadiusM / opts.metersPerUnit;
+  for (const term of terminals) {
+    if (!farFromDocks(term.x, term.z, mergeDist)) continue;
+    docks.push({ id: uniqueId(slugify(term.name), dockIds), name: term.name, x: round2(term.x), z: round2(term.z), rotationDeg: 0 });
+  }
+  report.terminals = docks.length;
+
+  // 2. Stops at real confluences: where a named river ends on another named river
+  if (opts.confluenceStops > 0) {
+    // Farthest-point sampling weighted by importance: spreads stops over the
+    // whole map instead of crowding the river with the most tributaries
+    const candidates = findConfluences(rivers);
+    const maxScore = Math.max(1, ...candidates.map((c) => c.score));
+    const minDistToDocks = (c: Confluence) =>
+      docks.length === 0 ? Infinity : Math.min(...docks.map((d) => Math.hypot(d.x - c.x, d.z - c.z)));
+    for (let placed = 0; placed < opts.confluenceStops; placed++) {
+      let best: Confluence | null = null;
+      let bestValue = -Infinity;
+      for (const c of candidates) {
+        const dist = minDistToDocks(c);
+        if (dist < opts.minStopSpacing) continue;
+        const value = Math.min(dist, half) * Math.sqrt(c.score / maxScore);
+        if (value > bestValue) {
+          bestValue = value;
+          best = c;
+        }
+      }
+      if (!best) break;
+      const c = best;
+      docks.push({
+        id: uniqueId(slugify(c.name), dockIds),
+        name: c.name,
+        x: round2(c.x),
+        z: round2(c.z),
+        rotationDeg: round2(c.rotationDeg),
+      });
+    }
   }
 
   if (rivers.length === 0) throw new Error("No waterways found inside the world bounds");
   if (docks.length === 0) throw new Error("No named ferry terminals or piers found inside the world bounds");
 
   const spawnDock = docks.find((d) => /estaci[oó]n fluvial/i.test(d.name)) ?? docks[0];
+  // Terminals sit on the bank: start the boat on the nearest river center line
+  const nearestWater = rivers
+    .map((r) => nearestOnPolyline([spawnDock.x, spawnDock.z], r.points))
+    .reduce((a, b) => (b.distance < a.distance ? b : a));
+  const spawnOffset: Vec2 = [
+    round2(nearestWater.point[0] - spawnDock.x),
+    round2(nearestWater.point[1] - spawnDock.z),
+  ];
   const areaFactor = (world.size / base.world.size) ** 2;
 
   const doc = {
@@ -288,14 +365,79 @@ export function osmToWorld(
     version: "0.1",
     world: { ...world, attribution: "© OpenStreetMap contributors, ODbL 1.0" },
     rules: base.rules,
-    spawn: { dock: spawnDock.id, offset: [0, 0] as Vec2 },
+    spawn: { dock: spawnDock.id, offset: spawnOffset },
     rivers,
     docks,
-    scatter: base.scatter.map((s) => ({ ...s, attempts: Math.min(5000, Math.round(s.attempts * areaFactor)) })),
+    // Same vegetation density as the base world, capped so cheap phones cope
+    scatter: base.scatter.map((s) => ({
+      ...s,
+      attempts: Math.min(MAX_SCATTER_ATTEMPTS[s.prefab] ?? 2000, Math.round(s.attempts * areaFactor)),
+    })),
   };
   report.rivers = rivers.length;
   report.docks = docks.length;
   return { world: parseWorld(doc), report };
+}
+
+interface Confluence {
+  name: string;
+  x: number;
+  z: number;
+  rotationDeg: number;
+  score: number;
+}
+
+/**
+ * A confluence is an endpoint of one river lying on another river. The stop
+ * is moved from the water onto the bank of the wider river and faces it.
+ */
+export function findConfluences(rivers: River[]): Confluence[] {
+  const out: Confluence[] = [];
+  const seen = new Set<string>();
+  for (const trib of rivers) {
+    for (const end of [trib.points[0], trib.points[trib.points.length - 1]]) {
+      for (const main of rivers) {
+        if (main === trib || main.name === trib.name) continue;
+        const hit = nearestOnPolyline(end, main.points);
+        if (hit.distance > main.width / 2 + trib.width / 2) continue;
+        const key = [main.name, trib.name].sort().join("|");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        // Bank offset: perpendicular to the main river, away from the tributary side
+        const [dx, dz] = hit.direction;
+        let nx = -dz, nz = dx;
+        const side = (end[0] - hit.point[0]) * nx + (end[1] - hit.point[1]) * nz;
+        if (side > 0) { nx = -nx; nz = -nz; }
+        const off = main.width / 2 + 3;
+        out.push({
+          name: `${main.name} y ${trib.name}`,
+          x: hit.point[0] + nx * off,
+          z: hit.point[1] + nz * off,
+          rotationDeg: (Math.atan2(dx, dz) * 180) / Math.PI,
+          // Cap the main river so the huge Paraná does not take every stop
+          score: Math.min(main.width, 20) + trib.width,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function nearestOnPolyline(p: Vec2, line: Vec2[]): { point: Vec2; direction: Vec2; distance: number } {
+  let best = { point: line[0], direction: [1, 0] as Vec2, distance: Infinity };
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1], b = line[i];
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    const len2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / len2));
+    const q: Vec2 = [a[0] + t * dx, a[1] + t * dz];
+    const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+    if (d < best.distance) {
+      const len = Math.sqrt(len2);
+      best = { point: q, direction: [dx / len, dz / len], distance: d };
+    }
+  }
+  return best;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

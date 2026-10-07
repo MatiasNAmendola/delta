@@ -200,7 +200,8 @@ export class Environment {
   /** Generate a splatmap DynamicTexture based on river proximity.
    *  R = grass (far from water), G = dirt (medium), B = sand (near water) */
   private generateSplatmap(waterSystem: WaterSystem): DynamicTexture {
-    const size = 256;
+    // ~3 world units per texel (256 for the original 800-unit Delta)
+    const size = this.world.world.size <= 800 ? 256 : 1024;
     const tex = new DynamicTexture("splatmap", size, this.scene, false);
     const ctx = tex.getContext();
 

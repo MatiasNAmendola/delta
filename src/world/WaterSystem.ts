@@ -20,7 +20,8 @@ export class WaterSystem {
   private waterMaterial: WaterMaterial | null = null;
   private time = 0;
   private riverCollisionMap: boolean[][] = [];
-  private mapResolution = 400;
+  /** Water lookup grid cells per side: ~2 world units per cell (400 for the original 800-unit Delta). */
+  private mapResolution: number;
 
   // Meshes to add to the water render list (reflection/refraction)
   private renderListMeshes: Mesh[] = [];
@@ -28,6 +29,7 @@ export class WaterSystem {
   constructor(scene: Scene, world: WorldDoc) {
     this.scene = scene;
     this.world = world;
+    this.mapResolution = Math.min(1600, Math.max(400, Math.round(world.world.size / 2)));
     this.buildCollisionMap();
     this.createBumpTexture();
     this.createRiverMeshes();
