@@ -10,37 +10,43 @@ cursos de agua reales (ríos, canales, arroyos) y paradas reales (terminales flu
 
 ## Estado actual
 
-El juego ya arranca en el **Delta real** (`src/world/data/delta-real.world.json`); la prueba de concepto
+El juego arranca en el **Delta real** (`src/world/data/delta-real.world.json`); la prueba de concepto
 dibujada a mano sigue disponible con `?world=delta`.
 
-- **114 cursos de agua reales** de la Primera Sección: Luján, Tigre, Sarmiento, Capitán, San Antonio,
-  Abra Vieja, Paraná de las Palmas, Reconquista y más de 100 arroyos y canales.
-- **16 paradas:** 4 terminales reales de OSM (Estación Fluvial Domingo F. Sarmiento, Tres Bocas, Muelle
-  Municipal Tamarindo, Sturla) y 12 paradas ubicadas en **confluencias reales** (p. ej. "Río Capitán y Arroyo
-  Capitán Viejo"). La geografía es real; esas 12 paradas son una aproximación porque los muelles numerados de
-  la lancha colectiva no están cargados en OSM.
-- Escala 1:8: el mundo mide 2.800 unidades (unos 22 km reales). Draw calls por frame: ~51.
-- Datos: exportación de HOT basada en el snapshot de Geofabrik del 10-05-2026.
+- **114 cursos de agua reales** de la Primera Sección (Luján, Tigre, Sarmiento, Capitán, San Antonio,
+  Abra Vieja, Paraná de las Palmas, Reconquista y más de 100 arroyos y canales).
+- **215 áreas de agua con su forma real** (polígonos de OSM con las islas como huecos): el ancho verdadero de
+  los ríos, las dársenas y marinas de Tigre, el Arroyo Espera, etc. 8.591 vértices, muy por debajo del
+  presupuesto de 60.000 que valida el World Doc.
+- **16 paradas:** 4 terminales reales (Estación Fluvial Domingo F. Sarmiento, Tres Bocas, Muelle Municipal
+  Tamarindo, Sturla) y 12 en **confluencias reales**. Los muelles numerados de la colectiva no están en OSM.
+- Escala 1:8: mundo de 2.800 unidades (~22 km reales). ~46 draw calls por frame.
+- El agua navegable es la unión de líneas centrales y polígonos. Las áreas se dibujan en una sola malla; las
+  franjas de los ríos se dibujan solo donde no hay polígono, para no superponer dos superficies de agua.
 
-## Uso
+## Actualizar el mapa
 
 ```bash
-scripts/osm/fetch-delta.sh        # datos frescos desde la Overpass API
-# o, si Overpass no es accesible (como en el entorno en la nube):
-scripts/osm/fetch-hot.sh          # exportación de Humanitarian OpenStreetMap Team (S3)
-
-npm run world:import -- --origin -34.35,-58.54 --size 2800   # genera src/world/data/delta-real.world.json
-npm run dev
+npm run map:update                     # descarga, reconstruye, valida y muestra qué cambió
+npm run map:update -- --source hot     # forzar la exportación de HOT (o --source overpass)
+npm run dev                            # revisar en http://localhost:3000/delta/?view=aerial
 ```
 
-Las dos descargas dejan el mismo archivo, `scripts/osm/delta-tigre.overpass.json`, que queda versionado para
-que el mundo se pueda regenerar sin red.
+`map:update` intenta primero la Overpass API (datos al minuto) y, si no responde, usa la exportación de
+Humanitarian OpenStreetMap Team (actualizada periódicamente desde Geofabrik). La zona, el centro, la escala y el
+tamaño están en `scripts/osm/delta.config.json`. Al final imprime el resumen: ríos, paradas y áreas antes y
+después, con los nombres nuevos o eliminados.
 
-- La zona por defecto es la Primera Sección de islas (`-34.43,-58.66` a `-34.27,-58.42`); se puede pasar otra:
-  `scripts/osm/fetch-delta.sh <sur> <oeste> <norte> <este>`.
-- `--scale 8` (por defecto) achica el mapa 8 veces: el Delta real, de unos 20 km, queda en un mundo de unas 2.600
-  unidades, que la lancha cruza en un par de minutos. Con `--scale 1` es tamaño real.
-- `--unnamed` incluye arroyos sin nombre en OSM (por defecto se descartan).
+**Desde GitHub, sin máquina local:** pestaña *Actions* → *Update map from OpenStreetMap* → *Run workflow*.
+Corre lo mismo y abre un pull request con los cambios para revisarlos antes de mezclar. (Requiere que el repo
+permita a GitHub Actions crear pull requests: *Settings → Actions → General → Workflow permissions*.)
+
+`?view=aerial` pone la cámara alta sobre la lancha para revisar la forma del mapa.
+
+### Pasos sueltos (si hace falta)
+
+- `scripts/osm/fetch-delta.sh` / `scripts/osm/fetch-hot.sh`: solo descargar (dejan `scripts/osm/delta-tigre.overpass.json`).
+- `npm run world:import -- --origin -34.35,-58.54 --size 2800`: solo reconstruir el mundo.
 
 ## Qué hace el importador (`scripts/osm/osmToWorld.ts`)
 
@@ -50,14 +56,15 @@ que el mundo se pueda regenerar sin red.
 4. Ancho: usa la etiqueta `width` de OSM si existe; si no, un ancho típico por tipo (río 150 m, canal 40 m,
    arroyo 30 m), nunca menor que lo navegable por la lancha.
 5. Muelles: terminales fluviales, muelles con nombre y paradas de lancha. La lancha arranca en la Estación Fluvial.
-6. Valida el resultado con el mismo validador del juego.
+6. Áreas de agua: arma los multipolígonos (anillos exteriores e islas), los recorta al mundo, los simplifica
+   y descarta piezas e islas diminutas; solo agua navegable (ríos, canales, dársenas), no estanques ni humedales.
+7. Valida el resultado con el mismo validador del juego.
 
 ## Limitaciones conocidas
 
-- El Río Carapachay y el Arroyo Espera no están mapeados en OSM como línea (solo como polígono de agua),
-  así que todavía no aparecen. Se resuelve importando los polígonos `natural=water` (siguiente etapa).
+- El Río Carapachay no tiene nombre ni en las líneas ni en los polígonos de la exportación de HOT; su agua
+  aparece (polígono sin nombre) pero el juego no muestra su nombre. Se puede corregir en OpenStreetMap mismo.
+- HOT exporta pocas relaciones multipolígono; con la Overpass API (`--source overpass`) se obtienen todas.
 - 174 tramos sin nombre se descartan para no llenar el mapa de zanjas; `--unnamed` los incluye.
 
-- Los ríos se dibujan como franjas de ancho fijo sobre su línea central. El contorno real de las orillas
-  (polígonos `natural=water`) queda para una segunda etapa.
 - La cobertura de paradas en OSM puede ser incompleta; se pueden agregar a mano en el JSON.

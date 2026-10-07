@@ -1,7 +1,9 @@
 /// <reference types="vite/client" />
 import { parseWorld, type WorldDoc } from "./WorldDoc";
 
-const worlds = import.meta.glob<{ default: unknown }>("./data/*.world.json", { eager: true });
+// Lazy: each world is its own chunk, downloaded only when chosen
+const worlds = import.meta.glob<{ default: unknown }>("./data/*.world.json");
+
 /** The real Delta (OpenStreetMap). The hand-drawn proof of concept stays available as `?world=delta`. */
 const DEFAULT_WORLD = "delta-real";
 
@@ -14,12 +16,12 @@ export function availableWorlds(): string[] {
  * Loads and validates the world named by `?world=<name>` in the URL
  * (e.g. `?world=delta` for the original proof of concept), or the real Delta.
  */
-export function loadWorldFromUrl(search: string = window.location.search): WorldDoc {
+export async function loadWorldFromUrl(search: string = window.location.search): Promise<WorldDoc> {
   const requested = new URLSearchParams(search).get("world") ?? DEFAULT_WORLD;
-  const mod = worlds[`./data/${requested}.world.json`];
-  if (!mod) {
+  let load = worlds[`./data/${requested}.world.json`];
+  if (!load) {
     console.warn(`World "${requested}" not found. Available: ${availableWorlds().join(", ")}`);
-    return parseWorld(worlds[`./data/${DEFAULT_WORLD}.world.json`].default);
+    load = worlds[`./data/${DEFAULT_WORLD}.world.json`];
   }
-  return parseWorld(mod.default);
+  return parseWorld((await load()).default);
 }

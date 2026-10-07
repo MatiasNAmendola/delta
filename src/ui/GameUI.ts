@@ -156,14 +156,41 @@ export class GameUI {
     this.drawMinimapBase();
   }
 
+  /** Static minimap layer (land, water, docks), rendered once and reused every frame. */
+  private minimapBase: HTMLCanvasElement | null = null;
+
   private drawMinimapBase(): void {
-    const ctx = this.minimapCtx;
+    if (!this.minimapBase) {
+      this.minimapBase = document.createElement("canvas");
+      this.minimapBase.width = 120;
+      this.minimapBase.height = 120;
+      this.renderMinimapBase(this.minimapBase.getContext("2d")!);
+    }
+    this.minimapCtx.clearRect(0, 0, 120, 120);
+    this.minimapCtx.drawImage(this.minimapBase, 0, 0);
+  }
+
+  private renderMinimapBase(ctx: CanvasRenderingContext2D): void {
     const w = 120;
     const h = 120;
+    const size = this.world.world.size;
+    const mx = (x: number) => ((x + size / 2) / size) * w;
+    const my = (z: number) => ((z + size / 2) / size) * h;
 
     // Background (land)
     ctx.fillStyle = "#2a5a35";
     ctx.fillRect(0, 0, w, h);
+
+    // Real water shapes; islands (holes) cut out with the even-odd rule
+    ctx.fillStyle = "#4a9a7a";
+    for (const area of this.world.waterAreas ?? []) {
+      ctx.beginPath();
+      for (const ring of [area.outer, ...area.holes]) {
+        ring.forEach(([x, z], i) => (i === 0 ? ctx.moveTo(mx(x), my(z)) : ctx.lineTo(mx(x), my(z))));
+        ctx.closePath();
+      }
+      ctx.fill("evenodd");
+    }
 
     // Draw rivers
     ctx.strokeStyle = "#4a9a7a";

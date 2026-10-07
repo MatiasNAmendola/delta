@@ -11,7 +11,18 @@ import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTextur
 import { WaterMaterial } from "@babylonjs/materials/water/waterMaterial";
 import { WATER_LEVEL, COLORS } from "../utils/constants";
 import type { River, WorldDoc } from "./WorldDoc";
+import {
+  createGrid,
+  isSet,
+  rasterizeAreas,
+  riverCoverage,
+  triangulateAreas,
+  type WaterGrid,
+} from "./waterGeometry";
 import { getPointOnPath, hexToColor3 } from "../utils/helpers";
+
+/** Rivers this much inside water areas are not drawn as strips. */
+const STRIP_SKIP_COVERAGE = 0.7;
 
 export class WaterSystem {
   private scene: Scene;
@@ -19,7 +30,9 @@ export class WaterSystem {
   private waterMeshes: Mesh[] = [];
   private waterMaterial: WaterMaterial | null = null;
   private time = 0;
-  private riverCollisionMap: boolean[][] = [];
+  private waterGrid!: WaterGrid;
+  /** Cells covered by water areas only (null when the world has none). */
+  private areaGrid: WaterGrid | null = null;
   /** Water lookup grid cells per side: ~2 world units per cell (400 for the original 800-unit Delta). */
   private mapResolution: number;
 
@@ -38,9 +51,8 @@ export class WaterSystem {
 
   private buildCollisionMap(): void {
     const res = this.mapResolution;
-    this.riverCollisionMap = Array.from({ length: res }, () =>
-      new Array(res).fill(false)
-    );
+    const size = this.world.world.size;
+    this.waterGrid = createGrid(size, res);
 
     for (const river of this.world.rivers) {
       const samples = river.points.length * 20;
@@ -49,36 +61,33 @@ export class WaterSystem {
         const [rx, rz] = getPointOnPath(river.points, t);
         const halfW = river.width / 2 + 2;
 
-        const minX = Math.floor(
-          ((rx - halfW + this.world.world.size / 2) / this.world.world.size) * res
-        );
-        const maxX = Math.ceil(
-          ((rx + halfW + this.world.world.size / 2) / this.world.world.size) * res
-        );
-        const minZ = Math.floor(
-          ((rz - halfW + this.world.world.size / 2) / this.world.world.size) * res
-        );
-        const maxZ = Math.ceil(
-          ((rz + halfW + this.world.world.size / 2) / this.world.world.size) * res
-        );
+        const minX = Math.floor(((rx - halfW + size / 2) / size) * res);
+        const maxX = Math.ceil(((rx + halfW + size / 2) / size) * res);
+        const minZ = Math.floor(((rz - halfW + size / 2) / size) * res);
+        const maxZ = Math.ceil(((rz + halfW + size / 2) / size) * res);
 
-        for (let gx = minX; gx <= maxX; gx++) {
-          for (let gz = minZ; gz <= maxZ; gz++) {
-            if (gx >= 0 && gx < res && gz >= 0 && gz < res) {
-              this.riverCollisionMap[gx][gz] = true;
-            }
+        for (let gx = Math.max(0, minX); gx <= Math.min(res - 1, maxX); gx++) {
+          for (let gz = Math.max(0, minZ); gz <= Math.min(res - 1, maxZ); gz++) {
+            this.waterGrid.cells[gx * res + gz] = 1;
           }
         }
       }
     }
+
+    // Real water shapes (OSM polygons): navigable water = rivers ∪ areas
+    const areas = this.world.waterAreas ?? [];
+    if (areas.length > 0) {
+      this.areaGrid = createGrid(size, res);
+      rasterizeAreas(this.areaGrid, areas);
+      const cells = this.waterGrid.cells;
+      this.areaGrid.cells.forEach((wet, i) => {
+        if (wet) cells[i] = 1;
+      });
+    }
   }
 
   public isWater(worldX: number, worldZ: number): boolean {
-    const res = this.mapResolution;
-    const gx = Math.floor(((worldX + this.world.world.size / 2) / this.world.world.size) * res);
-    const gz = Math.floor(((worldZ + this.world.world.size / 2) / this.world.world.size) * res);
-    if (gx < 0 || gx >= res || gz < 0 || gz >= res) return false;
-    return this.riverCollisionMap[gx][gz];
+    return isSet(this.waterGrid, worldX, worldZ);
   }
 
   /**
@@ -273,10 +282,42 @@ export class WaterSystem {
     this.waterMaterial.disableClipPlane = false;
 
     // Create river strip meshes using the shared WaterMaterial
+    if (this.world.waterAreas && this.world.waterAreas.length > 0) {
+      this.waterMeshes.push(this.createWaterAreasMesh());
+    }
     for (const river of this.world.rivers) {
+      // A river already drawn by its real polygon would overlap (and flicker)
+      if (this.areaGrid && riverCoverage(river, this.areaGrid) >= STRIP_SKIP_COVERAGE) continue;
       const mesh = this.createRiverStrip(river);
       this.waterMeshes.push(mesh);
     }
+  }
+
+  /** All water areas as one triangulated mesh: a single draw call. */
+  private createWaterAreasMesh(): Mesh {
+    const { vertices, indices } = triangulateAreas(this.world.waterAreas ?? []);
+    const count = vertices.length / 2;
+    const positions = new Float32Array(count * 3);
+    const normals = new Float32Array(count * 3);
+    const uvs = new Float32Array(count * 2);
+    for (let i = 0; i < count; i++) {
+      const x = vertices[i * 2];
+      const z = vertices[i * 2 + 1];
+      positions.set([x, WATER_LEVEL + 0.04, z], i * 3);
+      normals.set([0, 1, 0], i * 3);
+      uvs.set([x / 20, z / 20], i * 2);
+    }
+    const mesh = new Mesh("waterAreas", this.scene);
+    const vertexData = new VertexData();
+    vertexData.positions = positions;
+    vertexData.indices = indices;
+    vertexData.normals = normals;
+    vertexData.uvs = uvs;
+    vertexData.applyToMesh(mesh);
+    mesh.material = this.waterMaterial;
+    mesh.isPickable = false;
+    mesh.freezeWorldMatrix();
+    return mesh;
   }
 
   private createRiverStrip(river: River): Mesh {

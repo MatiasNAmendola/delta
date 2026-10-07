@@ -17,7 +17,7 @@ import {
   CAMERA_DISTANCE,
   CAMERA_LERP,
 } from "./utils/constants";
-import { findDock, type Dock, type WorldDoc } from "./world/WorldDoc";
+import { findDock, type Dock, type WaterArea, type WorldDoc } from "./world/WorldDoc";
 import { distance2D, lerp } from "./utils/helpers";
 import {
   defaultPolicy,
@@ -66,6 +66,10 @@ export class GameEngine {
     this.resolution = { level: this.resolutionPolicy.minLevel, goodWindows: 0 };
     this.engine.setHardwareScalingLevel(this.resolution.level);
 
+    this.namedAreas = (this.world.waterAreas ?? [])
+      .filter((a) => a.name)
+      .map((a) => ({ area: a, bounds: ringBounds(a.outer) }));
+
     this.init();
   }
 
@@ -81,7 +85,7 @@ export class GameEngine {
     );
     this.camera.setTarget(Vector3.Zero());
     this.camera.minZ = 0.5;
-    this.camera.maxZ = 800;
+    this.camera.maxZ = this.aerialView ? 3000 : 800;
 
     // Lighting
     const ambient = new HemisphericLight(
@@ -122,6 +126,8 @@ export class GameEngine {
       startDock.z + offsetZ,
       this.world.rules.boatCapacity
     );
+
+    if (this.aerialView) this.scene.fogEnabled = false;
 
     // Start the camera behind the boat instead of flying in from the origin
     this.updateCamera(0, 0, 0, true);
@@ -376,8 +382,9 @@ export class GameEngine {
   private updateCamera(dt: number, angleOffset: number, pitchOffset: number, snap = false): void {
     // Camera orbits around the boat based on boat rotation + user angle offset
     const cameraAngle = this.boat.rotation + Math.PI + angleOffset;
-    const dist = CAMERA_DISTANCE * 0.6;
-    const height = CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset;
+    // `?view=aerial`: high bird's-eye camera to review the map (e.g. after a map update)
+    const dist = this.aerialView ? 300 : CAMERA_DISTANCE * 0.6;
+    const height = this.aerialView ? 450 : CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset;
     // Snapping (lerp factor 1) jumps straight to the boat, e.g. at spawn
     const follow = snap ? 1 : CAMERA_LERP;
     const look = snap ? 1 : CAMERA_LERP * 2;
@@ -421,9 +428,9 @@ export class GameEngine {
   }
 
   private updateLocationName(): void {
-    // Find nearest river
-    let nearestRiver = "Delta de Tigre";
-    let minDist = Infinity;
+    // Inside a named water area (real OSM shape)? That name wins
+    let nearestRiver = this.namedAreaAt(this.boat.position.x, this.boat.position.z) ?? "Delta de Tigre";
+    let minDist = nearestRiver === "Delta de Tigre" ? Infinity : -1;
 
     for (const river of this.world.rivers) {
       for (const point of river.points) {
@@ -448,8 +455,38 @@ export class GameEngine {
     }
   }
 
+  private readonly aerialView = new URLSearchParams(window.location.search).get("view") === "aerial";
+  private namedAreas: Array<{ area: WaterArea; bounds: [number, number, number, number] }> = [];
+
+  private namedAreaAt(x: number, z: number): string | null {
+    for (const { area, bounds } of this.namedAreas) {
+      if (x < bounds[0] || x > bounds[2] || z < bounds[1] || z > bounds[3]) continue;
+      if (pointInRing(x, z, area.outer) && !area.holes.some((h) => pointInRing(x, z, h))) return area.name!;
+    }
+    return null;
+  }
+
   private endGame(): void {
     this.gameOver = true;
     this.ui.showEndScreen(this.score, this.totalDelivered);
   }
+}
+
+function ringBounds(ring: [number, number][]): [number, number, number, number] {
+  let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+  for (const [x, z] of ring) {
+    minX = Math.min(minX, x); minZ = Math.min(minZ, z);
+    maxX = Math.max(maxX, x); maxZ = Math.max(maxZ, z);
+  }
+  return [minX, minZ, maxX, maxZ];
+}
+
+function pointInRing(x: number, z: number, ring: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ax, az] = ring[i];
+    const [bx, bz] = ring[j];
+    if ((az > z) !== (bz > z) && x < ((bx - ax) * (z - az)) / (bz - az) + ax) inside = !inside;
+  }
+  return inside;
 }

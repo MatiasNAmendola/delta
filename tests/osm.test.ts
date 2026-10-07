@@ -5,7 +5,10 @@ import deltaWorld from "../src/world/data/delta.world.json";
 import { parseWorld } from "../src/world/WorldDoc";
 import {
   DEFAULT_OPTIONS,
+  clipRingToSquare,
   clipToSquare,
+  elementPolygons,
+  ringArea,
   estimateWidthM,
   joinWays,
   osmToWorld,
@@ -151,5 +154,54 @@ describe("osmToWorld", () => {
     expect(world.world.attribution).toMatch(/OpenStreetMap/);
     const factor = (1200 / 800) ** 2;
     expect(world.scatter[0].attempts).toBe(Math.round(600 * factor));
+  });
+});
+
+describe("water polygons", () => {
+  const ll = (dLatKm: number, dLonKm: number) => ({ lat: origin.lat + dLatKm * KM_LAT, lon: origin.lon + dLonKm * KM_LON });
+  const square = (c: [number, number], halfKm: number) => {
+    const ring = [
+      ll(c[0] - halfKm, c[1] - halfKm), ll(c[0] - halfKm, c[1] + halfKm),
+      ll(c[0] + halfKm, c[1] + halfKm), ll(c[0] + halfKm, c[1] - halfKm),
+    ];
+    return [...ring, ring[0]]; // OSM closes rings by repeating the first node
+  };
+
+  it("assembles Overpass multipolygon relations: split outer ways, islands as holes", () => {
+    const outer = square([0, 0], 1);
+    const relation: OverpassElement = {
+      type: "relation",
+      id: 1,
+      tags: { natural: "water", water: "river" },
+      members: [
+        { type: "way", role: "outer", geometry: outer.slice(0, 3) },
+        { type: "way", role: "outer", geometry: outer.slice(2) },
+        { type: "way", role: "inner", geometry: square([0, 0], 0.2) },
+      ],
+    };
+    const polys = elementPolygons(relation);
+    expect(polys).toHaveLength(1);
+    expect(polys[0]).toHaveLength(2); // outer + 1 island
+    expect(polys[0][0]).toHaveLength(4); // closing node removed
+  });
+
+  it("clips rings to the world square", () => {
+    const clipped = clipRingToSquare([[-20, -20], [20, -20], [20, 20], [-20, 20]], 10);
+    expect(ringArea(clipped)).toBeCloseTo(400, 6);
+  });
+
+  it("imports navigable water areas, skips ponds and drops tiny islands", () => {
+    const elements: OverpassElement[] = [
+      way(1, { waterway: "river", name: "Río Luján" }, [[0, -4], [0, 4]]),
+      stop(10, "Estación Fluvial Tigre", -0.1, -3.9),
+      { type: "area", id: 2, tags: { natural: "water", water: "river", name: "Río Luján" }, rings: [square([0, 0], 1), square([0.5, 0.5], 0.005)] },
+      { type: "area", id: 3, tags: { natural: "water", water: "pond" }, rings: [square([2, 2], 0.3)] },
+    ];
+    const { world, report } = osmToWorld(elements, parseWorld(deltaWorld), { id: "t", name: "t", size: 1200 }, { ...DEFAULT_OPTIONS, origin });
+    expect(report.waterAreas).toBe(1);
+    const area = world.waterAreas![0];
+    expect(area.name).toBe("Río Luján");
+    expect(area.holes).toHaveLength(0); // a 10 m island is below minWaterAreaSize
+    expect(ringArea(area.outer)).toBeCloseTo(250 * 250, -2); // 2 km square at 8 m/unit
   });
 });

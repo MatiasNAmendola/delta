@@ -33,7 +33,13 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   // Start the game
-  new GameEngine(canvas, loadWorldFromUrl());
+  loadWorldFromUrl()
+    .then((world) => new GameEngine(canvas, world))
+    .catch((error) => {
+      console.error("Could not load the world:", error);
+      const text = document.getElementById("loadingText");
+      if (text) text.textContent = "No se pudo cargar el mundo 😕";
+    });
 
   // Register service worker for PWA
   if ("serviceWorker" in navigator) {

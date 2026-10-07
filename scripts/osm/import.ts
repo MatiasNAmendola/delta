@@ -42,5 +42,6 @@ writeFileSync(output, json + "\n");
 console.log(
   `World written to ${output}\n` +
     `  rivers: ${report.rivers} · docks: ${report.docks} (${report.terminals} real terminals) · ` +
+    `water areas: ${report.waterAreas} (${report.waterAreaVertices} vertices) · ` +
     `dropped unnamed: ${report.droppedUnnamed} · dropped short: ${report.droppedShort}`
 );

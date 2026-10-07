@@ -1,0 +1,62 @@
+name: Update map from OpenStreetMap
+
+# Run it from the Actions tab ("Run workflow") whenever the map needs a refresh.
+# It rebuilds src/world/data/delta-real.world.json and opens a pull request
+# with the changes, so they can be reviewed (e.g. with ?view=aerial) before merging.
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Data source: auto (Overpass, fallback HOT), overpass or hot"
+        required: false
+        default: auto
+        type: choice
+        options: [auto, overpass, hot]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Update map
+        run: npm run map:update -- --source "${{ inputs.source }}" | tee map-update.log
+
+      - name: Open pull request with the changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- src/world/data scripts/osm/delta-tigre.overpass.json; then
+            echo "The map is already up to date."
+            exit 0
+          fi
+          BRANCH="map-update/${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add src/world/data scripts/osm/delta-tigre.overpass.json
+          git commit -m "chore(map): update the real Delta from OpenStreetMap"
+          git push -u origin "$BRANCH"
+          {
+            echo "Automatic map update from OpenStreetMap (source: \`${{ inputs.source }}\`)."
+            echo
+            echo '```'
+            grep -A6 "^Map updated" map-update.log || true
+            echo '```'
+            echo
+            echo "Review it in the game with \`?view=aerial\` before merging."
+            echo "Map data © OpenStreetMap contributors, ODbL 1.0."
+          } > pr-body.md
+          gh pr create --base "${{ github.ref_name }}" --head "$BRANCH" \
+            --title "Update the real Delta map from OpenStreetMap" --body-file pr-body.md
