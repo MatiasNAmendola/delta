@@ -1,11 +1,5 @@
 import { Scene } from "@babylonjs/core/scene";
-import {
-  GAME_DURATION,
-  MAX_PASSENGERS,
-  DOCK_LOCATIONS,
-  RIVER_MAP,
-  WORLD_SIZE,
-} from "../utils/constants";
+import type { WorldDoc } from "../world/WorldDoc";
 import { LanchaColectiva } from "../boat/LanchaColectiva";
 import { getPointOnPath } from "../utils/helpers";
 
@@ -22,7 +16,7 @@ export class GameUI {
   private startScreenDiv: HTMLDivElement | null = null;
   private endScreenDiv: HTMLDivElement | null = null;
 
-  constructor(private scene: Scene) {
+  constructor(private scene: Scene, private world: WorldDoc) {
     this.createHUD();
     this.createMinimap();
     this.showStartScreen();
@@ -121,7 +115,7 @@ export class GameUI {
         </div>
         <div class="hud-item">
           <span class="icon">👥</span>
-          <span id="hud-passengers">0/${MAX_PASSENGERS}</span>
+          <span id="hud-passengers">0/${this.world.rules.boatCapacity}</span>
         </div>
         <div class="hud-item">
           <span class="icon">⏱</span>
@@ -175,15 +169,15 @@ export class GameUI {
     ctx.strokeStyle = "#4a9a7a";
     ctx.lineWidth = 2;
 
-    for (const river of RIVER_MAP) {
+    for (const river of this.world.rivers) {
       ctx.beginPath();
-      ctx.lineWidth = Math.max(1, (river.width / WORLD_SIZE) * w * 0.8);
+      ctx.lineWidth = Math.max(1, (river.width / this.world.world.size) * w * 0.8);
 
       for (let i = 0; i <= 20; i++) {
         const t = i / 20;
         const [rx, rz] = getPointOnPath(river.points, t);
-        const mx = ((rx + WORLD_SIZE / 2) / WORLD_SIZE) * w;
-        const my = ((rz + WORLD_SIZE / 2) / WORLD_SIZE) * h;
+        const mx = ((rx + this.world.world.size / 2) / this.world.world.size) * w;
+        const my = ((rz + this.world.world.size / 2) / this.world.world.size) * h;
 
         if (i === 0) ctx.moveTo(mx, my);
         else ctx.lineTo(mx, my);
@@ -192,9 +186,9 @@ export class GameUI {
     }
 
     // Draw docks
-    for (const dock of DOCK_LOCATIONS) {
-      const dx = ((dock.x + WORLD_SIZE / 2) / WORLD_SIZE) * w;
-      const dy = ((dock.z + WORLD_SIZE / 2) / WORLD_SIZE) * h;
+    for (const dock of this.world.docks) {
+      const dx = ((dock.x + this.world.world.size / 2) / this.world.world.size) * w;
+      const dy = ((dock.z + this.world.world.size / 2) / this.world.world.size) * h;
       ctx.fillStyle = "#e8d5a3";
       ctx.fillRect(dx - 1.5, dy - 1.5, 3, 3);
     }
@@ -209,8 +203,8 @@ export class GameUI {
     const h = 120;
 
     // Draw boat position
-    const bx = ((boatX + WORLD_SIZE / 2) / WORLD_SIZE) * w;
-    const by = ((boatZ + WORLD_SIZE / 2) / WORLD_SIZE) * h;
+    const bx = ((boatX + this.world.world.size / 2) / this.world.world.size) * w;
+    const by = ((boatZ + this.world.world.size / 2) / this.world.world.size) * h;
 
     ctx.save();
     ctx.translate(bx, by);
@@ -328,7 +322,7 @@ export class GameUI {
   }
 
   public updatePassengers(current: number): void {
-    this.passengersEl.textContent = `${current}/${MAX_PASSENGERS}`;
+    this.passengersEl.textContent = `${current}/${this.world.rules.boatCapacity}`;
   }
 
   public updateTimer(secondsLeft: number): void {

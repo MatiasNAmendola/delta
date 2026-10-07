@@ -8,17 +8,13 @@ import { Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { WaterMaterial } from "@babylonjs/materials/water/waterMaterial";
-import {
-  RIVER_MAP,
-  WATER_LEVEL,
-  WORLD_SIZE,
-  COLORS,
-  type RiverSegment,
-} from "../utils/constants";
+import { WATER_LEVEL, COLORS } from "../utils/constants";
+import type { River, WorldDoc } from "./WorldDoc";
 import { getPointOnPath, hexToColor3 } from "../utils/helpers";
 
 export class WaterSystem {
   private scene: Scene;
+  private world: WorldDoc;
   private waterMeshes: Mesh[] = [];
   private waterMaterial: WaterMaterial | null = null;
   private time = 0;
@@ -28,8 +24,9 @@ export class WaterSystem {
   // Meshes to add to the water render list (reflection/refraction)
   private renderListMeshes: Mesh[] = [];
 
-  constructor(scene: Scene) {
+  constructor(scene: Scene, world: WorldDoc) {
     this.scene = scene;
+    this.world = world;
     this.buildCollisionMap();
     this.createBumpTexture();
     this.createRiverMeshes();
@@ -42,7 +39,7 @@ export class WaterSystem {
       new Array(res).fill(false)
     );
 
-    for (const river of RIVER_MAP) {
+    for (const river of this.world.rivers) {
       const samples = river.points.length * 20;
       for (let i = 0; i <= samples; i++) {
         const t = i / samples;
@@ -50,16 +47,16 @@ export class WaterSystem {
         const halfW = river.width / 2 + 2;
 
         const minX = Math.floor(
-          ((rx - halfW + WORLD_SIZE / 2) / WORLD_SIZE) * res
+          ((rx - halfW + this.world.world.size / 2) / this.world.world.size) * res
         );
         const maxX = Math.ceil(
-          ((rx + halfW + WORLD_SIZE / 2) / WORLD_SIZE) * res
+          ((rx + halfW + this.world.world.size / 2) / this.world.world.size) * res
         );
         const minZ = Math.floor(
-          ((rz - halfW + WORLD_SIZE / 2) / WORLD_SIZE) * res
+          ((rz - halfW + this.world.world.size / 2) / this.world.world.size) * res
         );
         const maxZ = Math.ceil(
-          ((rz + halfW + WORLD_SIZE / 2) / WORLD_SIZE) * res
+          ((rz + halfW + this.world.world.size / 2) / this.world.world.size) * res
         );
 
         for (let gx = minX; gx <= maxX; gx++) {
@@ -75,8 +72,8 @@ export class WaterSystem {
 
   public isWater(worldX: number, worldZ: number): boolean {
     const res = this.mapResolution;
-    const gx = Math.floor(((worldX + WORLD_SIZE / 2) / WORLD_SIZE) * res);
-    const gz = Math.floor(((worldZ + WORLD_SIZE / 2) / WORLD_SIZE) * res);
+    const gx = Math.floor(((worldX + this.world.world.size / 2) / this.world.world.size) * res);
+    const gz = Math.floor(((worldZ + this.world.world.size / 2) / this.world.world.size) * res);
     if (gx < 0 || gx >= res || gz < 0 || gz >= res) return false;
     return this.riverCollisionMap[gx][gz];
   }
@@ -273,13 +270,13 @@ export class WaterSystem {
     this.waterMaterial.disableClipPlane = false;
 
     // Create river strip meshes using the shared WaterMaterial
-    for (const river of RIVER_MAP) {
+    for (const river of this.world.rivers) {
       const mesh = this.createRiverStrip(river);
       this.waterMeshes.push(mesh);
     }
   }
 
-  private createRiverStrip(river: RiverSegment): Mesh {
+  private createRiverStrip(river: River): Mesh {
     const samples = river.points.length * 8;
     const positions: number[] = [];
     const indices: number[] = [];
@@ -353,7 +350,7 @@ export class WaterSystem {
   }
 
   private createRiverBed(): void {
-    for (const river of RIVER_MAP) {
+    for (const river of this.world.rivers) {
       const samples = river.points.length * 6;
       const positions: number[] = [];
       const indices: number[] = [];

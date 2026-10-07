@@ -1,4 +1,5 @@
 import { GameEngine } from "./GameEngine";
+import { loadDefaultWorld } from "./world/loadWorld";
 
 // Import side-effects needed by BabylonJS
 import "@babylonjs/core/Meshes/meshBuilder";
@@ -32,7 +33,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   // Start the game
-  new GameEngine(canvas);
+  new GameEngine(canvas, loadDefaultWorld());
 
   // Register service worker for PWA
   if ("serviceWorker" in navigator) {

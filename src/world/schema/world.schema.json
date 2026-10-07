@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MatiasNAmendola/delta/src/world/schema/world.schema.json",
+  "title": "World Doc",
+  "description": "Documento declarativo de un mundo (World DSL v0.1). Todo lo que define el mundo vive acá; el runtime solo lo interpreta.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "world",
+    "rules",
+    "spawn",
+    "rivers",
+    "docks",
+    "scatter"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": "0.1"
+    },
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "size"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "size": {
+          "type": "number",
+          "minimum": 50,
+          "maximum": 4000,
+          "description": "Lado del mundo cuadrado, en metros. El origen está en el centro."
+        }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "durationSec",
+        "boatCapacity",
+        "pickupRadius",
+        "scorePerPassenger",
+        "timeBonusPerPassenger"
+      ],
+      "properties": {
+        "durationSec": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "boatCapacity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "pickupRadius": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "scorePerPassenger": {
+          "type": "number",
+          "minimum": 0
+        },
+        "timeBonusPerPassenger": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "spawn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dock",
+        "offset"
+      ],
+      "properties": {
+        "dock": {
+          "$ref": "#/$defs/id",
+          "description": "id del muelle donde arranca la lancha."
+        },
+        "offset": {
+          "$ref": "#/$defs/vec2"
+        }
+      }
+    },
+    "rivers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "width",
+          "points"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "width": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 200
+          },
+          "points": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "$ref": "#/$defs/vec2"
+            },
+            "description": "Polilínea [x, z] por el centro del río."
+          }
+        }
+      }
+    },
+    "docks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "x",
+          "z",
+          "rotationDeg"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "x": {
+            "type": "number"
+          },
+          "z": {
+            "type": "number"
+          },
+          "rotationDeg": {
+            "type": "number",
+            "minimum": -360,
+            "maximum": 360
+          }
+        }
+      }
+    },
+    "scatter": {
+      "type": "array",
+      "description": "Reglas de distribución procedural determinista (misma semilla = mismo mundo).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "prefab",
+          "seed",
+          "attempts",
+          "spread",
+          "nearWaterDistance",
+          "inlandChance",
+          "instanceSeed"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "prefab": {
+            "enum": [
+              "tree",
+              "house"
+            ]
+          },
+          "seed": {
+            "type": "integer"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5000,
+            "description": "Posiciones candidatas a probar; solo se colocan en tierra."
+          },
+          "spread": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "description": "Fracción del mundo (centrada) donde se distribuye."
+          },
+          "nearWaterDistance": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Distancia en metros para considerar que una posición está junto al agua (siempre se coloca)."
+          },
+          "inlandChance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Probabilidad de colocar tierra adentro."
+          },
+          "instanceSeed": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "stride",
+              "offset"
+            ],
+            "properties": {
+              "stride": {
+                "type": "integer"
+              },
+              "offset": {
+                "type": "integer"
+              }
+            },
+            "description": "Semilla de cada instancia = índice * stride + offset."
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "vec2": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    }
+  }
+}

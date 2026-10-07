@@ -9,27 +9,24 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { TerrainMaterial } from "@babylonjs/materials/terrain/terrainMaterial";
-import {
-  WORLD_SIZE,
-  WATER_LEVEL,
-  COLORS,
-  DOCK_LOCATIONS,
-  RIVER_MAP,
-  type DockLocation,
-} from "../utils/constants";
+import { WATER_LEVEL, COLORS } from "../utils/constants";
+import { degToRad, type Dock, type ScatterRule, type WorldDoc } from "./WorldDoc";
 import { hexToColor3, seededRandom, clamp } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
 
 export class Environment {
   private scene: Scene;
+  private world: WorldDoc;
   private dockMeshes: Map<string, TransformNode> = new Map();
 
-  constructor(scene: Scene, waterSystem: WaterSystem) {
+  constructor(scene: Scene, waterSystem: WaterSystem, world: WorldDoc) {
     this.scene = scene;
+    this.world = world;
     this.createGround(waterSystem);
     this.createSkybox();
-    this.createTrees(waterSystem);
-    this.createHouses(waterSystem);
+    for (const rule of world.scatter) {
+      this.scatter(rule, waterSystem);
+    }
     this.createDocks();
   }
 
@@ -90,7 +87,7 @@ export class Environment {
     const subdivisions = 64;
     const ground = MeshBuilder.CreateGround(
       "ground",
-      { width: WORLD_SIZE, height: WORLD_SIZE, subdivisions, updatable: true },
+      { width: this.world.world.size, height: this.world.world.size, subdivisions, updatable: true },
       this.scene
     );
     ground.position.y = WATER_LEVEL - 0.3;
@@ -147,7 +144,7 @@ export class Environment {
     const positions = ground.getVerticesData(VertexBuffer.PositionKind);
     if (!positions) return;
 
-    const half = WORLD_SIZE / 2;
+    const half = this.world.world.size / 2;
     for (let i = 0; i < positions.length; i += 3) {
       const localX = positions[i];
       const localZ = positions[i + 2];
@@ -210,8 +207,8 @@ export class Environment {
 
     for (let py = 0; py < size; py++) {
       for (let px = 0; px < size; px++) {
-        const worldX = (px / size - 0.5) * WORLD_SIZE;
-        const worldZ = (py / size - 0.5) * WORLD_SIZE;
+        const worldX = (px / size - 0.5) * this.world.world.size;
+        const worldZ = (py / size - 0.5) * this.world.world.size;
 
         const onWater = waterSystem.isWater(worldX, worldZ);
 
@@ -419,7 +416,7 @@ export class Environment {
     // Simple gradient sky using a large sphere
     const sky = MeshBuilder.CreateSphere(
       "sky",
-      { diameter: WORLD_SIZE * 2.5, segments: 16 },
+      { diameter: this.world.world.size * 2.5, segments: 16 },
       this.scene
     );
     const skyMat = new StandardMaterial("skyMat", this.scene);
@@ -506,30 +503,6 @@ export class Environment {
     treeNode.rotation.y = rng() * Math.PI * 2;
   }
 
-  private createTrees(waterSystem: WaterSystem): void {
-    const rng = seededRandom(42);
-    const treeCount = 600;
-
-    for (let i = 0; i < treeCount; i++) {
-      const x = (rng() - 0.5) * WORLD_SIZE * 0.9;
-      const z = (rng() - 0.5) * WORLD_SIZE * 0.9;
-
-      // Only place on land, not in rivers
-      if (!waterSystem.isWater(x, z)) {
-        // Place trees more densely near rivers (Delta vegetation)
-        const nearRiver =
-          waterSystem.isWater(x + 10, z) ||
-          waterSystem.isWater(x - 10, z) ||
-          waterSystem.isWater(x, z + 10) ||
-          waterSystem.isWater(x, z - 10);
-
-        if (nearRiver || rng() < 0.3) {
-          this.createTree(x, z, i * 7 + 13);
-        }
-      }
-    }
-  }
-
   private createHouse(
     x: number,
     z: number,
@@ -614,41 +587,54 @@ export class Environment {
     door.position.set(0, baseY + 0.5, d / 2 + 0.03);
   }
 
-  private createHouses(waterSystem: WaterSystem): void {
-    const rng = seededRandom(123);
-    const houseCount = 80;
+  /**
+   * Deterministic placement from a World Doc scatter rule: candidates land
+   * only on dry ground; next to water they are always placed, inland only
+   * with `inlandChance`.
+   */
+  private scatter(rule: ScatterRule, waterSystem: WaterSystem): void {
+    const rng = seededRandom(rule.seed);
+    const range = this.world.world.size * rule.spread;
+    const d = rule.nearWaterDistance;
 
-    for (let i = 0; i < houseCount; i++) {
-      const x = (rng() - 0.5) * WORLD_SIZE * 0.85;
-      const z = (rng() - 0.5) * WORLD_SIZE * 0.85;
+    for (let i = 0; i < rule.attempts; i++) {
+      const x = (rng() - 0.5) * range;
+      const z = (rng() - 0.5) * range;
 
-      if (!waterSystem.isWater(x, z)) {
-        const nearRiver =
-          waterSystem.isWater(x + 12, z) ||
-          waterSystem.isWater(x - 12, z) ||
-          waterSystem.isWater(x, z + 12) ||
-          waterSystem.isWater(x, z - 12);
+      if (waterSystem.isWater(x, z)) continue;
 
-        if (nearRiver) {
-          this.createHouse(x, z, i * 13 + 7, true);
-        } else if (rng() < 0.15) {
-          this.createHouse(x, z, i * 13 + 7, false);
-        }
+      const nearWater =
+        waterSystem.isWater(x + d, z) ||
+        waterSystem.isWater(x - d, z) ||
+        waterSystem.isWater(x, z + d) ||
+        waterSystem.isWater(x, z - d);
+
+      if (!nearWater && rng() >= rule.inlandChance) continue;
+
+      const seed = i * rule.instanceSeed.stride + rule.instanceSeed.offset;
+      switch (rule.prefab) {
+        case "tree":
+          this.createTree(x, z, seed);
+          break;
+        case "house":
+          // Delta houses next to the water stand on stilts
+          this.createHouse(x, z, seed, nearWater);
+          break;
       }
     }
   }
 
   private createDocks(): void {
-    for (const dock of DOCK_LOCATIONS) {
+    for (const dock of this.world.docks) {
       const dockNode = this.createDockMesh(dock);
       this.dockMeshes.set(dock.name, dockNode);
     }
   }
 
-  private createDockMesh(dock: DockLocation): TransformNode {
+  private createDockMesh(dock: Dock): TransformNode {
     const node = new TransformNode(`dock_${dock.name}`, this.scene);
     node.position.set(dock.x, WATER_LEVEL, dock.z);
-    node.rotation.y = dock.rotation;
+    node.rotation.y = degToRad(dock.rotationDeg);
 
     // Dock platform
     const platform = MeshBuilder.CreateBox(

@@ -146,7 +146,7 @@ costo de IA por hora jugada.
 
 | Fase | Duración | Entregable | Criterio de salida |
 |---|---|---|---|
-| **0. Refactor a datos** | 1–2 sem | `world.json` + loader; `constants.ts` reemplazado por el documento; el Delta actual se carga desde JSON | Mismo juego, cero regresiones, mundo 100% en datos |
+| **0. Refactor a datos** ✅ hecho | 1–2 sem | `world.json` + loader; `constants.ts` reemplazado por el documento; el Delta actual se carga desde JSON | Mismo juego, cero regresiones, mundo 100% en datos |
 | **1. Runtime ECS + DSL v0** | 2–3 sem | 10 componentes, JSON Schema, validador, tests | Editar el JSON a mano cambia el juego en caliente |
 | **2. Agente** | 2–3 sem | Chat in-game, `query/patch/preview`, deshacer | 20 pedidos de prueba con ≥80% de patches válidos |
 | **3. Multijugador privado** | 2–3 sem | Yjs + Hocuspocus para el mundo, Colyseus para movimiento, salas por invitación, persistencia | 4 dispositivos editando y jugando a la vez sin divergencia |
