@@ -5,6 +5,7 @@ import { ShaderMaterial } from "@babylonjs/core/Materials/shaderMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Constants } from "@babylonjs/core/Engines/constants";
+import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import { METERS_PER_UNIT, WATER_LEVEL } from "../utils/constants";
 import { froude, KELVIN_TAN, wakeAmplitude, type WakeSource } from "./wakePhysics";
 import type { HullType } from "../boat/buoyancy";
@@ -71,6 +72,11 @@ uniform vec3 uHorizon;
 uniform vec3 uBody;
 uniform vec3 uFogColor;
 uniform float uFogDensity;
+uniform sampler2D uShoreSdf;
+uniform sampler2D uShoreKr;
+uniform float uWorldSize;
+uniform float uSdfRange;
+uniform float uHasShore;
 
 const float G = 9.81;
 const float PI = 3.14159265;
@@ -90,7 +96,7 @@ float resolvable(float k, float footprint) {
 }
 
 // Same as kelvinElevation() in wakePhysics.ts (without the amplitude)
-float kelvin(float x, float y, float U, float footprint) {
+float kelvin(float x, float y, float U, float footprint, float jitter) {
   if (x <= 0.0 || U <= 0.05) return 0.0;
   float T = abs(y) / x;
   float k0 = G / (U * U);
@@ -107,8 +113,8 @@ float kelvin(float x, float y, float U, float footprint) {
   float c2 = cos(t2);
   float k1 = k0 / max(1e-4, c1 * c1);
   float k2 = k0 / max(1e-4, c2 * c2);
-  float h1 = hullFilter(k1) * resolvable(k1, footprint) * cos(k1 * (x * c1 + abs(y) * sin(t1)) + PI * 0.25);
-  float h2 = hullFilter(k2) * resolvable(k2, footprint) * cos(k2 * (x * c2 + abs(y) * sin(t2)) - PI * 0.25);
+  float h1 = hullFilter(k1) * resolvable(k1, footprint) * cos(k1 * (x * c1 + abs(y) * sin(t1)) + PI * 0.25 + jitter);
+  float h2 = hullFilter(k2) * resolvable(k2, footprint) * cos(k2 * (x * c2 + abs(y) * sin(t2)) - PI * 0.25 + jitter * 1.3);
   return (h1 + h2) * w / 1.3;
 }
 
@@ -144,14 +150,45 @@ void main(void) {
   float fade = (1.0 - smoothstep(uTrail * 0.65, uTrail, x)) * exp(-age / 150.0);
   float a = amp * fade;
 
-  // Kelvin waves and their slope (for lighting)
-  float eps = max(0.12, footprint * 0.5);
-  float h = elev(a, kelvin(x, y, U, footprint));
-  float gx = (elev(a, kelvin(x + eps, y, U, footprint)) - h) / eps; // along x (backwards)
-  float gy = (elev(a, kelvin(x, y + eps, U, footprint)) - h) / eps; // along y (to starboard)
-  // To world: x points back along the track, y to the right of it
+  // Real wakes are not a perfect pattern: wave groups along the train, the
+  // two arms a bit different, phases wandering (docs/investigacion/04, §2)
+  float side = y >= 0.0 ? 1.0 : -1.0;
+  a *= 0.65 + 0.7 * noise(vec2(s * 0.035, side * 7.0 + 3.0));
+  float jitter = (noise(vec2(s * 0.03 + 11.0, y * 0.04 + side * 5.0)) - 0.5) * 1.6;
   vec2 back = -dir;
   vec2 right = vec2(dir.y, -dir.x);
+
+  // Waves bouncing off the shore (image method): a tablestacado sends back
+  // ~90% of the wave, a natural muddy bank very little; the incoming and
+  // the reflected waves add up into a choppy clapotis by the wall
+  vec2 mirror = vec2(0.0);
+  float kr = 0.0;
+  if (uHasShore > 0.5) {
+    vec2 uv = vWorld.xz / uWorldSize + 0.5;
+    float d = (texture2D(uShoreSdf, uv).r - 0.5) * 2.0 * uSdfRange;
+    if (d < 0.0 && d > -uSdfRange * 0.95) {
+      float e = 1.5 / 2048.0;
+      float ddx = texture2D(uShoreSdf, uv + vec2(e, 0.0)).r - texture2D(uShoreSdf, uv - vec2(e, 0.0)).r;
+      float ddz = texture2D(uShoreSdf, uv + vec2(0.0, e)).r - texture2D(uShoreSdf, uv - vec2(0.0, e)).r;
+      vec2 n = normalize(vec2(ddx, ddz) + vec2(1e-6));
+      vec2 m = n * (-d) * 2.0 * ${METERS_PER_UNIT}.0;
+      mirror = vec2(dot(m, back), dot(m, right));
+      kr = texture2D(uShoreKr, uv).r * (1.0 - smoothstep(uSdfRange * 0.6, uSdfRange * 0.95, -d));
+    }
+  }
+
+  // Kelvin waves (plus their reflection) and their slope, for lighting
+  float eps = max(0.12, footprint * 0.5);
+  float h = elev(a, kelvin(x, y, U, footprint, jitter));
+  float hx = elev(a, kelvin(x + eps, y, U, footprint, jitter));
+  float hy = elev(a, kelvin(x, y + eps, U, footprint, jitter));
+  if (kr > 0.01) {
+    h += kr * elev(a, kelvin(x + mirror.x, y + mirror.y, U, footprint, jitter));
+    hx += kr * elev(a, kelvin(x + eps + mirror.x, y + mirror.y, U, footprint, jitter));
+    hy += kr * elev(a, kelvin(x + mirror.x, y + eps + mirror.y, U, footprint, jitter));
+  }
+  float gx = (hx - h) / eps; // along x (backwards)
+  float gy = (hy - h) / eps; // along y (to starboard)
   vec2 g = gx * back + gy * right;
   vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
   float slope = length(g);
@@ -229,7 +266,18 @@ interface TrailPoint {
 /** A new trail point every this many metres travelled. */
 const STEP = 2;
 
+/** The shore, shared by every wake: distance to it and how much each stretch reflects. */
+export interface WakeShore {
+  sdf: BaseTexture;
+  kr: BaseTexture;
+  worldSize: number;
+  sdfRange: number;
+}
+
 export class WakeRibbon {
+  /** Set once the river banks exist (GameEngine). */
+  static shore: WakeShore | null = null;
+  private hasShore = false;
   readonly mesh: Mesh;
   private material: ShaderMaterial;
   private points: TrailPoint[] = [];
@@ -275,7 +323,9 @@ export class WakeRibbon {
         uniforms: [
           "viewProjection", "uL", "uBeam", "uTrail", "uWash", "uWashBeam", "uFoamLife", "uStroke", "uSpan", "uAlternate", "uBowFoam", "uPixel",
           "uCameraPos", "uSunDir", "uZenith", "uHorizon", "uBody", "uFogColor", "uFogDensity",
+          "uWorldSize", "uSdfRange", "uHasShore",
         ],
+        samplers: ["uShoreSdf", "uShoreKr"],
         needAlphaBlending: true,
       }
     );
@@ -300,8 +350,10 @@ export class WakeRibbon {
     m.setColor3("uZenith", new Color3(0.47, 0.64, 0.82));
     m.setColor3("uHorizon", new Color3(0.8, 0.85, 0.88));
     m.setColor3("uBody", new Color3(0.42, 0.32, 0.2));
+    m.setFloat("uHasShore", 0);
     this.material = m;
     this.mesh.material = m;
+    this.applyShore();
     this.mesh.setEnabled(false);
   }
 
@@ -373,7 +425,20 @@ export class WakeRibbon {
     this.mesh.updateVerticesData("aux", this.aux);
   }
 
+  private applyShore(): void {
+    const shore = WakeRibbon.shore;
+    if (this.hasShore || !shore) return;
+    const m = this.material;
+    m.setTexture("uShoreSdf", shore.sdf);
+    m.setTexture("uShoreKr", shore.kr);
+    m.setFloat("uWorldSize", shore.worldSize);
+    m.setFloat("uSdfRange", shore.sdfRange);
+    m.setFloat("uHasShore", 1);
+    this.hasShore = true;
+  }
+
   private setViewUniforms(): void {
+    this.applyShore();
     const scene = this.mesh.getScene();
     const camera = scene.activeCamera;
     if (!camera) return;

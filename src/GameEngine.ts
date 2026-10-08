@@ -12,6 +12,9 @@ import { loadLayout } from "./world/layout/loadLayout";
 import { WaterSystem } from "./world/WaterSystem";
 import { Environment } from "./world/Environment";
 import { WakeEffect } from "./world/WakeEffect";
+import { WakeRibbon } from "./world/WakeRibbon";
+import { r8Texture, SHORE_SDF_RANGE } from "./world/WaterSystem";
+import { REFLECTIVITY_RES } from "./world/RiverBanks";
 import { wakeOptions } from "./boat/boatTypes";
 import { YolaTraffic } from "./world/Yolas";
 import { Boat } from "./boat/Boat";
@@ -19,6 +22,7 @@ import { BOAT_TYPES, parseBoatType, type BoatTypeId, type BoatSpec } from "./boa
 import { currentZone, ZONES } from "./world/loadWorld";
 import { COURTESY_SPEED } from "./world/rowingRoute";
 import { Handling } from "./boat/handling";
+import { compassName, fetchLiveConditions, isSudestada, levelOffset, SAN_FERNANDO_ALERT, windVector, type LiveConditions } from "./world/liveConditions";
 import { handlingInput, handlingKeys, handlingMode, touchLabels } from "./controls/handlingInput";
 import { createMode, type GameMode } from "./game/modes";
 import { probeChannel, RuleBook, ZONE_SPEED, type RuleEvent } from "./game/navigationRules";
@@ -26,7 +30,7 @@ import { Traffic } from "./world/Traffic";
 import { Trash, TRASH_REACH } from "./world/Trash";
 import { MobileControls } from "./controls/MobileControls";
 import { GameUI } from "./ui/GameUI";
-import { PROP_SCALE, CAMERA_LERP } from "./utils/constants";
+import { PROP_SCALE, CAMERA_LERP, METERS_PER_UNIT } from "./utils/constants";
 import { findDock, type WaterArea, type WorldDoc } from "./world/WorldDoc";
 import { distance2D, lerp } from "./utils/helpers";
 import {
@@ -75,6 +79,8 @@ export class GameEngine {
   private gameTime = 0;
   /** Game time when a sudestada blows in (Infinity: not this trip). */
   private sudestadaAt = Infinity;
+  /** Today's real conditions, when the INA / Open-Meteo answered. */
+  private live: LiveConditions | null = null;
   /** Shown where no river is named: the section of the Delta. */
   private get zoneName(): string {
     return ZONES.find((z) => z.id === currentZone())?.label.split(" · ")[1] ?? "Delta de Tigre";
@@ -156,11 +162,25 @@ export class GameEngine {
     const { layout, origin } = await loadLayout(this.world);
     mark(`mundo (${origin})`);
     this.waterSystem = new WaterSystem(this.scene, this.world, layout);
+    // Today's real river and wind, if reachable (ADR 0008); ?clima=… keeps the simulation
+    if (!new URLSearchParams(window.location.search).get("clima")) {
+      void fetchLiveConditions().then((live) => {
+        if (!live) return;
+        this.live = live;
+        const wind = live.windSpeed !== null && live.windFrom !== null ? windVector(live.windSpeed, live.windFrom) : null;
+        this.waterSystem.conditions.useReal(
+          live.height !== null ? levelOffset(live.height, METERS_PER_UNIT) : 0,
+          live.rising ?? true,
+          wind
+        );
+      });
+    }
 
     await this.updateLoadingBar(50, "Construyendo islas y vegetación...");
 
     // Create environment
     this.environment = new Environment(this.scene, this.waterSystem, this.world, layout);
+    this.connectShoreReflections();
 
     await this.updateLoadingBar(70, "Preparando las embarcaciones...");
 
@@ -323,7 +343,8 @@ ${this.spec.mission}`, 2800);
     // Some trips get a sudestada; ?clima=sudestada forces one, ?clima=calma none
     const clima = new URLSearchParams(window.location.search).get("clima");
     this.waterSystem.conditions.endSudestada();
-    this.sudestadaAt = clima === "sudestada" ? 4 : clima === "calma" ? Infinity : Math.random() < 0.25 ? 50 + Math.random() * 70 : Infinity;
+    this.sudestadaAt =
+      clima === "sudestada" ? 4 : clima === "calma" ? Infinity : this.live ? (isSudestada(this.live) ? 8 : Infinity) : Math.random() < 0.25 ? 50 + Math.random() * 70 : Infinity;
     this.tideNoticeAt = 3.2;
   }
 
@@ -421,6 +442,36 @@ ${this.spec.mission}`, 2800);
     this.scene.render();
   }
 
+  /**
+   * Waves bounce off the banks (ADR 0012): wooden tablestacados reflect
+   * ~90%, natural banks very little. The wake shader and the boats'
+   * buoyancy both use it.
+   */
+  private connectShoreReflections(): void {
+    const banks = this.environment.banks;
+    if (!banks) return;
+    const water = this.waterSystem;
+    WakeRibbon.shore = {
+      sdf: water.createShoreDistanceTexture(),
+      kr: r8Texture(this.scene, "reflectividad", banks.reflectivity, REFLECTIVITY_RES),
+      worldSize: this.world.world.size,
+      sdfRange: SHORE_SDF_RANGE,
+    };
+    const range = 2;
+    water.conditions.wall = (x, z) => {
+      const d = -water.shoreDistance(x, z, range);
+      if (d <= 0 || d >= range * 0.95) return null;
+      const e = 0.15;
+      let nx = water.shoreDistance(x + e, z, range) - water.shoreDistance(x - e, z, range);
+      let nz = water.shoreDistance(x, z + e, range) - water.shoreDistance(x, z - e, range);
+      const len = Math.hypot(nx, nz) || 1;
+      nx /= len;
+      nz /= len;
+      const kr = banks.krAt(x, z) * (1 - Math.max(0, (d - range * 0.6) / (range * 0.35)));
+      return kr > 0.01 ? { mx: x + nx * 2 * d, mz: z + nz * 2 * d, kr } : null;
+    };
+  }
+
   /** Tide, current, wind and wakes; everything afloat follows the level. */
   private updateRiver(dt: number): void {
     const { x, z } = this.boat.position;
@@ -429,12 +480,21 @@ ${this.spec.mission}`, 2800);
     if (this.gameStarted && !this.gameOver) {
       if (this.gameTime >= this.tideNoticeAt) {
         this.tideNoticeAt = Infinity;
-        this.ui.showNotification(
-          conditions.tideTrend() === "creciente"
-            ? "Marea creciente: la corriente sube el río"
-            : "Marea bajante: la corriente baja hacia el Río de la Plata",
-          3000
-        );
+        const live = this.live;
+        if (live && (live.height !== null || live.windSpeed !== null)) {
+          const parts: string[] = [];
+          if (live.height !== null) parts.push(`${live.height.toFixed(2).replace(".", ",")} m, ${live.rising ? "creciente" : "bajante"}`);
+          if (live.windSpeed !== null && live.windFrom !== null) parts.push(`viento ${compassName(live.windFrom)} ${Math.round(live.windSpeed)} km/h`);
+          const warn = live.height !== null && live.height >= SAN_FERNANDO_ALERT ? "\n¡Río en alerta!" : "";
+          this.ui.showNotification(`Hoy en San Fernando: ${parts.join(" · ")}${warn}\n(INA · Open-Meteo)`, 4200);
+        } else {
+          this.ui.showNotification(
+            conditions.tideTrend() === "creciente"
+              ? "Marea creciente: la corriente sube el río"
+              : "Marea bajante: la corriente baja hacia el Río de la Plata",
+            3000
+          );
+        }
       }
       if (this.gameTime >= this.sudestadaAt) {
         this.sudestadaAt = Infinity;

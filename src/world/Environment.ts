@@ -110,6 +110,7 @@ export class Environment {
       bankTop: BANK_TOP,
       isBulkhead: (x, z) => bulkheads.blocked(x, z) || this.waterfront.blocked(x, z) || this.fbm(x * 0.012, z * 0.012, 2, 77) > 0.68,
       keepClear: (x, z) => clearSpots.blocked(x, z),
+      worldSize: world.world.size,
     });
     mark("barrancas");
   }
@@ -503,6 +504,11 @@ export class Environment {
     }
     this.settlement = new Settlement(this.scene, lots, { groundY: this.groundY(0, 0) });
     mark(`casas (${lots.length})`);
+  }
+
+  /** The river banks (their reflectivity, for waves bouncing off walls). */
+  public get banks(): RiverBanks | null {
+    return this.riverBanks;
   }
 
   /** Houses and docks drawn now (for ?perf=1). */
