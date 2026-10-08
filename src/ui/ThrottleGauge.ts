@@ -38,13 +38,13 @@ export class ThrottleGauge {
   }
 
   /** lever and speed in -1..1 (fractions of top speed); limit: fraction allowed in the zone. */
-  update(lever: number, speed: number, zone: SlowZone, limit: number): void {
+  update(lever: number, speed: number, zone: SlowZone, limit: number, label?: string): void {
     const Z = ThrottleGauge.ZERO;
     const y = (v: number) => (Z + (v >= 0 ? v * (1 - Z) : v * Z)) * 100;
     const lo = Math.min(y(0), y(lever));
     const hi = Math.max(y(0), y(lever));
     const over = zone !== null && Math.abs(speed) > limit;
-    const key = `${lever.toFixed(2)}|${speed.toFixed(2)}|${zone}|${over}`;
+    const key = `${lever.toFixed(2)}|${speed.toFixed(2)}|${zone}|${over}|${label}`;
     if (key === this.last) return;
     this.last = key;
     this.fill.style.bottom = `${lo}%`;
@@ -54,7 +54,7 @@ export class ThrottleGauge {
     this.limit.style.display = zone ? "block" : "none";
     this.limit.style.bottom = `${y(limit)}%`;
     this.root.classList.toggle("over", over);
-    this.label.textContent = zone === "arroyo" ? "Arroyo · despacio" : zone === "muelle" ? "Muelle · despacio" : zone === "remeros" ? "Remeros · despacio" : lever === 0 ? "Punto muerto" : lever < 0 ? "Reversa" : `${Math.round(lever * 100)}%`;
+    this.label.textContent = label && !zone ? label : zone === "arroyo" ? "Arroyo · despacio" : zone === "muelle" ? "Muelle · despacio" : zone === "remeros" ? "Remeros · despacio" : lever === 0 ? "Punto muerto" : lever < 0 ? "Reversa" : `${Math.round(lever * 100)}%`;
   }
 }
 

@@ -18,6 +18,8 @@ import { Boat } from "./boat/Boat";
 import { BOAT_TYPES, parseBoatType, type BoatTypeId, type BoatSpec } from "./boat/boatTypes";
 import { currentZone, ZONES } from "./world/loadWorld";
 import { COURTESY_SPEED } from "./world/rowingRoute";
+import { Handling } from "./boat/handling";
+import { handlingInput, handlingKeys, handlingMode, touchLabels } from "./controls/handlingInput";
 import { createMode, type GameMode } from "./game/modes";
 import { probeChannel, RuleBook, ZONE_SPEED, type RuleEvent } from "./game/navigationRules";
 import { Traffic } from "./world/Traffic";
@@ -292,6 +294,12 @@ export class GameEngine {
     this.ui.hideStartScreen();
     this.rules = new RuleBook(this.spec);
     this.controls.lever.set(0);
+    // Optional realistic handling: wheel and telegraph, strokes, gears (ADR 0013)
+    const realistic = handlingMode() === "realista" ? new Handling(this.spec) : null;
+    this.boat.setHandling(realistic);
+    this.controls.lever.notch = realistic?.kind === "rueda" ? 0.5 : 0.25;
+    this.controls.setLabels(touchLabels(realistic?.kind ?? null));
+    this.controls.setKeysHint(handlingKeys(realistic?.kind ?? null));
     this.mode = createMode(this.spec.id, {
       scene: this.scene,
       world: this.world,
@@ -339,6 +347,11 @@ ${this.spec.mission}`, 2800);
       const controlState = this.controls.update(dt);
       this.boat.throttle = controlState.throttle;
       this.boat.steering = controlState.steering;
+      const realistic = this.boat.realistic;
+      if (realistic) {
+        const helm = controlState.gyroSteering ?? controlState.steering;
+        this.boat.handlingInput = handlingInput(realistic.kind, controlState.raw, controlState.throttle, helm);
+      }
 
       // Update boat
       this.boat.update(
@@ -373,11 +386,13 @@ ${this.spec.mission}`, 2800);
       // Update UI
       // Rowers ahead come first: their limit is the one that fines on the spot
       const rowers = this.rules?.has("wakeCourtesy") && this.yolas.nearestCrew(this.boat.position.x, this.boat.position.z) < ROWERS_WARNING;
+      const status = this.boat.realistic?.status();
       this.ui.updateThrottle(
-        this.controls.lever.value,
+        status ? status.lever : this.controls.lever.value,
         this.boat.speed / this.spec.maxSpeed,
         rowers ? "remeros" : (this.rules?.zone ?? null),
-        rowers ? COURTESY_SPEED : ZONE_SPEED
+        rowers ? COURTESY_SPEED : ZONE_SPEED,
+        status ? status.label : undefined
       );
       this.ui.updateScore(this.score);
       const second = this.mode!.secondary();

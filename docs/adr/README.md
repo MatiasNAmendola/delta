@@ -16,6 +16,8 @@ Cada ADR registra una decisión: el contexto, qué decidimos, qué otras opcione
 | [0010](0010-embarcaciones-y-regatas.md) | Lanchas particulares y regatas de remo | Implementada |
 | [0011](0011-casas-muelles-y-streaming.md) | Casas, muelles particulares y dibujar solo lo cercano | Implementada |
 | [0012](0012-fisica-de-la-estela.md) | Física de la estela (Kelvin, Froude, estela turbulenta) | Implementada |
+| [0013](0013-manejo-realista.md) | Manejo realista optativo por embarcación | Implementada (v1) |
+| [0014](0014-pwa.md) | App instalable (PWA) y nitidez en celulares | Implementada |
 
 ## Cómo medimos
 

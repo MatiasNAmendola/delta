@@ -15,6 +15,7 @@ import { WaterSystem } from "../world/WaterSystem";
 import { findFloatingPose, hullOutline, moveHull, type Hull } from "./hullCollision";
 import type { BoatSpec, BoatTypeId } from "./boatTypes";
 import { Buoyancy, type BuoyancyParams } from "./buoyancy";
+import { NO_INPUT, type Handling, type HandlingInput } from "./handling";
 import { buildClasica, buildSingle, buildKayak, buildMoto, buildPesca, buildRunabout, buildSemirrigido, buildTravesia, type BoatModel } from "./boatModels";
 
 /** Turn rates in the specs were tuned for twitchy arcade turns; real boats turn slower. */
@@ -49,6 +50,10 @@ export class Boat {
 
   private meshes: Mesh[] = [];
   private strokePhase = 0;
+  /** Realistic handling (optional); null = the simple arcade controls. */
+  private handling: Handling | null = null;
+  /** This frame's orders for the realistic handling. */
+  handlingInput: HandlingInput = NO_INPUT;
   /** -1..1, follows the steering input with some lag. */
   private rudder = 0;
   private buoyancy: Buoyancy;
@@ -167,28 +172,42 @@ export class Boat {
     // Clamped so a stalled frame (tab switch) can't teleport the boat.
     const frames = Math.min(deltaTime, 0.1) * 60;
 
-    // Crews tire: effort drains energy, easing off recovers it
-    let topSpeed = spec.maxSpeed;
-    if (spec.humanPowered) {
-      const effort = Math.abs(this.throttle);
-      this.energy = clamp(this.energy + (effort > 0 ? -0.05 * effort : 0.12) * deltaTime, 0, 1);
-      topSpeed *= 0.45 + 0.55 * this.energy;
+    let turn: number;
+    let turnFactor = 1;
+    if (this.handling) {
+      // Realistic handling: wheel, lever, gears, strokes (handling.ts)
+      const out = this.handling.update(Math.min(deltaTime, 0.1), this.handlingInput, this.energy);
+      if (spec.humanPowered) {
+        this.energy = clamp(this.energy + (out.effort > 0.5 ? -0.04 : 0.1) * deltaTime, 0, 1);
+      }
+      this.speed = out.speed / 60;
+      this.rudder = out.rudder;
+      this.throttle = out.effort;
+      turn = out.yawRate * Math.min(deltaTime, 0.1);
+    } else {
+      // Crews tire: effort drains energy, easing off recovers it
+      let topSpeed = spec.maxSpeed;
+      if (spec.humanPowered) {
+        const effort = Math.abs(this.throttle);
+        this.energy = clamp(this.energy + (effort > 0 ? -0.05 * effort : 0.12) * deltaTime, 0, 1);
+        topSpeed *= 0.45 + 0.55 * this.energy;
+      }
+
+      // The throttle lever sets the speed to reach (a fraction of top speed, or of reverse)
+      const target = this.throttle >= 0 ? this.throttle * topSpeed : this.throttle * spec.maxSpeed * spec.reverse;
+      if (this.speed < target) this.speed = Math.min(target, this.speed + spec.acceleration * frames);
+      else this.speed = Math.max(target, this.speed - spec.deceleration * (this.speed > 0 && target < 0 ? 2 : 1) * frames);
+
+      // The rudder (or paddle stroke) takes time to come over: taps are small corrections
+      const rudderRate = (Math.abs(steering) > Math.abs(this.rudder) && Math.sign(steering) !== -Math.sign(this.rudder) ? 2.2 : 4) * Math.min(deltaTime, 0.1);
+      this.rudder += Math.max(-rudderRate, Math.min(rudderRate, steering - this.rudder));
+
+      // Rudder boats need way on to turn; paddled ones pivot almost in place
+      turnFactor = spec.turnsInPlace
+        ? 0.6 + 0.4 * Math.min(1, Math.abs(this.speed) / (spec.maxSpeed * 0.3))
+        : Math.min(1, Math.abs(this.speed) / (spec.maxSpeed * 0.3));
+      turn = this.rudder * spec.turnSpeed * TURN_SCALE * turnFactor * frames;
     }
-
-    // The throttle lever sets the speed to reach (a fraction of top speed, or of reverse)
-    const target = this.throttle >= 0 ? this.throttle * topSpeed : this.throttle * spec.maxSpeed * spec.reverse;
-    if (this.speed < target) this.speed = Math.min(target, this.speed + spec.acceleration * frames);
-    else this.speed = Math.max(target, this.speed - spec.deceleration * (this.speed > 0 && target < 0 ? 2 : 1) * frames);
-
-    // The rudder (or paddle stroke) takes time to come over: taps are small corrections
-    const rudderRate = (Math.abs(steering) > Math.abs(this.rudder) && Math.sign(steering) !== -Math.sign(this.rudder) ? 2.2 : 4) * Math.min(deltaTime, 0.1);
-    this.rudder += Math.max(-rudderRate, Math.min(rudderRate, steering - this.rudder));
-
-    // Rudder boats need way on to turn; paddled ones pivot almost in place
-    const turnFactor = spec.turnsInPlace
-      ? 0.6 + 0.4 * Math.min(1, Math.abs(this.speed) / (spec.maxSpeed * 0.3))
-      : Math.min(1, Math.abs(this.speed) / (spec.maxSpeed * 0.3));
-    const turn = this.rudder * spec.turnSpeed * TURN_SCALE * turnFactor * frames;
 
     const heading = this.rotation + turn;
     // The river carries the boat: barely a heavy lancha, fully a kayak
@@ -210,6 +229,7 @@ export class Boat {
     if (result.hit) {
       // Scraping along the bank slows the boat; a head-on hit bounces it back
       this.speed *= result.slid ? 0.85 : -0.3;
+      this.handling?.scaleSpeed(result.slid ? 0.85 : -0.3);
     }
 
     const ratio = Math.abs(this.speed) / spec.maxSpeed;
@@ -239,6 +259,16 @@ export class Boat {
     );
   }
 
+  /** Switches between the realistic handling and the simple controls. */
+  setHandling(handling: Handling | null): void {
+    this.handling = handling;
+    this.speed = 0;
+  }
+
+  get realistic(): Handling | null {
+    return this.handling;
+  }
+
   /** Places the boat at a spawn point, turned so the whole hull fits on the water. */
   public placeAt(x: number, z: number, preferredRotation: number, waterSystem: WaterSystem): void {
     const pose = findFloatingPose(x, z, preferredRotation, (px, pz) => waterSystem.isWater(px, pz), this.hull);
@@ -246,6 +276,7 @@ export class Boat {
     this.position.z = pose.z;
     this.rotation = pose.rotation;
     this.speed = 0;
+    this.handling?.reset();
     this.buoyancy.reset(this.floatTarget(waterSystem, 0, 0));
     this.rootNode.position.copyFrom(this.position);
     this.rootNode.rotation.y = this.rotation;
