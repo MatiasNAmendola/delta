@@ -1093,8 +1093,8 @@
       ]
     },
     {
-      "id": "arroyo-paycarabi",
-      "name": "Arroyo Paycarabí",
+      "id": "arroyo-pay-carabi",
+      "name": "Arroyo Pay Carabi",
       "width": 8,
       "points": [
         [-1397.75, -686.13],
@@ -3948,8 +3948,8 @@
   ],
   "docks": [
     {
-      "id": "arroyo-paycarabi-y-rio-parana-de-las-palmas",
-      "name": "Arroyo Paycarabí y Río Paraná de las Palmas",
+      "id": "arroyo-pay-carabi-y-rio-parana-de-las-palmas",
+      "name": "Arroyo Pay Carabi y Río Paraná de las Palmas",
       "x": -1356.39,
       "z": -1112.66,
       "rotationDeg": -175.2

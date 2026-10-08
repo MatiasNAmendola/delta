@@ -713,8 +713,8 @@
       ]
     },
     {
-      "id": "arroyo-paycarabi",
-      "name": "Arroyo Paycarabí",
+      "id": "arroyo-pay-carabi",
+      "name": "Arroyo Pay Carabi",
       "width": 8,
       "points": [
         [-635.38, 1399.31],
@@ -844,8 +844,8 @@
       ]
     },
     {
-      "id": "arroyo-gelves",
-      "name": "Arroyo Gelves",
+      "id": "arroyo-gelvez",
+      "name": "Arroyo Gelvez",
       "width": 8,
       "points": [
         [-643.9, 325.76],

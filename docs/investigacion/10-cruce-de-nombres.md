@@ -11,12 +11,24 @@ El IGN (WFS) no respondió (504); el workflow lo reintenta en cada corrida.
 - **98 de 211 nombres confirmados** (✅ exacto o ≈ con otra grafía) por al menos una de las dos fuentes. Entre ellos, todos los ríos principales: Luján, Tigre, Sarmiento, San Antonio, Capitán, Paraná de las Palmas, Paraná Miní, Paraná Guazú, Reconquista, y también Abra Vieja, Caraguatá, Dorado, Pajarito, Rama Negra, Antequera, Toro, Felicaria y Canal de Vinculación.
 - **Sin confirmar no significa mal.** Los arroyos chicos casi no están en estas fuentes. Por ejemplo, Gambado y Fulminante no aparecen en ninguna de las dos.
 
+## Fuentes que pidió el usuario (2026-10-08)
+Desde el entorno de desarrollo, el proxy bloquea las cuatro (error 403 de túnel). Por eso se consultan desde el workflow, en los servidores de GitHub.
+
+| Fuente | Qué devolvió | Uso |
+|---|---|---|
+| [ign.gob.ar](https://www.ign.gob.ar/) y [geoportal.ign.gob.ar](https://geoportal.ign.gob.ar/) | Responden. El geoportal usa el GeoServer `wms.ign.gob.ar/geoserver/ows`, que publica capas WFS de hidrografía: `ign:lineas_de_aguas_continentales_perenne`, `_intermitentes`, `BH010` a `BH030` y `BI020`; `ign:areas_de_aguas_continentales_*`; `ign:puntos_de_aguas_continentales_*`. Con el recuadro del Delta devolvieron 0 elementos; se reintenta con el otro orden de ejes | Fuente oficial: queda como referencia principal cuando devuelva datos |
+| [viatigre.com.ar/tigre/delta/mapa/](https://viatigre.com.ar/tigre/delta/mapa/) | Lista de 36 ríos y arroyos de la Primera Sección. Incluye **Río Urion**, **Arroyo Gelvez**, **Arroyo Pay Carabi**, **Río Carapachay** (falta en nuestro mapa), Canal Rompani y Canal Honda | Guía turística local; cuenta como una fuente |
+| [satellites.pro](https://satellites.pro/plano/mapa_de_Delta_del_Tigre.Argentina) | El mapa se dibuja con JavaScript a partir de teselas; la página no trae nombres en texto | No sirve para cruzar nombres |
+
+**Resultado (corrida del workflow del 2026-10-08):** 100 de 210 nombres confirmados por al menos una fuente.
+
 ## Corregido en el importador (`scripts/osm/name-fixes.json`)
 | En OSM | En el juego | Por qué |
 |---|---|---|
-| Río URíon | **Río Urión** | Solo la mayúscula estaba mal. Un aviso lo ubica "sobre río Urión a 300 m del arroyo Borazo" ([argenprop](https://www.argenprop.com/negocios-especiales/partido-de-tigre/dolares-hasta-75000)), y en el mapa el Arroyo Boraso desemboca ahí. Confianza: probable, falta fuente oficial. *Corrección del 2026-10-08: antes había quedado como "Río Unión" por error. La mención del Atlas Ambiental no se verificó, y el "Arroyo Unión" de GeoNames coincidía solo por normalización. Ninguna búsqueda encontró un "Río Unión" en Tigre.* |
+| Río URíon | **Río Urión** | **Confirmado por 3 fuentes:** GeoNames "Río Urión" (exacto), ViaTigre "Río Urion" y el aviso. Solo la mayúscula estaba mal. Un aviso lo ubica "sobre río Urión a 300 m del arroyo Borazo" ([argenprop](https://www.argenprop.com/negocios-especiales/partido-de-tigre/dolares-hasta-75000)), y en el mapa el Arroyo Boraso desemboca ahí. Confianza: probable, falta fuente oficial. *Corrección del 2026-10-08: antes había quedado como "Río Unión" por error. La mención del Atlas Ambiental no se verificó, y el "Arroyo Unión" de GeoNames coincidía solo por normalización. Ninguna búsqueda encontró un "Río Unión" en Tigre.* |
 | Arroyo Panatanosito | Arroyo Pantanosito | Errata; GeoNames confirma el "Arroyo Pantanoso" vecino |
-| Arroyo Pay Carabi | Arroyo Paycarabí | La misma vía tiene las dos grafías en OSM |
+| Arroyo Paycarabí (OSM) | **Arroyo Pay Carabi** | GeoNames y ViaTigre lo escriben separado. *Antes se había unificado al revés, por error.* |
+| Arroyo Gelves | **Arroyo Gelvez** | GeoNames, ViaTigre y avisos |
 | Arroyo las Casas | Arroyo Las Casas | Mayúscula |
 | Ayo Pacu | Arroyo Pacu | "Ayo" es la abreviatura de Arroyo |
 | Arroyo Sin Nombre | (se quitó) | Era un marcador, no un nombre |
@@ -42,7 +54,6 @@ GeoNames tiene sus propias erratas (por ejemplo "Tarapuati", "Caviotas", "Noranc
 
 | En el juego (OSM) | Otra grafía | Fuente |
 |---|---|---|
-| Arroyo Gelves | Arroyo Gelvez | GeoNames y avisos |
 | Arroyo Chileno | Arroyo Chileño | GeoNames |
 | Arroyo Correa | Arroyo Correas | GeoNames |
 | Arroyo Caracoles | Arroyo Caracolas | GeoNames |
@@ -57,7 +68,7 @@ GeoNames tiene sus propias erratas (por ejemplo "Tarapuati", "Caviotas", "Noranc
 | Pozos del Barca Grande | Canal Pozos del Barca Grande | GeoNames y Wikidata |
 
 ## Faltantes conocidos
-- **Río Carapachay:** no está en el extracto de OSM.
+- **Río Carapachay:** no está en el extracto de OSM, pero ViaTigre lo lista. Hay que agregarlo desde otra fuente con geometría (IGN o Provincia).
 - **Canal Buenos Aires:** Wikidata lo tiene y nuestro mapa también (el usuario lo nombró).
 
 ## Próximo
