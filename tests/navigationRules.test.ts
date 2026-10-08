@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BOAT_TYPES } from "../src/boat/boatTypes";
-import { onWrongSide, probeChannel, RuleBook, speedZoneAt, wakeMeeting, type RuleInputs } from "../src/game/navigationRules";
+import { onWrongSide, probeChannel, RuleBook, speedZoneAt, START_GRACE, wakeMeeting, type RuleInputs } from "../src/game/navigationRules";
 
 // River 20 wide along z (|x| < 10)
 const river = (x: number) => Math.abs(x) < 10;
@@ -55,22 +55,45 @@ describe("RuleBook", () => {
     const book = new RuleBook(BOAT_TYPES.colectiva);
     const wrong = base({ speed: 0.15, probe: { port: 3, starboard: 15, width: 18 } });
     const events = [];
-    for (let i = 0; i < 8 * 60; i++) events.push(...book.update(1 / 60, wrong));
+    for (let i = 0; i < (8 + START_GRACE) * 60; i++) events.push(...book.update(1 / 60, wrong));
     expect(events.map((e) => e.kind)).toEqual(["warn", "fine"]);
   });
 
-  it("fines speeding in an arroyo once, then rests", () => {
+  it("warns about speeding in an arroyo first, fines only if it goes on", () => {
     const book = new RuleBook(BOAT_TYPES.runabout);
+    for (let i = 0; i < START_GRACE * 60; i++) book.update(1 / 60, base());
     const fast = base({ speed: 0.3, probe: { port: 1, starboard: 1, width: 2 } });
     const events = [];
-    for (let i = 0; i < 60; i++) events.push(...book.update(1 / 60, fast));
-    expect(events).toHaveLength(1);
-    expect(events[0].rule).toBe("speedZones");
+    for (let i = 0; i < 2 * 60; i++) events.push(...book.update(1 / 60, fast));
+    expect(events.map((e) => e.kind)).toEqual(["warn"]);
+    for (let i = 0; i < 2 * 60; i++) events.push(...book.update(1 / 60, fast));
+    expect(events.map((e) => e.kind)).toEqual(["warn", "fine"]);
+    expect(book.zone).toBe("arroyo");
+  });
+
+  it("slowing down in time avoids the fine", () => {
+    const book = new RuleBook(BOAT_TYPES.runabout);
+    for (let i = 0; i < START_GRACE * 60; i++) book.update(1 / 60, base());
+    const events = [];
+    for (let i = 0; i < 60; i++) events.push(...book.update(1 / 60, base({ speed: 0.3, probe: { port: 1, starboard: 1, width: 2 } })));
+    for (let i = 0; i < 5 * 60; i++) events.push(...book.update(1 / 60, base({ speed: 0.1, probe: { port: 1, starboard: 1, width: 2 } })));
+    expect(events.every((e) => e.kind === "warn")).toBe(true);
+  });
+
+  it("does not fine while leaving the dock at the start", () => {
+    const book = new RuleBook(BOAT_TYPES.colectiva);
+    const events = [];
+    for (let i = 0; i < 5 * 60; i++) events.push(...book.update(1 / 60, base({ speed: 0.17, distanceToDock: 1 })));
+    expect(events).toEqual([]);
   });
 
   it("kayaks lose points taking a wake broadside and gain taking it bow first", () => {
-    const side = new RuleBook(BOAT_TYPES.kayak).update(1 / 60, base({ wakes: [{ x: 4, z: 0 }] }));
-    const bow = new RuleBook(BOAT_TYPES.kayak).update(1 / 60, base({ wakes: [{ x: 0, z: 4 }] }));
+    const after = (book: RuleBook, inputs: ReturnType<typeof base>) => {
+      for (let i = 0; i < START_GRACE * 60 + 1; i++) book.update(1 / 60, base());
+      return book.update(1 / 60, inputs);
+    };
+    const side = after(new RuleBook(BOAT_TYPES.kayak), base({ wakes: [{ x: 4, z: 0 }] }));
+    const bow = after(new RuleBook(BOAT_TYPES.kayak), base({ wakes: [{ x: 0, z: 4 }] }));
     expect(side[0].penalty).toBeGreaterThan(0);
     expect(bow[0].penalty).toBeLessThan(0);
   });

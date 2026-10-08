@@ -1,3 +1,4 @@
+import { ThrottleGauge, type SlowZone } from "./ThrottleGauge";
 import { Scene } from "@babylonjs/core/scene";
 import type { WorldDoc } from "../world/WorldDoc";
 import { gsap } from "gsap";
@@ -12,6 +13,7 @@ import { injectHudTheme } from "./hudTheme";
 
 export class GameUI {
   private hudDiv!: HTMLDivElement;
+  private throttle!: ThrottleGauge;
   private scoreEl!: HTMLElement;
   private secondEl!: HTMLElement;
   private secondLabelEl!: HTMLElement;
@@ -134,6 +136,7 @@ export class GameUI {
       <div id="hud-nextStop"></div>
     `;
     document.body.appendChild(this.hudDiv);
+    this.throttle = new ThrottleGauge(this.hudDiv);
     injectHudTheme();
 
     this.scoreEl = document.getElementById("hud-score")!;
@@ -174,6 +177,11 @@ export class GameUI {
       ease: "expo.out",
       clearProps: "all",
     });
+  }
+
+  /** Throttle lever, actual speed and the slow-zone limit (fractions of top speed). */
+  public updateThrottle(lever: number, speed: number, zone: SlowZone, limit: number): void {
+    this.throttle.update(lever, speed, zone, limit);
   }
 
   public updateScore(score: number): void {

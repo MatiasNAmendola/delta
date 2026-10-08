@@ -1,4 +1,5 @@
 import { Scene } from "@babylonjs/core/scene";
+import { ThrottleLever } from "./throttleLever";
 
 export interface ControlState {
   throttle: number; // -1 to 1
@@ -26,6 +27,8 @@ export class MobileControls {
   private gyroListener: ((e: DeviceOrientationEvent) => void) | null = null;
   private controlsDiv!: HTMLDivElement;
   private keysDown = new Set<string>();
+  /** The throttle stays where it is left (see throttleLever.ts). */
+  readonly lever = new ThrottleLever();
   private actionPressed = false;
 
   // Camera drag state
@@ -56,14 +59,22 @@ export class MobileControls {
   }
 
   private setupKeyboard(): void {
+    const leverKey = (key: string): 1 | -1 | 0 => (key === "w" || key === "arrowup" ? 1 : key === "s" || key === "arrowdown" ? -1 : 0);
     window.addEventListener("keydown", (e) => {
-      this.keysDown.add(e.key.toLowerCase());
+      const key = e.key.toLowerCase();
+      this.keysDown.add(key);
       if (e.key === " " || e.key === "e") {
         this.actionPressed = true;
       }
+      const dir = leverKey(key);
+      if (dir && !e.repeat) this.lever.press(dir);
+      // X: throttle to neutral
+      if (key === "x") this.lever.set(0);
     });
     window.addEventListener("keyup", (e) => {
-      this.keysDown.delete(e.key.toLowerCase());
+      const key = e.key.toLowerCase();
+      this.keysDown.delete(key);
+      if (leverKey(key)) this.lever.release();
     });
   }
 
@@ -171,7 +182,7 @@ export class MobileControls {
       <div style="position:fixed;bottom:10px;left:10px;background:rgba(0,0,0,0.7);
         color:#e8d5a3;padding:10px 15px;border-radius:8px;font-size:13px;
         font-family:monospace;z-index:100;pointer-events:none;">
-        W/↑ Acelerar &nbsp; S/↓ Reversa &nbsp; A/← D/→ Girar &nbsp; ESPACIO Parada &nbsp; Click-derecho Cámara
+        W/↑ S/↓ Acelerador (tocá: un punto · mantené: suave) &nbsp; X Punto muerto &nbsp; A/← D/→ Timón &nbsp; ESPACIO Parada &nbsp; Click-derecho Cámara
       </div>
     `;
     document.body.appendChild(hint);
@@ -284,16 +295,9 @@ export class MobileControls {
       setTimeout(() => hint?.remove(), 1000);
     }, 5000);
 
-    this.setupTouchButton("btnForward", () => {
-      this.controlState.throttle = 1;
-    }, () => {
-      this.controlState.throttle = 0;
-    });
-    this.setupTouchButton("btnReverse", () => {
-      this.controlState.throttle = -1;
-    }, () => {
-      this.controlState.throttle = 0;
-    });
+    // The lever stays where it is left: tap for one notch, hold to move it smoothly
+    this.setupTouchButton("btnForward", () => this.lever.press(1), () => this.lever.release());
+    this.setupTouchButton("btnReverse", () => this.lever.press(-1), () => this.lever.release());
     this.setupTouchButton("btnLeft", () => {
       this.controlState.steering = -1;
     }, () => {
@@ -482,23 +486,13 @@ export class MobileControls {
 
   public update(dt: number): ControlState {
     // Keyboard controls (desktop)
+    this.controlState.throttle = this.lever.update(dt);
+    // Keyboard steering works on any device (touch laptops too)
+    const left = this.keysDown.has("a") || this.keysDown.has("arrowleft");
+    const right = this.keysDown.has("d") || this.keysDown.has("arrowright");
+    if (left || right) this.controlState.steering = (right ? 1 : 0) - (left ? 1 : 0);
+    else if (!this.isMobile) this.controlState.steering = 0;
     if (!this.isMobile) {
-      this.controlState.throttle = 0;
-      this.controlState.steering = 0;
-
-      if (this.keysDown.has("w") || this.keysDown.has("arrowup")) {
-        this.controlState.throttle = 1;
-      }
-      if (this.keysDown.has("s") || this.keysDown.has("arrowdown")) {
-        this.controlState.throttle = -1;
-      }
-      if (this.keysDown.has("a") || this.keysDown.has("arrowleft")) {
-        this.controlState.steering = -1;
-      }
-      if (this.keysDown.has("d") || this.keysDown.has("arrowright")) {
-        this.controlState.steering = 1;
-      }
-
       // Q/E for camera rotation on desktop
       if (this.keysDown.has("q")) {
         this.controlState.cameraAngleOffset -= 0.03;
@@ -528,7 +522,8 @@ export class MobileControls {
       }
     }
 
-    // Action button (one-shot)
+    // Action button (one-shot); stopping at a dock also takes the throttle to neutral
+    if (this.actionPressed) this.lever.set(0);
     this.controlState.action = this.actionPressed;
     this.actionPressed = false;
 

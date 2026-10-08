@@ -17,6 +17,9 @@ import type { BoatSpec, BoatTypeId } from "./boatTypes";
 import { Buoyancy, type BuoyancyParams } from "./buoyancy";
 import { buildClasica, buildSingle, buildKayak, buildMoto, buildPesca, buildRunabout, buildSemirrigido, buildTravesia, type BoatModel } from "./boatModels";
 
+/** Turn rates in the specs were tuned for twitchy arcade turns; real boats turn slower. */
+const TURN_SCALE = 0.6;
+
 /** How deep a GLB model's keel sits under the water, relative to the boat's length. */
 const MODEL_DRAFT = 0.035;
 
@@ -46,6 +49,8 @@ export class Boat {
 
   private meshes: Mesh[] = [];
   private strokePhase = 0;
+  /** -1..1, follows the steering input with some lag. */
+  private rudder = 0;
   private buoyancy: Buoyancy;
   private floatParams: BuoyancyParams;
   private hull: Hull;
@@ -170,22 +175,20 @@ export class Boat {
       topSpeed *= 0.45 + 0.55 * this.energy;
     }
 
-    if (this.throttle !== 0) {
-      this.speed += this.throttle * spec.acceleration * frames;
-    } else if (Math.abs(this.speed) > spec.deceleration * frames) {
-      this.speed -= Math.sign(this.speed) * spec.deceleration * frames;
-    } else {
-      this.speed = 0;
-    }
-    // Above the (tired) top speed the boat slows down to it
-    if (this.speed > topSpeed) this.speed = Math.max(topSpeed, this.speed - spec.deceleration * frames);
-    this.speed = clamp(this.speed, -spec.maxSpeed * spec.reverse, spec.maxSpeed);
+    // The throttle lever sets the speed to reach (a fraction of top speed, or of reverse)
+    const target = this.throttle >= 0 ? this.throttle * topSpeed : this.throttle * spec.maxSpeed * spec.reverse;
+    if (this.speed < target) this.speed = Math.min(target, this.speed + spec.acceleration * frames);
+    else this.speed = Math.max(target, this.speed - spec.deceleration * (this.speed > 0 && target < 0 ? 2 : 1) * frames);
+
+    // The rudder (or paddle stroke) takes time to come over: taps are small corrections
+    const rudderRate = (Math.abs(steering) > Math.abs(this.rudder) && Math.sign(steering) !== -Math.sign(this.rudder) ? 2.2 : 4) * Math.min(deltaTime, 0.1);
+    this.rudder += Math.max(-rudderRate, Math.min(rudderRate, steering - this.rudder));
 
     // Rudder boats need way on to turn; paddled ones pivot almost in place
     const turnFactor = spec.turnsInPlace
       ? 0.6 + 0.4 * Math.min(1, Math.abs(this.speed) / (spec.maxSpeed * 0.3))
       : Math.min(1, Math.abs(this.speed) / (spec.maxSpeed * 0.3));
-    const turn = steering * spec.turnSpeed * turnFactor * frames;
+    const turn = this.rudder * spec.turnSpeed * TURN_SCALE * turnFactor * frames;
 
     const heading = this.rotation + turn;
     // The river carries the boat: barely a heavy lancha, fully a kayak
@@ -215,7 +218,7 @@ export class Boat {
 
     // Afloat: the water under bow, stern and both sides sets heave, pitch
     // and roll; springs give the hull its weight (see buoyancy.ts)
-    const float = this.buoyancy.update(deltaTime, this.floatTarget(waterSystem, Math.sign(this.speed) * ratio, steering * turnFactor));
+    const float = this.buoyancy.update(deltaTime, this.floatTarget(waterSystem, Math.sign(this.speed) * ratio, this.rudder * turnFactor));
     this.position.y = WATER_LEVEL + float.y;
     this.rootNode.position.copyFrom(this.position);
     this.rootNode.rotation.y = this.rotation;

@@ -73,9 +73,9 @@ export class StartScreen {
       <aside class="ss-how" aria-hidden="true">
         <h2>Cómo se juega</h2>
         <ol>
-          <li><p><b>Navegá</b> ${touch ? "con los botones o inclinando el celular" : "con W A S D o las flechas"}; ${touch ? "PARADA" : "ESPACIO"} para parar en los muelles.</p></li>
+          <li><p><b>El acelerador queda donde lo dejás,</b> como una palanca: ${touch ? "▲▼" : "W/S"} lo mueven un punto por toque, o suave si los mantenés${touch ? "" : " (X: punto muerto)"}. ${touch ? "◀▶ o inclinar el celular" : "A/D"} mueven el timón; ${touch ? "PARADA" : "ESPACIO"} para en los muelles.</p></li>
           <li><p><b>Por la derecha:</b> como en la ruta, en el río se navega por la mano derecha.</p></li>
-          <li><p><b>Despacio</b> en los arroyos, frente a los muelles y cerca de remeros y kayaks: tu ola los moja.</p></li>
+          <li><p><b>Despacio</b> en los arroyos, frente a los muelles y cerca de remeros y kayaks: tu ola los moja. La línea punteada junto al acelerador marca el límite; primero te avisan y si seguís rápido, te multan.</p></li>
           <li><p><b>Limpiá el río:</b> ${touch ? "tocá" : "hacé clic en"} la basura que flota cerca tuyo y ganás créditos.</p></li>
           <li><p><b>En kayak o a remo,</b> recibí la ola de las lanchas de proa, y en los ríos anchos quedate cerca de la costa.</p></li>
           <li><p><b>El río está vivo:</b> la marea sube y baja, la corriente se da vuelta y a veces se larga una sudestada.</p></li>
