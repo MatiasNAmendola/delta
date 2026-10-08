@@ -148,8 +148,8 @@ export class GameEngine {
     // Wake effect
     this.wakeEffect = new WakeEffect(this.scene);
 
-    // Rowing club yolas on the rivers near the start, and beached by the docks
-    this.yolas = new YolaTraffic(this.scene, this.world, this.waterSystem, start, this.environment.getBeachedYolas());
+    // Rowing club yolas on the rivers near the start, and moored by the docks
+    this.yolas = new YolaTraffic(this.scene, this.world, this.waterSystem, start, this.environment.getMooredYolas());
 
     this.updateLoadingBar(85, "Configurando controles...");
 

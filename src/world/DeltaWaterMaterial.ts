@@ -81,10 +81,12 @@ void main(void) {
 
   vec3 color = mix(body, sky, clamp(fresnel * 0.85, 0.0, 1.0));
 
-  // Sun: tight glints that sparkle on the ripples plus a soft sheen
+  // Sun: tight glints that sparkle on the ripples plus a soft sheen. Far
+  // away the ripples are smaller than a pixel, so glints would only alias
   vec3 H = normalize(uSunDir + V);
   float nh = max(dot(N, H), 0.0);
-  color += uSunColor * (pow(nh, 500.0) * 1.8 + pow(nh, 80.0) * 0.05);
+  float near = 1.0 - smoothstep(70.0, 220.0, dist);
+  color += uSunColor * (pow(nh, 500.0) * 1.8 * near + pow(nh, 80.0) * 0.05);
 
   // Water lapping the bank: a thin, moving line of foam
   float lap = 0.5 + 0.5 * sin(uTime * 1.4 + p.x * 0.35 + p.y * 0.27);

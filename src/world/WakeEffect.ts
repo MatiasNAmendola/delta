@@ -250,10 +250,10 @@ export class WakeEffect {
     ps.maxEmitPower = 2.0;
 
     // Foam grows and spreads
-    ps.minSize = 0.4;
-    ps.maxSize = 1.2;
+    ps.minSize = 0.25;
+    ps.maxSize = 0.7;
     ps.minScaleX = 1;
-    ps.maxScaleX = 2.5;
+    ps.maxScaleX = 1.6;
 
     // Longer life for lingering foam
     ps.minLifeTime = 2.0;
@@ -358,10 +358,10 @@ export class WakeEffect {
     ps.maxEmitPower = 1.0;
 
     // Large flat foam patches
-    ps.minSize = 0.6;
-    ps.maxSize = 2.0;
-    ps.minScaleX = 1.5;
-    ps.maxScaleX = 3.0;
+    ps.minSize = 0.3;
+    ps.maxSize = 0.9;
+    ps.minScaleX = 1;
+    ps.maxScaleX = 1.6;
 
     // Long-lived surface foam
     ps.minLifeTime = 3.0;
@@ -499,8 +499,8 @@ export class WakeEffect {
       this.sternFoam.emitRate = Math.floor(absSpeed * 500);
       this.sternFoam.minEmitPower = absSpeed * 1.5;
       this.sternFoam.maxEmitPower = absSpeed * 4.0;
-      this.sternFoam.minSize = 0.4 + absSpeed * 0.8;
-      this.sternFoam.maxSize = 1.2 + absSpeed * 3.0;
+      this.sternFoam.minSize = 0.25 + absSpeed * 0.6;
+      this.sternFoam.maxSize = 0.7 + absSpeed * 1.2;
     } else {
       this.sternFoam.emitRate = 0;
     }

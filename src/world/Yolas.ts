@@ -11,8 +11,8 @@ import type { WorldDoc } from "./WorldDoc";
 import type { WaterSystem } from "./WaterSystem";
 import { breaksWakeCourtesy, offsetPolyline, PingPongRoute } from "./rowingRoute";
 
-/** A yola pulled up on the mud next to a dock (bow pointing inland). */
-export interface BeachedSpot {
+/** A yola moored along the bank next to a dock. */
+export interface MooredSpot {
   x: number;
   z: number;
   heading: number;
@@ -52,7 +52,7 @@ const SKIN = [new Color3(0.93, 0.76, 0.62), new Color3(0.78, 0.58, 0.42), new Co
 
 /**
  * Rowing club yolas, a Tigre classic: varnished wooden shells rowed by 2-3
- * people along the rivers, and others pulled up on the mud by the docks.
+ * people along the rivers, and others moored along the bank by the docks.
  * Everything is drawn with four thin-instance meshes (hulls, torsos, heads,
  * oars), so the whole fleet costs four draw calls.
  */
@@ -64,7 +64,7 @@ export class YolaTraffic {
   private crews: Rowing[] = [];
   private tmp = Matrix.Identity();
 
-  constructor(scene: Scene, world: WorldDoc, waterSystem: WaterSystem, start: { x: number; z: number }, beached: BeachedSpot[]) {
+  constructor(scene: Scene, world: WorldDoc, waterSystem: WaterSystem, start: { x: number; z: number }, moored: MooredSpot[]) {
     const mat = new StandardMaterial("yolaMat", scene);
     mat.diffuseColor = Color3.White();
     mat.specularColor = new Color3(0.25, 0.22, 0.18); // varnish shine
@@ -116,12 +116,12 @@ export class YolaTraffic {
       this.crews.push(c);
     }
 
-    // Beached yolas: hull only, tilted a little on the mud
-    for (const spot of beached) {
+    // Moored yolas: hull only, afloat beside the bank
+    for (const spot of moored) {
       const m = Matrix.Compose(
         Vector3.One(),
-        Quaternion.FromEulerAngles(0.05, spot.heading, 0.06),
-        new Vector3(spot.x, WATER_LEVEL + 0.12, spot.z)
+        Quaternion.FromEulerAngles(0, spot.heading, 0.02),
+        new Vector3(spot.x, WATER_LEVEL + 0.05, spot.z)
       );
       hullMatrices.push(...(m.toArray() as number[]));
     }
