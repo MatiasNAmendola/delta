@@ -16,8 +16,9 @@ import { YolaTraffic } from "./world/Yolas";
 import { Boat } from "./boat/Boat";
 import { BOAT_TYPES, parseBoatType, type BoatTypeId, type BoatSpec } from "./boat/boatTypes";
 import { currentZone, ZONES } from "./world/loadWorld";
+import { COURTESY_SPEED } from "./world/rowingRoute";
 import { createMode, type GameMode } from "./game/modes";
-import { probeChannel, RuleBook, type RuleEvent } from "./game/navigationRules";
+import { probeChannel, RuleBook, ZONE_SPEED, type RuleEvent } from "./game/navigationRules";
 import { Traffic } from "./world/Traffic";
 import { Trash, TRASH_REACH } from "./world/Trash";
 import { MobileControls } from "./controls/MobileControls";
@@ -31,6 +32,9 @@ import {
   type ResolutionPolicy,
   type ResolutionState,
 } from "./utils/AdaptiveResolution";
+
+/** Show the rowers' speed limit this far from them (their wake zone is 3 units). */
+const ROWERS_WARNING = 10;
 
 /** Fog color under a sudestada's low grey sky. */
 const STORM_FOG = new Color3(0.52, 0.56, 0.58);
@@ -285,6 +289,7 @@ export class GameEngine {
     this.score = 0;
     this.ui.hideStartScreen();
     this.rules = new RuleBook(this.spec);
+    this.controls.lever.set(0);
     this.mode = createMode(this.spec.id, {
       scene: this.scene,
       world: this.world,
@@ -296,6 +301,7 @@ export class GameEngine {
       addScore: (points) => (this.score = Math.max(0, this.score + points)),
       placeBoat: (x, z, heading) => {
         this.boat.placeAt(x, z, heading, this.waterSystem);
+        this.controls.lever.set(0);
         this.snapCamera = true;
       },
       current: (x, z) => this.waterSystem.conditions.current(x, z),
@@ -362,6 +368,14 @@ ${this.spec.mission}`, 2800);
       this.snapCamera = false;
 
       // Update UI
+      // Rowers ahead come first: their limit is the one that fines on the spot
+      const rowers = this.rules?.has("wakeCourtesy") && this.yolas.nearestCrew(this.boat.position.x, this.boat.position.z) < ROWERS_WARNING;
+      this.ui.updateThrottle(
+        this.controls.lever.value,
+        this.boat.speed / this.spec.maxSpeed,
+        rowers ? "remeros" : (this.rules?.zone ?? null),
+        rowers ? COURTESY_SPEED : ZONE_SPEED
+      );
       this.ui.updateScore(this.score);
       const second = this.mode!.secondary();
       this.ui.updateSecondary(second.label, second.value);

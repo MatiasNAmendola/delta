@@ -185,6 +185,13 @@ export class YolaTraffic {
    * Checks the lancha against every crew: a fast pass close by swamps them
    * with the wake ("wake"), touching them is a collision ("bump").
    */
+  /** Distance to the nearest rowing crew. */
+  nearestCrew(x: number, z: number): number {
+    let best = Infinity;
+    for (const c of this.crews) best = Math.min(best, Math.hypot(c.x - x, c.z - z));
+    return best;
+  }
+
   checkLancha(x: number, z: number, speedRatio: number): RowerEvent {
     for (const c of this.crews) {
       const d = Math.hypot(c.x - x, c.z - z);

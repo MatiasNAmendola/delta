@@ -23,7 +23,7 @@ export const BIG_RIVER_WIDTH = 14;
 /** Max distance to the bank that counts as "near" for small craft. */
 export const NEAR_BANK = 3;
 /** Fraction of top speed allowed in reduced-speed zones. */
-export const ZONE_SPEED = 0.45;
+export const ZONE_SPEED = 0.5;
 /** Distance to a dock's berth inside which the dock speed zone applies. */
 export const DOCK_ZONE = 5;
 
@@ -101,17 +101,23 @@ export interface RuleInputs {
   wakes: Array<{ x: number; z: number }>;
 }
 
-const WARN_AFTER: Partial<Record<RuleId, number>> = { keepRight: 3, hugTheBank: 7 };
-const FINE_AFTER: Partial<Record<RuleId, number>> = { keepRight: 7, hugTheBank: 12 };
+const WARN_AFTER: Partial<Record<RuleId, number>> = { keepRight: 3, hugTheBank: 7, speedZones: 0.4 };
+const FINE_AFTER: Partial<Record<RuleId, number>> = { keepRight: 7, hugTheBank: 12, speedZones: 3.5 };
 const COOLDOWN = 6;
+/** No warnings or fines in the first seconds of a trip (leaving the dock). */
+export const START_GRACE = 6;
 
 /**
  * Applies a boat's rules frame by frame. Lasting faults (wrong side, far
- * from the bank) warn after a grace time and fine if they go on; instant
- * ones (speeding in a zone, a wake broadside) fine right away. Each rule
- * then rests for a few seconds so one mistake costs once.
+ * from the bank, speeding in a slow zone) warn first and fine only if they
+ * go on; a wake taken broadside fines right away. Each rule then rests for
+ * a few seconds so one mistake costs once, and nothing is fined while
+ * leaving the dock at the start.
  */
 export class RuleBook {
+  private elapsed = 0;
+  /** The slow zone the boat is in now (for the HUD). */
+  zone: SpeedZone = null;
   private timers = new Map<RuleId, number>();
   private cooldown = new Map<RuleId, number>();
   private warned = new Set<RuleId>();
@@ -124,6 +130,9 @@ export class RuleBook {
 
   update(dt: number, s: RuleInputs): RuleEvent[] {
     const events: RuleEvent[] = [];
+    this.elapsed += dt;
+    this.zone = this.has("speedZones") ? speedZoneAt(s.probe, s.distanceToDock) : null;
+    if (this.elapsed < START_GRACE) return events;
     for (const [r, t] of this.cooldown) this.cooldown.set(r, Math.max(0, t - dt));
     const moving = Math.abs(s.speed) > this.spec.maxSpeed * 0.15;
     const ratio = Math.abs(s.speed) / this.spec.maxSpeed;
@@ -149,16 +158,12 @@ export class RuleBook {
     }
 
     if (this.has("speedZones")) {
-      const zone = speedZoneAt(s.probe, s.distanceToDock);
-      if (zone && ratio > ZONE_SPEED && this.ready("speedZones")) {
-        events.push({
-          rule: "speedZones",
-          kind: "fine",
-          message: zone === "arroyo" ? "Multa: velocidad reducida en arroyos" : "Multa: despacio frente a los muelles",
-          penalty: 50,
-        });
-        this.rest("speedZones");
-      }
+      const zone = this.zone;
+      this.lasting(dt, "speedZones", zone !== null && ratio > ZONE_SPEED, events, {
+        warn: zone === "arroyo" ? "Arroyo: bajá la velocidad (acelerador a la mitad)" : "Muelle cerca: bajá la velocidad",
+        fine: zone === "arroyo" ? "Multa: velocidad reducida en arroyos" : "Multa: despacio frente a los muelles",
+        penalty: 50,
+      });
     }
 
     if (this.has("takeWakeBowFirst") && s.wakes.length > 0 && this.ready("takeWakeBowFirst")) {
