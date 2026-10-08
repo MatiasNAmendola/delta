@@ -386,7 +386,9 @@ export function roughenRing(
   ring: Vec2[],
   step: number,
   amplitude: number,
-  room: (x: number, z: number, nx: number, nz: number) => number
+  room: (x: number, z: number, nx: number, nz: number) => number,
+  /** World half-size: points on the world's edge stay put (they close the map, not a bank). */
+  half = Infinity
 ): Vec2[] {
   // Resample at a fixed spacing
   const pts: Vec2[] = [];
@@ -409,10 +411,13 @@ export function roughenRing(
     // Water is on the left of the ring direction
     const wx = -dz / len;
     const wz = dx / len;
-    const n = fractalNoise(x, z) * amplitude;
+    // Fade the displacement out near the world's edge, where rings run along the border
+    const edge = Math.min(half - Math.abs(x), half - Math.abs(z));
+    const fade = Math.max(0, Math.min(1, (edge - 1) / 3));
+    const n = fractalNoise(x, z) * amplitude * fade;
     const limit = n > 0 ? room(x, z, wx, wz) : room(x, z, -wx, -wz);
     const d = Math.sign(n) * Math.min(Math.abs(n), limit * 0.3);
-    out.push([x + wx * d, z + wz * d]);
+    out.push([Math.max(-half, Math.min(half, x + wx * d)), Math.max(-half, Math.min(half, z + wz * d))]);
   }
   return out;
 }
