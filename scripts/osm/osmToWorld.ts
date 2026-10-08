@@ -373,7 +373,10 @@ export function osmToWorld(
   if (rivers.length === 0) throw new Error("No waterways found inside the world bounds");
   if (docks.length === 0) throw new Error("No named ferry terminals or piers found inside the world bounds");
 
-  const spawnDock = docks.find((d) => /estaci[oó]n fluvial/i.test(d.name)) ?? docks[0];
+  // The river station if there is one, else the stop closest to the middle of the world
+  const spawnDock =
+    docks.find((d) => /estaci[oó]n fluvial/i.test(d.name)) ??
+    docks.reduce((a, b) => (Math.hypot(b.x, b.z) < Math.hypot(a.x, a.z) ? b : a));
   // Terminals sit on the bank: start the boat on the nearest river center line
   const nearestWater = rivers
     .map((r) => nearestOnPolyline([spawnDock.x, spawnDock.z], r.points))

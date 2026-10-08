@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "world:import": "tsx scripts/osm/import.ts",
     "map:update": "bash scripts/osm/update-map.sh",
+    "map:update:all": "bash scripts/osm/update-all.sh",
     "bake": "tsx scripts/bake/bakeWorlds.ts"
   },
   "dependencies": {

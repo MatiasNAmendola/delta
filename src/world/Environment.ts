@@ -676,6 +676,8 @@ const BERTH_GAP = 1.5 * PROP_SCALE;
 const BANK_TOP = 0.6 * PROP_SCALE;
 /** How far from the World Doc point a dock may move to reach the bank. */
 const MAX_BANK_SEARCH = 40;
+/** Fallback search for docks placed mid-river on the widest rivers. */
+const WIDE_BANK_SEARCH = 160;
 
 /** Where the lancha stops for a dock, moored alongside it. */
 export interface Berth {
@@ -722,6 +724,26 @@ function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockS
             edge = [x - s * across[0] * 0.1, z - s * across[1] * 0.1];
           }
           break;
+        }
+      }
+    }
+    if (!dir) {
+      // A confluence in the middle of a wide river (the Paraná is up to 1 km
+      // across): the nearest bank in any direction
+      let best2 = Infinity;
+      for (let k = 0; k < 32; k++) {
+        const ang = (k / 32) * Math.PI * 2;
+        const d: [number, number] = [Math.cos(ang), Math.sin(ang)];
+        for (let t = 0.5; t <= WIDE_BANK_SEARCH && t < best2; t += 0.5) {
+          if (!wet(dock.x + d[0] * t, dock.z + d[1] * t)) {
+            best2 = t;
+            dir = [-d[0], -d[1]];
+            // Walk back to the last water point before the bank
+            let u = t;
+            while (u > 0 && !wet(dock.x + d[0] * u, dock.z + d[1] * u)) u -= 0.1;
+            edge = [dock.x + d[0] * u, dock.z + d[1] * u];
+            break;
+          }
         }
       }
     }

@@ -1,0 +1,19 @@
+{
+  "$comment": "Delta section world: Paraná de las Palmas frente a Escobar y el Carabelas. Used by update-map.sh --config.",
+  "bbox": {
+    "south": -34.3406,
+    "west": -58.9017,
+    "north": -34.1394,
+    "east": -58.6583
+  },
+  "origin": {
+    "lat": -34.24,
+    "lon": -58.78
+  },
+  "size": 2800,
+  "metersPerUnit": 8,
+  "id": "delta-escobar",
+  "name": "Delta: Escobar y Paraná de las Palmas",
+  "overpass": "delta-escobar.overpass.json",
+  "output": "src/world/data/delta-escobar.world.json"
+}

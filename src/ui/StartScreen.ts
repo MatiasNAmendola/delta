@@ -1,5 +1,6 @@
 import { gsap } from "gsap";
 import type { WorldDoc } from "../world/WorldDoc";
+import { chooseZone, currentZone, ZONES } from "../world/loadWorld";
 import { BOAT_TYPES, FAMILIES, type BoatFamily, type BoatTypeId } from "../boat/boatTypes";
 
 /** Start screen tabs: one per boat, or one per family of boats. */
@@ -41,7 +42,11 @@ export class StartScreen {
     this.root.innerHTML = `
       <div class="ss-scrim"></div>
       <main class="ss-content">
-        <p class="ss-eyebrow"><span class="ss-dot"></span>Tigre · Buenos Aires</p>
+        <p class="ss-eyebrow"><span class="ss-dot"></span>
+          <label class="ss-zone">Delta del Paraná ·
+            <select aria-label="Zona del Delta">${ZONES.map((z) => `<option value="${z.id}"${z.id === currentZone() ? " selected" : ""}>${z.label}</option>`).join("")}</select>
+          </label>
+        </p>
         <h1 class="ss-title" aria-label="Delta">${[..."Delta"].map((c) => `<span class="ss-char"><span>${c}</span></span>`).join("")}</h1>
         <p class="ss-sub">${BOAT_TYPES[selected].name}</p>
         <p class="ss-lede">Elegí tu embarcación. Cada una navega distinto y tiene sus reglas.</p>
@@ -73,6 +78,8 @@ export class StartScreen {
           <li><p><b>Despacio</b> en los arroyos, frente a los muelles y cerca de remeros y kayaks: tu ola los moja.</p></li>
           <li><p><b>Limpiá el río:</b> ${touch ? "tocá" : "hacé clic en"} la basura que flota cerca tuyo y ganás créditos.</p></li>
           <li><p><b>En kayak o a remo,</b> recibí la ola de las lanchas de proa, y en los ríos anchos quedate cerca de la costa.</p></li>
+          <li><p><b>El río está vivo:</b> la marea sube y baja, la corriente se da vuelta y a veces se larga una sudestada.</p></li>
+          <li><p><b>Regatas:</b> con el single, esperá el "¡Ya!" y no te salgas de tu andarivel.</p></li>
         </ol>
       </aside>
       ${world.world.attribution ? `<footer class="ss-credit">Mapa: ${world.world.attribution}</footer>` : ""}
@@ -88,6 +95,9 @@ export class StartScreen {
       this.start();
     });
     this.root.querySelector("#howBtn")!.addEventListener("click", () => this.toggleHow());
+    // Another section of the Delta: a new world, so the page reloads into it
+    const zone = this.root.querySelector<HTMLSelectElement>(".ss-zone select")!;
+    zone.addEventListener("change", () => chooseZone(zone.value));
     this.root.querySelectorAll<HTMLButtonElement>(".ss-boat").forEach((b) =>
       b.addEventListener("click", () => {
         const tab = b.dataset.tab!;
@@ -347,6 +357,13 @@ export function injectStyles(): void {
     .ss-screen .ss-bar-track { display: inline-flex; gap: 3px; }
     .ss-screen .ss-bar i { display: block; width: 14px; height: 4px; border-radius: 2px; background: rgba(244, 239, 227, 0.18); transform-origin: left; }
     .ss-screen .ss-bar i.on { background: var(--accent); }
+    .ss-screen .ss-zone { display: inline-flex; align-items: center; gap: 6px; }
+    .ss-screen .ss-zone select {
+      font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--ink); cursor: pointer;
+      background: rgba(244, 239, 227, 0.08); border: 1px solid rgba(244, 239, 227, 0.22); border-radius: 999px;
+      padding: 4px 10px; max-width: 70vw;
+    }
+    .ss-screen .ss-zone select option { color: #1b140a; text-transform: none; }
     .ss-screen .ss-variants { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
     .ss-screen .ss-variant { font: inherit; font-size: 12px; letter-spacing: 0.04em; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(244, 239, 227, 0.25); background: transparent; color: var(--muted); cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s; }
     .ss-screen .ss-variant:hover { color: var(--ink); border-color: rgba(244, 239, 227, 0.5); }
