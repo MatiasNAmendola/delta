@@ -71,6 +71,11 @@ export class WaterSystem {
     this.createRiverMeshes();
   }
 
+  /** Half the world's side: the world spans -worldHalf..worldHalf on x and z. */
+  get worldHalf(): number {
+    return this.layout.size / 2;
+  }
+
   /** Shoreline rings (water on their left). */
   public getShore(): Shore {
     return this.shore;
