@@ -96,12 +96,14 @@ def roof_slab(side):
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     bm = bmesh.new()
     bm.from_mesh(o.data)
-    # Corrugations every 7.6 cm (typical sinusoidal sheet), 4 vertices per wave
+    # Corrugations every 7.6 cm (typical sinusoidal sheet), 2 vertices per wave:
+    # a zigzag reads the same at game distance for half the triangles
     period = 0.076
     waves = round((W + 0.5) / period)
-    bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if abs(e.verts[0].co.x - e.verts[1].co.x) > 0.1], cuts=waves * 4 - 1)
+    bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if abs(e.verts[0].co.x - e.verts[1].co.x) > 0.1], cuts=waves * 2 - 1)
     for v in bm.verts:
-        v.co.z = 0.012 * math.sin((v.co.x + (W + 0.5) / 2) * math.pi * 2 / period)
+        k = round((v.co.x + (W + 0.5) / 2) / (period / 2))
+        v.co.z = 0.012 if k % 2 else -0.012
     bm.to_mesh(o.data)
     bm.free()
     sol = o.modifiers.new("espesor", "SOLIDIFY")

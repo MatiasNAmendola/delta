@@ -33,7 +33,7 @@ export class RiverBanks {
   constructor(scene: Scene, rings: Vec2[][], options: RiverBankOptions) {
     const mud = new WallBuilder();
     const wood = new WallBuilder();
-    const reeds = new InstancedBoxBatch("juncos", scene, { specular: new Color3(0.02, 0.02, 0.02) });
+    const reeds = new InstancedBoxBatch("juncos", scene, { specular: new Color3(0.02, 0.02, 0.02), shape: "cross" });
     const camalotes = new InstancedBoxBatch("camalotes", scene, {
       shape: "blob",
       specular: new Color3(0.08, 0.08, 0.08),
@@ -60,8 +60,8 @@ export class RiverBanks {
             const x = a[0] + ((b[0] - a[0]) * t) / len;
             const z = a[1] + ((b[1] - a[1]) * t) / len;
             const roll = rng();
-            if (roll < 0.05) addReeds(reeds, x + nx * 0.3, z + nz * 0.3, rng);
-            else if (roll < 0.08) addCamalotes(camalotes, x, z, nx, nz, rng);
+            if (roll < 0.03) addReeds(reeds, x + nx * 0.3, z + nz * 0.3, rng);
+            else if (roll < 0.045) addCamalotes(camalotes, x, z, nx, nz, rng);
           }
         }
         walked += len;
@@ -191,7 +191,7 @@ function addReeds(batch: InstancedBoxBatch, x: number, z: number, rng: () => num
     const r = rng() * 0.8;
     const tone = REED_COLORS[Math.floor(rng() * REED_COLORS.length)];
     const parent = propTransform(x + Math.cos(a) * r, WATER_LEVEL - 0.3, z + Math.sin(a) * r, rng() * Math.PI);
-    batch.add(parent, [0.05, h, 0.05], [0, h / 2, 0], tone, [(rng() - 0.5) * 0.35, 0, (rng() - 0.5) * 0.35]);
+    batch.add(parent, [0.07, h, 0.07], [0, h / 2, 0], tone, [(rng() - 0.5) * 0.35, 0, (rng() - 0.5) * 0.35]);
   }
 }
 

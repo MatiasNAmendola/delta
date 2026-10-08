@@ -466,8 +466,8 @@ export class WakeEffect {
       this.centerTrail.diameter = 0.8 + absSpeed * 3;
 
       // Faint: solid sheets read as plastic, not foam
-      this.trailMat.alpha = Math.min(0.2, absSpeed * 0.8);
-      this.centerTrailMat.alpha = Math.min(0.28, absSpeed * 1.1);
+      this.trailMat.alpha = Math.min(0.1, absSpeed * 0.4);
+      this.centerTrailMat.alpha = Math.min(0.15, absSpeed * 0.6);
     } else {
       // When stopped, fade trails
       this.trailMat.alpha = Math.max(0, this.trailMat.alpha - deltaTime * 0.5);

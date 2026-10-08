@@ -21,7 +21,7 @@ import {
 import { getPointOnPath, hexToColor3, seededRandom } from "../utils/helpers";
 import { DeltaWaterMaterial } from "./DeltaWaterMaterial";
 import { WaterDistanceField } from "./WaterDistanceField";
-import { buildRegions, shorelineRings, triangulate, type Polygon } from "./shoreline";
+import { buildRegions, ShoreIndex, shorelineRings, triangulate, type Polygon } from "./shoreline";
 
 export interface Shore {
   /** Closed shoreline rings, water on the left of their direction. */
@@ -52,6 +52,7 @@ export class WaterSystem {
   /** River center lines rasterized as water where the OSM polygons miss them (see planStrips). */
   private strips: River[] = [];
   private shore!: Shore;
+  private shoreIndex!: ShoreIndex;
   /** Water lookup grid cells per side: ~2 world units per cell (400 for the original 800-unit Delta). */
   private mapResolution: number;
 
@@ -109,6 +110,8 @@ export class WaterSystem {
       this.waterGrid,
       regions.water.map((poly, i) => ({ id: `agua-${i}`, outer: poly.outer, holes: poly.holes }))
     );
+    const coarse = this.waterGrid;
+    this.shoreIndex = new ShoreIndex(rings, size, (x, z) => isSet(coarse, x, z));
   }
 
   /** Shoreline rings (water on their left) and the water/land regions they bound. */
@@ -135,8 +138,39 @@ export class WaterSystem {
     return strips;
   }
 
+  /** Exact: true when the point is inside the drawn water (same shoreline as the banks). */
   public isWater(worldX: number, worldZ: number): boolean {
-    return isSet(this.waterGrid, worldX, worldZ);
+    return this.shoreIndex.isWater(worldX, worldZ);
+  }
+
+  /**
+   * Land (white) / water (black) mask of the whole world, painted from the
+   * shoreline polygons, for shaders that must keep things off the water.
+   * Texel (u, v) = world (x, z) mapped from -size/2..size/2.
+   */
+  public createLandMask(): DynamicTexture {
+    const res = 2048;
+    const size = this.world.world.size;
+    const tex = new DynamicTexture("mascaraTierra", res, this.scene, false);
+    const ctx = tex.getContext();
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, res, res);
+    ctx.fillStyle = "#000";
+    const px = (x: number) => ((x + size / 2) / size) * res;
+    // Canvas row 0 ends up at v = 1 (the +z edge) once uploaded
+    const py = (z: number) => (1 - (z + size / 2) / size) * res;
+    for (const poly of this.shore.water) {
+      ctx.beginPath();
+      for (const ring of [poly.outer, ...poly.holes]) {
+        ring.forEach(([x, z], i) => (i === 0 ? ctx.moveTo(px(x), py(z)) : ctx.lineTo(px(x), py(z))));
+        ctx.closePath();
+      }
+      (ctx.fill as (rule?: string) => void).call(ctx, "evenodd");
+    }
+    tex.update(false);
+    tex.wrapU = Texture.CLAMP_ADDRESSMODE;
+    tex.wrapV = Texture.CLAMP_ADDRESSMODE;
+    return tex;
   }
 
   /**

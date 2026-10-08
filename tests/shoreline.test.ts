@@ -7,6 +7,7 @@ import {
   smoothRing,
   traceShorelines,
   triangulate,
+  ShoreIndex,
 } from "../src/world/shoreline";
 
 // 20x20 world, 1 unit cells: a 12x12 lake with a 4x4 island in the middle
@@ -66,5 +67,30 @@ describe("ring smoothing", () => {
     expect(smooth.length).toBeLessThan(smoothRing(ring, 2).length);
     expect(Math.abs(signedArea2(smooth) / 2 - 144)).toBeLessThan(144 * 0.05);
     expect(pointInRing(0, 0, smooth)).toBe(true);
+  });
+});
+
+describe("ShoreIndex", () => {
+  const rings = traceShorelines(grid);
+  const coarse = (x: number, z: number) => grid.wet(Math.floor(x + 10), Math.floor(z + 10));
+  const index = new ShoreIndex(rings, 20, coarse, 2);
+
+  it("matches the exact shore, including just either side of the edge", () => {
+    expect(index.isWater(0, -5)).toBe(true); // lake, south of the island
+    expect(index.isWater(-5.9, 0)).toBe(true); // 0.1 inside the lake's west shore
+    expect(index.isWater(-6.1, 0)).toBe(false); // 0.1 outside it
+    expect(index.isWater(-2.1, 0)).toBe(true); // just off the island's west shore (island spans -2..2)
+    expect(index.isWater(-1.9, 0)).toBe(false); // just on the island
+    expect(index.isWater(0, 0)).toBe(false); // island center
+    expect(index.isWater(-9, -9)).toBe(false); // far land
+  });
+
+  it("agrees with point-in-polygon everywhere on a fine sample", () => {
+    const { water } = buildRegions(rings, 20);
+    const exact = (x: number, z: number) =>
+      water.some((p) => pointInRing(x, z, p.outer) && !p.holes.some((h) => pointInRing(x, z, h)));
+    let mismatches = 0;
+    for (let x = -9.95; x < 10; x += 0.37) for (let z = -9.95; z < 10; z += 0.41) if (index.isWater(x, z) !== exact(x, z)) mismatches++;
+    expect(mismatches).toBe(0);
   });
 });

@@ -254,3 +254,97 @@ export function triangulate(polygons: Polygon[]): { vertices: Float32Array; indi
   }
   return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices) };
 }
+
+/**
+ * Exact water test against the shoreline rings, so collisions match the
+ * banks that are drawn. Cells that a shore segment passes near are decided
+ * by the side of the nearest segment (rings keep water on their left);
+ * cells far from any shore are wholly water or land, decided once.
+ */
+export class ShoreIndex {
+  private readonly res: number;
+  private readonly cell: number;
+  /** Segment ids per cell (null = no shore near this cell). */
+  private readonly cells: Array<number[] | null>;
+  /** For cells without shore: 1 water, 0 land. */
+  private readonly solid: Uint8Array;
+  private readonly ax: Float64Array;
+  private readonly az: Float64Array;
+  private readonly bx: Float64Array;
+  private readonly bz: Float64Array;
+
+  constructor(rings: Vec2[][], readonly size: number, coarseIsWater: (x: number, z: number) => boolean, cell = 4) {
+    this.cell = cell;
+    this.res = Math.ceil(size / cell);
+    const res = this.res;
+    const segs: number[] = [];
+    for (const ring of rings) {
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i];
+        const b = ring[(i + 1) % ring.length];
+        segs.push(a[0], a[1], b[0], b[1]);
+      }
+    }
+    const n = segs.length / 4;
+    this.ax = new Float64Array(n);
+    this.az = new Float64Array(n);
+    this.bx = new Float64Array(n);
+    this.bz = new Float64Array(n);
+    this.cells = new Array(res * res).fill(null);
+    const half = size / 2;
+    for (let s = 0; s < n; s++) {
+      const [ax, az, bx, bz] = segs.slice(s * 4, s * 4 + 4);
+      this.ax[s] = ax;
+      this.az[s] = az;
+      this.bx[s] = bx;
+      this.bz[s] = bz;
+      // Register in every cell the segment's box touches, one cell of margin
+      const i0 = Math.max(0, Math.floor((Math.min(ax, bx) + half) / cell) - 1);
+      const i1 = Math.min(res - 1, Math.floor((Math.max(ax, bx) + half) / cell) + 1);
+      const j0 = Math.max(0, Math.floor((Math.min(az, bz) + half) / cell) - 1);
+      const j1 = Math.min(res - 1, Math.floor((Math.max(az, bz) + half) / cell) + 1);
+      for (let i = i0; i <= i1; i++) {
+        for (let j = j0; j <= j1; j++) {
+          const k = j * res + i;
+          (this.cells[k] ??= []).push(s);
+        }
+      }
+    }
+    this.solid = new Uint8Array(res * res);
+    for (let j = 0; j < res; j++) {
+      for (let i = 0; i < res; i++) {
+        if (this.cells[j * res + i]) continue;
+        this.solid[j * res + i] = coarseIsWater(-half + (i + 0.5) * cell, -half + (j + 0.5) * cell) ? 1 : 0;
+      }
+    }
+  }
+
+  isWater(x: number, z: number): boolean {
+    const half = this.size / 2;
+    const i = Math.floor((x + half) / this.cell);
+    const j = Math.floor((z + half) / this.cell);
+    if (i < 0 || j < 0 || i >= this.res || j >= this.res) return false;
+    const k = j * this.res + i;
+    const list = this.cells[k];
+    if (!list) return this.solid[k] === 1;
+
+    // Nearest segment decides; at a shared vertex prefer the segment whose
+    // line is farther from the point (it resolves convex/concave corners)
+    let best = Infinity;
+    let side = 0;
+    for (const s of list) {
+      const ax = this.ax[s], az = this.az[s];
+      const dx = this.bx[s] - ax, dz = this.bz[s] - az;
+      const l2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
+      const px = ax + dx * t - x, pz = az + dz * t - z;
+      const d2 = px * px + pz * pz;
+      const cross = dx * (z - az) - dz * (x - ax);
+      if (d2 < best - 1e-9 || (Math.abs(d2 - best) <= 1e-9 && Math.abs(cross) / Math.sqrt(l2) > Math.abs(side))) {
+        best = d2;
+        side = cross / Math.sqrt(l2);
+      }
+    }
+    return side > 0;
+  }
+}
