@@ -311,8 +311,13 @@ export class WaterSystem {
     if (this.world.waterAreas && this.world.waterAreas.length > 0) {
       this.waterMeshes.push(this.createWaterAreasMesh());
     }
-    for (const river of this.strips) {
-      this.waterMeshes.push(this.createRiverStrip(river));
+    // All strips share the material: merge them into a single draw call
+    const strips = this.strips.map((river) => this.createRiverStrip(river));
+    const merged = strips.length > 1 ? Mesh.MergeMeshes(strips, true, true) : strips[0];
+    if (merged) {
+      merged.name = "riverStrips";
+      merged.material = this.waterMaterial;
+      this.waterMeshes.push(merged);
     }
   }
 

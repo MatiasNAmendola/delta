@@ -14,6 +14,7 @@ import { hexToColor3, seededRandom, clamp } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
 import { InstancedBoxBatch, propTransform } from "./InstancedBatch";
 import { WaterDistanceField } from "./WaterDistanceField";
+import type { BeachedSpot } from "./Yolas";
 
 export class Environment {
   private scene: Scene;
@@ -24,7 +25,10 @@ export class Environment {
   /** Distance to the nearest water, shared by texturing, relief and vegetation. */
   private waterDistance: WaterDistanceField;
   private berths = new Map<string, { x: number; z: number }>();
+  /** Side of one terrain mesh quad, in world units. */
+  private terrainQuad = 12.5;
   private dockSites: Array<{ x: number; z: number }> = [];
+  private beached: BeachedSpot[] = [];
 
   constructor(scene: Scene, waterSystem: WaterSystem, world: WorldDoc) {
     this.scene = scene;
@@ -101,7 +105,8 @@ export class Environment {
       { width: this.world.world.size, height: this.world.world.size, subdivisions, updatable: true },
       this.scene
     );
-    ground.position.y = WATER_LEVEL - 0.3;
+    ground.position.y = WATER_LEVEL + GROUND_OFFSET;
+    this.terrainQuad = this.world.world.size / subdivisions;
     ground.receiveShadows = true;
     this.reflectedMeshes.push(ground);
 
@@ -154,26 +159,38 @@ export class Environment {
 
     for (let i = 0; i < positions.length; i += 3) {
       // Ground is centered at the origin, so local = world
-      const x = positions[i];
-      const z = positions[i + 2];
-      const d = this.waterDistance.at(x, z);
-
-      if (d === 0) {
-        positions[i + 1] = -0.5; // Under the water surface
-        continue;
-      }
-
-      // Low muddy bank right at the water, blending into hills further inland
-      const bank = this.fbm(x * 0.02, z * 0.02, 3, 42) * 0.8;
-      const hills =
-        this.fbm(x * 0.008, z * 0.008, 4, 42) * 4.0 +
-        this.fbm(x * 0.025, z * 0.025, 2, 99) * 1.0;
-      const inland = smoothstep(4, 20, d);
-      positions[i + 1] = Math.max(0, bank + (Math.max(0.2, hills) - bank) * inland);
+      positions[i + 1] = this.terrainHeight(positions[i], positions[i + 2]);
     }
 
     ground.updateVerticesData(VertexBuffer.PositionKind, positions);
     ground.createNormals(true);
+  }
+
+  /**
+   * Terrain height relative to the ground mesh (world y = this + GROUND_OFFSET).
+   *
+   * Within one terrain quad of any water the ground stays just under the
+   * water surface: otherwise a triangle spanning a channel narrower than a
+   * quad would rise between its two banks and hide the water. Past that it
+   * climbs to a low muddy bank, then to rolling hills inland.
+   */
+  private terrainHeight(x: number, z: number): number {
+    const d = this.waterDistance.at(x, z);
+    if (d === 0) return -0.5;
+    const q = this.terrainQuad;
+    if (d < q) return BANK_UNDER_WATER;
+
+    const bank = this.fbm(x * 0.02, z * 0.02, 3, 42) * 0.8;
+    const hills =
+      this.fbm(x * 0.008, z * 0.008, 4, 42) * 4.0 +
+      this.fbm(x * 0.025, z * 0.025, 2, 99) * 1.0;
+    const land = Math.max(0.35, bank + (Math.max(0.2, hills) - bank) * smoothstep(1.5 * q, 3 * q, d));
+    return BANK_UNDER_WATER + (land - BANK_UNDER_WATER) * smoothstep(q, 2 * q, d);
+  }
+
+  /** World y of the ground at (x, z), to stand trees and houses on it. */
+  private groundY(x: number, z: number): number {
+    return WATER_LEVEL + GROUND_OFFSET + this.terrainHeight(x, z);
   }
 
   /** Splatmap from the water distance field.
@@ -362,7 +379,7 @@ export class Environment {
     const g2 = 0.4 + rng() * 0.25;
     const leaf2Color = new Color3(0.12 + rng() * 0.08, g2, 0.1 + rng() * 0.06);
 
-    const parent = propTransform(x, WATER_LEVEL, z, rng() * Math.PI * 2);
+    const parent = propTransform(x, this.groundY(x, z), z, rng() * Math.PI * 2);
     p.trunks.add(parent, [trunkWidth, height, trunkWidth], [0, height / 2, 0], trunkColor);
     p.leavesLow.add(parent, [leafSize, leafSize * 0.6, leafSize], [0, height, 0], leaf1Color);
     p.leavesHigh.add(
@@ -377,7 +394,7 @@ export class Environment {
   private addHouse(x: number, z: number, seed: number, onStilts: boolean): void {
     const rng = seededRandom(seed);
     const p = this.props;
-    const parent = propTransform(x, WATER_LEVEL, z, rng() * Math.PI * 2);
+    const parent = propTransform(x, this.groundY(x, z), z, rng() * Math.PI * 2);
 
     const w = 2 + rng() * 2;
     const h = 1.5 + rng() * 1.5;
@@ -428,6 +445,8 @@ export class Environment {
           this.addTree(x, z, seed);
           // Delta banks are a wall of vegetation: grow a small grove at the water
           if (nearWater) this.addGrove(x, z, seed, waterSystem);
+          // ...with reeds right at the edge
+          if (this.waterDistance.at(x, z) <= 3 && seed % 2 === 0) this.addReeds(x, z, seed);
           break;
         case "house":
           this.addHouse(x, z, seed, nearWater);
@@ -450,9 +469,66 @@ export class Environment {
     }
   }
 
+  /**
+   * 2-4 rowing yolas pulled up side by side on the mud beside a dock, bows
+   * pointing inland, like at the rowing clubs along the Tigre and Luján.
+   */
+  private beachYolas(site: DockSite, toWater: [number, number], rng: () => number, waterSystem: WaterSystem): void {
+    const along: [number, number] = [-toWater[1], toWater[0]];
+    const side = rng() < 0.5 ? 1 : -1;
+    const count = 2 + Math.floor(rng() * 3);
+    for (let k = 0; k < count; k++) {
+      const off = side * (DOCK_HALF_X + 2.5 + k * 0.9);
+      let x = site.x + along[0] * off;
+      let z = site.z + along[1] * off;
+      // Slide across the shore line to this spot's own water's edge
+      const wetHere = waterSystem.isWater(x, z);
+      let found = false;
+      for (let t = 0; t < 12; t += 0.25) {
+        const sx = x + (wetHere ? -toWater[0] : toWater[0]) * t;
+        const sz = z + (wetHere ? -toWater[1] : toWater[1]) * t;
+        if (waterSystem.isWater(sx, sz) !== wetHere) {
+          x = sx;
+          z = sz;
+          found = true;
+          break;
+        }
+      }
+      if (!found) continue;
+      // Stern in the shallows, bow on the mud
+      this.beached.push({
+        x: x - toWater[0] * 0.5,
+        z: z - toWater[1] * 0.5,
+        heading: Math.atan2(-toWater[0], -toWater[1]) + (rng() - 0.5) * 0.15,
+      });
+    }
+  }
+
+  /** Clump of reeds (juncos) at the water's edge. */
+  private addReeds(x: number, z: number, seed: number): void {
+    const rng = seededRandom(seed * 13 + 5);
+    const stalks = 5 + Math.floor(rng() * 5);
+    for (let k = 0; k < stalks; k++) {
+      const h = 0.8 + rng() * 0.8;
+      const a = rng() * Math.PI * 2;
+      const r = rng() * 0.9;
+      const tone = REED_COLORS[Math.floor(rng() * REED_COLORS.length)];
+      const parent = propTransform(x + Math.cos(a) * r, WATER_LEVEL - 0.1, z + Math.sin(a) * r, rng() * Math.PI);
+      this.props.reeds.add(parent, [0.05, h, 0.05], [0, h / 2, 0], tone, [(rng() - 0.5) * 0.3, 0, (rng() - 0.5) * 0.3]);
+    }
+  }
+
+  /** Rowing yolas pulled up on the mud beside the docks. */
+  public getBeachedYolas(): BeachedSpot[] {
+    return this.beached;
+  }
+
   /** Keeps vegetation and houses off the bus-boat stops. */
   private nearDock(x: number, z: number): boolean {
-    return this.dockSites.some((site) => Math.abs(site.x - x) < 5 && Math.abs(site.z - z) < 5);
+    return (
+      this.dockSites.some((site) => Math.abs(site.x - x) < 5 && Math.abs(site.z - z) < 5) ||
+      this.beached.some((spot) => Math.abs(spot.x - x) < 2 && Math.abs(spot.z - z) < 2)
+    );
   }
 
   /**
@@ -466,6 +542,7 @@ export class Environment {
     const site = placeOnBank(dock, waterSystem, DOCK_HALF_X);
     this.berths.set(dock.id, site.berth);
     this.dockSites.push({ x: site.x, z: site.z });
+    if (site.toWater && rng() < 0.6) this.beachYolas(site, site.toWater, rng, waterSystem);
     const parent = propTransform(site.x, WATER_LEVEL, site.z, site.rotation);
     const deckTop = 1.3;
     const halfX = DOCK_HALF_X; // deck 4 x 3
@@ -564,10 +641,15 @@ const COLOR = {
   white: new Color3(0.9, 0.9, 0.86),
   railBlue: new Color3(0.35, 0.55, 0.75),
 };
+const REED_COLORS = [new Color3(0.55, 0.6, 0.3), new Color3(0.68, 0.64, 0.4), new Color3(0.4, 0.5, 0.25)];
 /** Corrugated roofs of Delta quinchos: galvanized grey, green and oxide red. */
 const ROOF_SHEET_COLORS = [new Color3(0.62, 0.64, 0.66), new Color3(0.27, 0.4, 0.3), new Color3(0.55, 0.22, 0.18)];
 
 const DOCK_HALF_X = 2.0;
+/** The ground mesh sits this far below the water level. */
+const GROUND_OFFSET = -0.3;
+/** Height (relative to the ground mesh) of land next to water: just under the surface. */
+const BANK_UNDER_WATER = 0.15;
 /** How far from the World Doc point a dock may move to reach the bank. */
 const MAX_BANK_SEARCH = 40;
 
@@ -577,6 +659,8 @@ interface DockSite {
   /** Y rotation that makes local +x (the open, boarding side) face the water. */
   rotation: number;
   berth: { x: number; z: number };
+  /** Unit vector from the bank towards the water (null when no bank was found). */
+  toWater: [number, number] | null;
 }
 
 /**
@@ -629,7 +713,13 @@ function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockS
   if (!dir) {
     // Open water everywhere (or nowhere): keep the authored placement
     const rotation = degToRad(dock.rotationDeg);
-    return { x: dock.x, z: dock.z, rotation, berth: { x: dock.x + Math.cos(rotation) * (halfX + 1.5), z: dock.z - Math.sin(rotation) * (halfX + 1.5) } };
+    return {
+      x: dock.x,
+      z: dock.z,
+      rotation,
+      berth: { x: dock.x + Math.cos(rotation) * (halfX + 1.5), z: dock.z - Math.sin(rotation) * (halfX + 1.5) },
+      toWater: null,
+    };
   }
 
   // Deck center: over the water, its land edge 0.5 units onto the bank
@@ -638,8 +728,13 @@ function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockS
   const z = edge[1] + dir[1] * inset;
   // RotationY(r) maps local +x to (cos r, -sin r): solve for +x = dir
   const rotation = Math.atan2(-dir[1], dir[0]);
-  const reach = halfX + 1.5;
-  return { x, z, rotation, berth: { x: x + dir[0] * reach, z: z + dir[1] * reach } };
+
+  // Berth just off the open side, but never past mid-channel: in a narrow
+  // arroyo that would land it on the far bank
+  let width = 0;
+  while (width < MAX_BANK_SEARCH && wet(edge[0] + dir[0] * (width + 0.5), edge[1] + dir[1] * (width + 0.5))) width += 0.5;
+  const reach = Math.min(inset + halfX + 1.5, Math.max(0.5, width / 2));
+  return { x, z, rotation, berth: { x: edge[0] + dir[0] * reach, z: edge[1] + dir[1] * reach }, toWater: dir };
 }
 
 /** Stable small hash so each dock gets the same look on every load. */
@@ -698,6 +793,7 @@ function createPropBatches(scene: Scene) {
     dockPlatforms: new InstancedBoxBatch("dockPlatforms", scene),
     dockPosts: new InstancedBoxBatch("dockPosts", scene),
     signs: new InstancedBoxBatch("signs", scene, { emissive: new Color3(0.05, 0.05, 0.05) }),
+    reeds: new InstancedBoxBatch("reeds", scene, { specular: new Color3(0.02, 0.02, 0.02) }),
   };
 }
 type PropBatches = ReturnType<typeof createPropBatches>;

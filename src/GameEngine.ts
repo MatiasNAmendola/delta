@@ -9,10 +9,12 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { WaterSystem } from "./world/WaterSystem";
 import { Environment } from "./world/Environment";
 import { WakeEffect } from "./world/WakeEffect";
+import { YolaTraffic } from "./world/Yolas";
 import { LanchaColectiva } from "./boat/LanchaColectiva";
 import { MobileControls } from "./controls/MobileControls";
 import { GameUI } from "./ui/GameUI";
 import {
+  BOAT_MAX_SPEED,
   CAMERA_HEIGHT,
   CAMERA_DISTANCE,
   CAMERA_LERP,
@@ -33,6 +35,7 @@ export class GameEngine {
   private waterSystem!: WaterSystem;
   private environment!: Environment;
   private wakeEffect!: WakeEffect;
+  private yolas!: YolaTraffic;
   private boat!: LanchaColectiva;
   private controls!: MobileControls;
   private ui!: GameUI;
@@ -144,9 +147,13 @@ export class GameEngine {
     // Wake effect
     this.wakeEffect = new WakeEffect(this.scene);
 
+    // Rowing club yolas on the rivers near the start, and beached by the docks
+    this.yolas = new YolaTraffic(this.scene, this.world, this.waterSystem, start, this.environment.getBeachedYolas());
+
     // Only the static world and the boat are reflected by the water
     this.waterSystem.addToReflections(this.environment.getReflectedMeshes());
     this.waterSystem.addToReflections(this.boat.getMeshes());
+    this.waterSystem.addToReflections(this.yolas.getMeshes());
     this.boat.onModelLoaded = () => {
       this.waterSystem.addToReflections(this.boat.getMeshes());
     };
@@ -290,6 +297,10 @@ export class GameEngine {
         this.boat.speed
       );
 
+      // Rowers: they keep rowing, and complain about reckless lanchas
+      this.yolas.update(dt);
+      this.checkRowers();
+
       // Check dock proximity
       this.checkDocks(controlState.action);
 
@@ -320,11 +331,29 @@ export class GameEngine {
       );
       this.ui.updateNextStop(targetDock.name, dist);
     } else {
-      // Still update water animation even on menus
+      // Still update water and rowers even on menus
       this.waterSystem.update(dt);
+      this.yolas.update(dt);
     }
 
     this.scene.render();
+  }
+
+  /** Delta etiquette: slow down near rowers, and never hit them. */
+  private checkRowers(): void {
+    const event = this.yolas.checkLancha(
+      this.boat.position.x,
+      this.boat.position.z,
+      this.boat.speed / BOAT_MAX_SPEED
+    );
+    if (event === "bump") {
+      this.boat.speed *= -0.3;
+      this.score = Math.max(0, this.score - BUMP_PENALTY);
+      this.ui.showNotification(`💥 ¡Chocaste una yola!\n-${BUMP_PENALTY} puntos`, 2200);
+    } else if (event === "wake") {
+      this.score = Math.max(0, this.score - WAKE_PENALTY);
+      this.ui.showNotification(`🚣 ¡Bajá la velocidad cerca de los remeros!\nTu ola los mojó: -${WAKE_PENALTY} puntos`, 2500);
+    }
   }
 
   private checkDocks(actionPressed: boolean): void {
@@ -501,6 +530,9 @@ export class GameEngine {
     this.ui.showEndScreen(this.score, this.totalDelivered);
   }
 }
+
+const WAKE_PENALTY = 50;
+const BUMP_PENALTY = 100;
 
 /** How many of the nearest docks the next stop is drawn from. */
 const NEXT_STOP_CHOICES = 3;
