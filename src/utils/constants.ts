@@ -9,6 +9,8 @@ export const WATER_LEVEL = 0;
  * Design sizes in their code are multiplied by this to get real sizes.
  */
 export const PROP_SCALE = 2 / 7;
+/** Real meters per world unit (the OpenStreetMap world), for distances shown to the player. */
+export const METERS_PER_UNIT = 8;
 
 // Boat: a lancha colectiva is ~16 m long and ~5 m wide
 export const BOAT_LENGTH = 2;
