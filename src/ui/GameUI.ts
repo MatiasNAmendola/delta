@@ -2,6 +2,11 @@ import { Scene } from "@babylonjs/core/scene";
 import type { WorldDoc } from "../world/WorldDoc";
 import { LanchaColectiva } from "../boat/LanchaColectiva";
 import { getPointOnPath } from "../utils/helpers";
+import { gsap } from "gsap";
+import { METERS_PER_UNIT } from "../utils/constants";
+import { StartScreen } from "./StartScreen";
+import { showEndScreen } from "./EndScreen";
+import { injectHudTheme } from "./hudTheme";
 
 export class GameUI {
   private hudDiv!: HTMLDivElement;
@@ -13,13 +18,12 @@ export class GameUI {
   private locationEl!: HTMLElement;
   private notificationEl!: HTMLElement;
   private notificationTimeout: number | null = null;
-  private startScreenDiv: HTMLDivElement | null = null;
-  private endScreenDiv: HTMLDivElement | null = null;
+  private startScreen: StartScreen | null = null;
 
   constructor(private scene: Scene, private world: WorldDoc) {
     this.createHUD();
     this.createMinimap();
-    this.showStartScreen();
+    // The title screen is shown by the engine once the loader is gone
   }
 
   private createHUD(): void {
@@ -109,16 +113,15 @@ export class GameUI {
       </style>
       <div class="hud-bar">
         <div class="hud-item">
-          <span class="icon">⭐</span>
-          <span>Puntos: </span>
+          <span class="label">Puntos</span>
           <span class="value" id="hud-score">0</span>
         </div>
         <div class="hud-item">
-          <span class="icon">👥</span>
-          <span id="hud-passengers">0/${this.world.rules.boatCapacity}</span>
+          <span class="label">Pasajeros</span>
+          <span class="value" id="hud-passengers">0/${this.world.rules.boatCapacity}</span>
         </div>
         <div class="hud-item">
-          <span class="icon">⏱</span>
+          <span class="label">Tiempo</span>
           <span class="value" id="hud-timer">5:00</span>
         </div>
       </div>
@@ -127,6 +130,7 @@ export class GameUI {
       <div id="hud-nextStop"></div>
     `;
     document.body.appendChild(this.hudDiv);
+    injectHudTheme();
 
     this.scoreEl = document.getElementById("hud-score")!;
     this.passengersEl = document.getElementById("hud-passengers")!;
@@ -150,6 +154,7 @@ export class GameUI {
     this.minimapCanvas.width = 120;
     this.minimapCanvas.height = 120;
     container.appendChild(this.minimapCanvas);
+    container.id = "minimap";
     document.body.appendChild(container);
 
     this.minimapCtx = this.minimapCanvas.getContext("2d")!;
@@ -250,125 +255,26 @@ export class GameUI {
   }
 
   public showStartScreen(): void {
-    this.startScreenDiv = document.createElement("div");
-    this.startScreenDiv.id = "startScreen";
-    this.startScreenDiv.innerHTML = `
-      <style>
-        #startScreen {
-          position: fixed;
-          top: 0; left: 0;
-          width: 100%; height: 100%;
-          background: linear-gradient(135deg, rgba(10,22,40,0.95), rgba(26,58,42,0.95));
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          /* If it still doesn't fit, scroll instead of pushing JUGAR off-screen */
-          justify-content: safe center;
-          overflow-y: auto;
-          padding: 12px 16px;
-          box-sizing: border-box;
-          z-index: 200;
-          color: #e8d5a3;
-          font-family: 'Segoe UI', Tahoma, sans-serif;
-        }
-        #startScreen h1 {
-          font-size: 2.5em;
-          margin-bottom: 5px;
-          text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-        #startScreen h2 {
-          font-size: 1.1em;
-          color: #7cb8a0;
-          font-weight: normal;
-          margin-bottom: 25px;
-        }
-        #startScreen .instructions {
-          background: rgba(0,0,0,0.3);
-          padding: 15px 25px;
-          border-radius: 10px;
-          margin-bottom: 25px;
-          max-width: 400px;
-          text-align: left;
-          line-height: 1.8;
-          font-size: 0.9em;
-        }
-        #startScreen .play-btn {
-          padding: 15px 50px;
-          font-size: 1.3em;
-          background: linear-gradient(135deg, #4a9a7a, #2d7a5f);
-          border: 3px solid #7cb8a0;
-          border-radius: 12px;
-          color: white;
-          cursor: pointer;
-          font-weight: bold;
-          transition: transform 0.2s, background 0.2s;
-        }
-        #startScreen .play-btn:hover {
-          transform: scale(1.05);
-          background: linear-gradient(135deg, #5aaa8a, #3d8a6f);
-        }
-        /* Last so it overrides the rules above. Landscape phones (~360-430 px tall): compact layout so JUGAR is visible */
-        @media (max-height: 520px) {
-          #startScreen .boat-icon { display: none; }
-          #startScreen h1 { font-size: 1.6em; margin: 0 0 2px; }
-          #startScreen h2 { font-size: 0.95em; margin: 0 0 10px; }
-          #startScreen .instructions {
-            max-width: 620px;
-            padding: 8px 16px;
-            margin-bottom: 12px;
-            line-height: 1.45;
-            font-size: 0.8em;
-          }
-          #startScreen .play-btn { padding: 10px 40px; font-size: 1.15em; }
-        }
-      </style>
-      <div class="boat-icon" style="font-size:4em;margin-bottom:15px;">🚢</div>
-      <h1>Delta de Tigre</h1>
-      <h2>Lancha Colectiva Simulator</h2>
-      <div class="instructions">
-        🎮 <b>Objetivo:</b> Navegá por los ríos del Delta recogiendo y dejando pasajeros en las paradas.<br>
-        ⭐ Ganá puntos por cada pasajero entregado.<br>
-        ⏱ Tenés ${Math.round(this.world.rules.durationSec / 60)} minutos para hacer la mayor cantidad de viajes.<br>
-        🗺 Ríos: Luján, Tigre, Sarmiento, Capitán, San Antonio y más.<br>
-        📱 En móvil: usá los botones táctiles o el giroscopio para manejar.
-      </div>
-      <button class="play-btn" id="playBtn">▶ JUGAR</button>
-    `;
-    const attribution = this.world.world.attribution;
-    if (attribution) {
-      // Required by the data license (e.g. ODbL for OpenStreetMap)
-      const credit = document.createElement("div");
-      credit.textContent = `Mapa: ${attribution}`;
-      credit.style.cssText = "margin-top:12px;font-size:11px;opacity:0.7";
-      this.startScreenDiv.appendChild(credit);
-    }
-    document.body.appendChild(this.startScreenDiv);
+    this.startScreen = new StartScreen(this.world);
   }
 
   public onPlayClick(callback: () => void): void {
-    const btn = document.getElementById("playBtn");
-    if (btn) {
-      btn.addEventListener("click", () => {
-        callback();
-      });
-      btn.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        callback();
-      });
-    }
+    this.startScreen?.onPlayClick(callback);
   }
 
+  /** The title screen animates itself out; the HUD slides in after it. */
   public hideStartScreen(): void {
-    if (this.startScreenDiv) {
-      this.startScreenDiv.style.opacity = "0";
-      this.startScreenDiv.style.transition = "opacity 0.5s";
-      setTimeout(() => {
-        this.startScreenDiv?.remove();
-        this.startScreenDiv = null;
-      }, 500);
-    }
+    this.startScreen = null;
     this.hudDiv.style.display = "block";
+    gsap.from(this.hudDiv.querySelectorAll(".hud-bar > *"), {
+      y: -24,
+      opacity: 0,
+      duration: 0.9,
+      delay: 0.45,
+      stagger: 0.08,
+      ease: "expo.out",
+      clearProps: "all",
+    });
   }
 
   public updateScore(score: number): void {
@@ -398,85 +304,35 @@ export class GameUI {
   public updateNextStop(name: string, distance: number): void {
     const el = document.getElementById("hud-nextStop");
     if (el) {
-      el.textContent = `→ ${name} (${Math.floor(distance)}m)`;
+      // World units are 8 m on the real map
+      const meters = distance * METERS_PER_UNIT;
+      const far = meters >= 1000 ? `${(meters / 1000).toFixed(1).replace(".", ",")} km` : `${Math.round(meters / 10) * 10} m`;
+      el.textContent = `Próxima parada · ${name} · ${far}`;
     }
   }
 
   public showNotification(message: string, duration = 2500): void {
-    this.notificationEl.textContent = message;
-    this.notificationEl.classList.add("show");
+    const el = this.notificationEl;
+    el.textContent = message;
+    el.classList.add("show");
+    gsap.killTweensOf(el);
+    gsap.fromTo(el, { y: 12, scale: 0.96, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.5, ease: "expo.out" });
 
     if (this.notificationTimeout) {
       clearTimeout(this.notificationTimeout);
     }
     this.notificationTimeout = window.setTimeout(() => {
-      this.notificationEl.classList.remove("show");
+      gsap.to(el, {
+        y: -10,
+        opacity: 0,
+        duration: 0.4,
+        ease: "power2.in",
+        onComplete: () => el.classList.remove("show"),
+      });
     }, duration);
   }
 
   public showEndScreen(score: number, passengersDelivered: number): void {
-    this.endScreenDiv = document.createElement("div");
-    this.endScreenDiv.innerHTML = `
-      <style>
-        #endScreen {
-          position: fixed;
-          top: 0; left: 0;
-          width: 100%; height: 100%;
-          background: rgba(10,22,40,0.92);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          justify-content: safe center;
-          overflow-y: auto;
-          z-index: 200;
-          color: #e8d5a3;
-        }
-        #endScreen h1 { font-size: 2em; margin-bottom: 10px; }
-        #endScreen .stats {
-          font-size: 1.2em;
-          margin: 20px 0;
-          line-height: 2;
-          text-align: center;
-        }
-        #endScreen .replay-btn {
-          padding: 15px 50px;
-          font-size: 1.2em;
-          background: linear-gradient(135deg, #4a9a7a, #2d7a5f);
-          border: 3px solid #7cb8a0;
-          border-radius: 12px;
-          color: white;
-          cursor: pointer;
-          font-weight: bold;
-          margin-top: 15px;
-        }
-        @media (max-height: 520px) {
-          #endScreen h1 { font-size: 1.5em; margin: 0; }
-          #endScreen .stats { margin: 8px 0; line-height: 1.6; }
-          #endScreen .replay-btn { margin-top: 4px; }
-        }
-      </style>
-      <div id="endScreen">
-        <div style="font-size:3em;">🏆</div>
-        <h1>¡Fin del recorrido!</h1>
-        <div class="stats">
-          ⭐ Puntos: <b>${score.toLocaleString()}</b><br>
-          👥 Pasajeros entregados: <b>${passengersDelivered}</b><br>
-          ${score > 3000 ? "🌟 ¡Excelente capitán!" : score > 1500 ? "👍 ¡Buen trabajo!" : "💪 ¡Seguí practicando!"}
-        </div>
-        <button class="replay-btn" id="replayBtn">🔄 Jugar de nuevo</button>
-      </div>
-    `;
-    document.body.appendChild(this.endScreenDiv);
-
-    const replayBtn = document.getElementById("replayBtn");
-    if (replayBtn) {
-      const reload = () => window.location.reload();
-      replayBtn.addEventListener("click", reload);
-      replayBtn.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        reload();
-      });
-    }
+    showEndScreen(score, passengersDelivered);
   }
 }

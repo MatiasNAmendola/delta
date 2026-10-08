@@ -5,6 +5,7 @@ import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { gsap } from "gsap";
 
 import { WaterSystem } from "./world/WaterSystem";
 import { Environment } from "./world/Environment";
@@ -42,6 +43,8 @@ export class GameEngine {
   private ui!: GameUI;
 
   private gameStarted = false;
+  /** Camera angle around the boat while the title screen is up. */
+  private menuOrbit = 0.6;
   private gameOver = false;
   private gameTime = 0;
   private score = 0;
@@ -74,11 +77,11 @@ export class GameEngine {
       .filter((a) => a.name)
       .map((a) => ({ area: a, bounds: ringBounds(a.outer) }));
 
-    this.init();
+    void this.init();
   }
 
-  private init(): void {
-    this.updateLoadingBar(10, "Creando escena...");
+  private async init(): Promise<void> {
+    await this.updateLoadingBar(10, "Creando escena...");
     this.scene = new Scene(this.engine);
 
     // Camera
@@ -109,17 +112,17 @@ export class GameEngine {
     sun.intensity = 0.7;
     sun.diffuse = new Color3(1, 0.95, 0.8);
 
-    this.updateLoadingBar(30, "Generando ríos del Delta...");
+    await this.updateLoadingBar(30, "Generando ríos del Delta...");
 
     // Create water system
     this.waterSystem = new WaterSystem(this.scene, this.world);
 
-    this.updateLoadingBar(50, "Construyendo islas y vegetación...");
+    await this.updateLoadingBar(50, "Construyendo islas y vegetación...");
 
     // Create environment
     this.environment = new Environment(this.scene, this.waterSystem, this.world);
 
-    this.updateLoadingBar(70, "Preparando la lancha colectiva...");
+    await this.updateLoadingBar(70, "Preparando la lancha colectiva...");
 
     // Create boat at the world's spawn dock
     // Start alongside the spawn dock's muelle (docks are moved to the bank);
@@ -152,7 +155,7 @@ export class GameEngine {
     // Rowing club yolas on the rivers near the start, and moored by the docks
     this.yolas = new YolaTraffic(this.scene, this.world, this.waterSystem, start, this.environment.getMooredYolas());
 
-    this.updateLoadingBar(85, "Configurando controles...");
+    await this.updateLoadingBar(85, "Configurando controles...");
 
     // Controls
     this.controls = new MobileControls(this.scene);
@@ -160,22 +163,28 @@ export class GameEngine {
     // Initialize dock passengers
     this.randomizeDockPassengers();
 
-    this.updateLoadingBar(95, "Preparando interfaz...");
+    await this.updateLoadingBar(95, "Preparando interfaz...");
 
     // UI
     this.ui = new GameUI(this.scene, this.world);
-    this.ui.onPlayClick(() => this.startGame());
 
-    this.updateLoadingBar(100, "¡Listo!");
+    await this.updateLoadingBar(100, "¡Listo!");
 
-    // Hide loading screen
-    setTimeout(() => {
-      const loading = document.getElementById("loadingScreen");
-      if (loading) {
-        loading.style.opacity = "0";
-        setTimeout(() => loading.remove(), 500);
-      }
-    }, 500);
+    // The loader lifts away over the live river, then the title screen comes in
+    const loading = document.getElementById("loadingScreen");
+    const showTitle = () => {
+      loading?.remove();
+      this.ui.showStartScreen();
+      this.ui.onPlayClick(() => this.startGame());
+    };
+    if (loading) {
+      gsap
+        .timeline({ delay: 0.3, onComplete: showTitle })
+        .to(loading.children, { y: -24, opacity: 0, filter: "blur(6px)", duration: 0.7, stagger: 0.05, ease: "expo.in" })
+        .to(loading, { opacity: 0, duration: 0.8, ease: "power2.inOut" }, "-=0.3");
+    } else {
+      showTitle();
+    }
 
     // Start render loop
     this.engine.runRenderLoop(() => this.gameLoop());
@@ -198,11 +207,13 @@ export class GameEngine {
     this.resolution = next;
   }
 
-  private updateLoadingBar(percent: number, text: string): void {
+  /** Updates the loader, then yields a frame so it is actually painted between build steps. */
+  private async updateLoadingBar(percent: number, text: string): Promise<void> {
     const bar = document.getElementById("loadingBar");
     const loadText = document.getElementById("loadingText");
     if (bar) bar.style.width = `${percent}%`;
     if (loadText) loadText.textContent = text;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
   }
 
   /** Where the boat has to be to serve a dock: alongside the muelle, on the water. */
@@ -226,7 +237,7 @@ export class GameEngine {
     this.score = 0;
     this.totalDelivered = 0;
     this.ui.hideStartScreen();
-    this.ui.showNotification("¡Bienvenido al Delta! Navegá hasta las paradas", 3000);
+    this.ui.showNotification("Buen viaje\nSeguí la próxima parada", 2600);
 
     // Pick first target
     this.pickNextTarget();
@@ -328,6 +339,11 @@ export class GameEngine {
       // Still update water and rowers even on menus
       this.waterSystem.update(dt);
       this.yolas.update(dt);
+      // Behind the title screen the camera circles the lancha slowly
+      if (!this.gameStarted) {
+        this.menuOrbit += dt * 0.07;
+        this.updateCamera(dt, this.menuOrbit, 0, false, true);
+      }
     }
 
     // Trees and grass stream in around the camera
@@ -346,10 +362,10 @@ export class GameEngine {
     if (event === "bump") {
       this.boat.speed *= -0.3;
       this.score = Math.max(0, this.score - BUMP_PENALTY);
-      this.ui.showNotification(`💥 ¡Chocaste una yola!\n-${BUMP_PENALTY} puntos`, 2200);
+      this.ui.showNotification(`¡Chocaste una yola!\n−${BUMP_PENALTY} puntos`, 2200);
     } else if (event === "wake") {
       this.score = Math.max(0, this.score - WAKE_PENALTY);
-      this.ui.showNotification(`🚣 ¡Bajá la velocidad cerca de los remeros!\nTu ola los mojó: -${WAKE_PENALTY} puntos`, 2500);
+      this.ui.showNotification(`Despacio cerca de los remeros\nTu ola los mojó: −${WAKE_PENALTY} puntos`, 2500);
     }
   }
 
@@ -399,7 +415,7 @@ export class GameEngine {
       this.totalDelivered += dropped;
 
       this.ui.showNotification(
-        `🚏 ${dock.name}\n👥 ${dropped} pasajeros bajaron\n⭐ +${points + bonus} puntos${bonus > 0 ? " (¡BONUS!)" : ""}`,
+        `${dock.name}\n${dropped} pasajeros bajaron · +${points + bonus} puntos${bonus > 0 ? " · bonus de parada" : ""}`,
         2500
       );
 
@@ -416,7 +432,7 @@ export class GameEngine {
       this.dockPassengers.set(dock.id, waitingPassengers - picked);
 
       this.ui.showNotification(
-        `🚏 ${dock.name}\n👥 ${picked} pasajeros subieron`,
+        `${dock.name}\nSubieron ${picked} pasajeros`,
         2000
       );
 
@@ -425,7 +441,7 @@ export class GameEngine {
       }
     } else {
       this.ui.showNotification(
-        `🚏 ${dock.name}\nNo hay pasajeros esperando`,
+        `${dock.name}\nNo hay pasajeros esperando`,
         1500
       );
     }
@@ -433,13 +449,18 @@ export class GameEngine {
 
   private cameraLookTarget = Vector3.Zero();
 
-  private updateCamera(dt: number, angleOffset: number, pitchOffset: number, snap = false): void {
+  private updateCamera(dt: number, angleOffset: number, pitchOffset: number, snap = false, cinematic = false): void {
     // Camera orbits around the boat based on boat rotation + user angle offset
     const cameraAngle = this.boat.rotation + Math.PI + angleOffset;
     // `?view=aerial`: high bird's-eye camera to review the map (e.g. after a map update)
-    const dist = this.aerialView ? 300 : CAMERA_DISTANCE;
+    // Title screen: a wide, low establishing shot circling the boat
+    const dist = this.aerialView ? 300 : cinematic ? CAMERA_DISTANCE * 1.8 : CAMERA_DISTANCE;
     // Camera drag offsets were tuned for the old, 3.5x bigger props
-    const baseHeight = this.aerialView ? 450 : Math.max(0.6, CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset * PROP_SCALE);
+    const baseHeight = this.aerialView
+      ? 450
+      : cinematic
+        ? CAMERA_HEIGHT * 1.6
+        : Math.max(0.6, CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset * PROP_SCALE);
     // Snapping (lerp factor 1) jumps straight to the boat, e.g. at spawn.
     // CAMERA_LERP is per 60 fps frame; convert so smoothing feels the same at any FPS.
     const frames = Math.min(dt, 0.1) * 60;
@@ -449,7 +470,7 @@ export class GameEngine {
     let targetX = this.boat.position.x + Math.sin(cameraAngle) * dist;
     let targetZ = this.boat.position.z + Math.cos(cameraAngle) * dist;
     let raise = 0;
-    if (!this.aerialView) {
+    if (!this.aerialView && !cinematic) {
       // Keep the camera over the water: over the bank it ends up inside the
       // trees. Pull it in towards the boat and lift it to keep the view.
       let free = dist;
@@ -523,7 +544,8 @@ export class GameEngine {
 
     // Also show dock if nearby
     if (this.nearDock) {
-      this.ui.updateLocation(`${nearestRiver} - 🚏 ${this.nearDock} (ESPACIO para parar)`);
+      const touch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+      this.ui.updateLocation(`${nearestRiver} · Muelle ${this.nearDock} · ${touch ? "tocá PARADA" : "ESPACIO para parar"}`);
     } else {
       this.ui.updateLocation(nearestRiver);
     }
