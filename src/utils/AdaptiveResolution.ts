@@ -41,15 +41,19 @@ export function nextResolution(
   return { level: state.level, goodWindows: 0 };
 }
 
-/** Default policy: never above 2x pixel ratio (1.5x on touch devices). */
-export function defaultPolicy(devicePixelRatio: number, isTouch: boolean): ResolutionPolicy {
+/**
+ * Default policy: never above 2x pixel ratio (1.5x on touch devices), never
+ * below 2/3 of the CSS resolution. With a 30 fps cap the thresholds follow
+ * the cap, or the resolution would never sharpen again.
+ */
+export function defaultPolicy(devicePixelRatio: number, isTouch: boolean, fpsCap = 60): ResolutionPolicy {
   const maxRatio = isTouch ? 1.5 : 2;
   return {
     minLevel: round(1 / Math.min(Math.max(devicePixelRatio, 1), maxRatio)),
     maxLevel: 1.5,
     step: 0.25,
-    lowFps: 28,
-    highFps: 55,
+    lowFps: fpsCap <= 30 ? 24 : 28,
+    highFps: fpsCap <= 30 ? 29 : 55,
     windowsBeforeSharpen: 3,
   };
 }

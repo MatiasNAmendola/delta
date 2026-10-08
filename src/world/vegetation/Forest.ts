@@ -26,6 +26,10 @@ const NEAR = 30;
 const FAR = 170;
 /** Rebuild the visible set after the camera moves this much. */
 const REFRESH_DISTANCE = 5;
+/** Trees closer than this to the line from the camera to the boat are hidden, so they never block the view. */
+const SIGHT_CLEARANCE = 1.6;
+/** With trees that close to the sight line, refresh more often. */
+const CLOSE_REFRESH = 0.6;
 const VARIANTS = 2;
 
 interface Part {
@@ -47,6 +51,7 @@ export class Forest {
   /** parts[species][variant][lod] = [trunk, foliage] */
   private parts = new Map<string, Part[]>();
   private lastRefresh = new Vector3(Infinity, 0, Infinity);
+  private sightBlocked = false;
 
   constructor(private scene: Scene) {}
 
@@ -130,9 +135,19 @@ export class Forest {
   }
 
   /** Uploads the trees near the camera when it has moved enough. */
-  update(camera: Vector3): void {
-    if (Vector3.DistanceSquared(camera, this.lastRefresh) < REFRESH_DISTANCE * REFRESH_DISTANCE) return;
+  update(camera: Vector3, focus?: { x: number; z: number }): void {
+    const step = this.sightBlocked ? CLOSE_REFRESH : REFRESH_DISTANCE;
+    if (Vector3.DistanceSquared(camera, this.lastRefresh) < step * step) return;
     this.lastRefresh.copyFrom(camera);
+    this.sightBlocked = false;
+    // Sight line from the camera to what it looks at (the boat)
+    const sx = camera.x;
+    const sz = camera.z;
+    const ex = focus?.x ?? sx;
+    const ez = focus?.z ?? sz;
+    const lx = ex - sx;
+    const lz = ez - sz;
+    const l2 = lx * lx + lz * lz || 1;
 
     for (const list of this.parts.values()) for (const p of list) p.pick.length = 0;
     const near2 = NEAR * NEAR;
@@ -143,6 +158,16 @@ export class Forest {
       const dz = t.z - camera.z;
       const d2 = dx * dx + dz * dz;
       if (d2 > far2) continue;
+      if (focus && d2 < 400) {
+        // Distance from the tree to the camera-boat segment
+        const u = Math.max(0, Math.min(1, ((t.x - sx) * lx + (t.z - sz) * lz) / l2));
+        const qx = sx + lx * u - t.x;
+        const qz = sz + lz * u - t.z;
+        if (qx * qx + qz * qz < SIGHT_CLEARANCE * SIGHT_CLEARANCE) {
+          this.sightBlocked = true;
+          continue;
+        }
+      }
       const lod = d2 < near2 ? 0 : 1;
       const list = this.parts.get(t.species)!;
       const base = (this.variantOf[i] * 2 + lod) * 2;

@@ -77,6 +77,13 @@ export function injectHudTheme(): void {
     }
     /* Below the map card (136 px, or 104 px on landscape phones) */
     body #mobileControls .gyro-toggle { top: 158px !important; right: 12px !important; }
+    .credit-pop {
+      position: fixed; z-index: 120; pointer-events: none; transform-origin: 50% 100%;
+      translate: -50% -100%; display: flex; flex-direction: column; align-items: center; gap: 1px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.55);
+    }
+    .credit-pop b { font: 700 22px/1 "Fraunces Variable", Fraunces, Georgia, serif; color: #e9b44c; }
+    .credit-pop span { font: 600 10px/1 "Inter Variable", Inter, system-ui, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: #f4efe3; }
     @media (max-height: 520px) {
       body #gameHUD .hud-bar { padding: 8px 10px; gap: 6px; }
       body #gameHUD .hud-item { padding: 5px 10px 6px; }
