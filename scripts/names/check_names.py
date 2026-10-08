@@ -89,6 +89,80 @@ def ign():
     return out
 
 
+NAME_RE = re.compile(r"\b((?:R[ií]o|Arroyo|Aº|Ayo\.?|Canal|Riacho|Zanj[oó]n|Pasaje|Brazo)\s+(?:(?:de|del|de la|de las|de los|la|las|los|el)\s+)?[A-ZÁÉÍÓÚÑ][\wÁÉÍÓÚÑáéíóúñü.'-]*(?:\s+(?:de|del|la|las|los|el|[A-ZÁÉÍÓÚÑ][\wÁÉÍÓÚÑáéíóúñü.'-]*)){0,3})")
+
+
+def page_names(url):
+    """River and arroyo names written on a public web page (maps, guides)."""
+    html = get(url, 60).decode("utf-8", "ignore")
+    text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S | re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    import html as h
+    text = h.unescape(text)
+    found = sorted({m.group(1).strip(" .,;:") for m in NAME_RE.finditer(text)})
+    print(f"{url}: {len(found)} nombres", found[:400])
+    return [{"name": n, "alt": [n]} for n in found]
+
+
+def viatigre():
+    return page_names("https://viatigre.com.ar/tigre/delta/mapa/")
+
+
+def satellites_pro():
+    return page_names("https://satellites.pro/plano/mapa_de_Delta_del_Tigre.Argentina")
+
+
+def ign_geoportal():
+    """Finds the geoservers the IGN geoportal uses and asks them for watercourses."""
+    out = []
+    pages = {}
+    for u in ("https://www.ign.gob.ar/", "https://geoportal.ign.gob.ar/"):
+        try:
+            pages[u] = get(u, 60).decode("utf-8", "ignore")
+            print(u, "OK", len(pages[u]), "bytes")
+        except Exception as e:  # noqa: BLE001
+            print(u, "falló:", e)
+    servers = set()
+    for html in pages.values():
+        servers |= set(re.findall(r"https?://[\w.-]*ign\.gob\.ar/[\w/.-]*(?:geoserver|wms|wfs|ows)[\w/.-]*", html, re.I))
+    for js in set(re.findall(r'src="([^"]+\.js)"', pages.get("https://geoportal.ign.gob.ar/", ""))):
+        try:
+            url = js if js.startswith("http") else urllib.parse.urljoin("https://geoportal.ign.gob.ar/", js)
+            servers |= set(re.findall(r"https?://[\w.-]*ign\.gob\.ar/[\w/.-]*(?:geoserver|wms|wfs|ows)[\w/.-]*", get(url, 60).decode("utf-8", "ignore"), re.I))
+        except Exception:  # noqa: BLE001
+            pass
+    servers |= {"https://wms.ign.gob.ar/geoserver/ows", "https://geoservicios.ign.gob.ar/geoserver/ows", "https://imagenes.ign.gob.ar/geoserver/ows"}
+    print("IGN servidores candidatos:", sorted(servers))
+    for base in sorted(servers):
+        base = re.sub(r"(geoserver)(/.*)?$", r"\1/ows", base)
+        try:
+            caps = get(base + "?service=WFS&version=2.0.0&request=GetCapabilities", 90).decode("utf-8", "ignore")
+        except Exception as e:  # noqa: BLE001
+            print(base, "WFS falló:", e)
+            continue
+        layers = sorted(set(re.findall(r"<(?:wfs:)?Name>([^<]*(?:curso|agua|hidro|rio|arroyo|canal)[^<]*)</(?:wfs:)?Name>", caps, re.I)))
+        print(base, "capas:", layers)
+        for layer in layers[:8]:
+            url = (base + "?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&srsName=EPSG:4326"
+                   f"&typeNames={urllib.parse.quote(layer)}&bbox={BBOX[0]},{BBOX[1]},{BBOX[2]},{BBOX[3]},EPSG:4326&count=5000")
+            try:
+                fc = json.loads(get(url, 180))
+            except Exception as e:  # noqa: BLE001
+                print("  ", layer, "falló:", e)
+                continue
+            n0 = len(out)
+            for feat in fc.get("features", []):
+                props = feat.get("properties") or {}
+                for k, v in props.items():
+                    if k.lower() in ("nam", "fna", "gna", "nombre", "name") and isinstance(v, str) and v.strip():
+                        out.append({"name": v.strip(), "alt": [v.strip()], "layer": layer})
+                        break
+            print("  ", layer, len(out) - n0, "nombres")
+        if out:
+            break
+    return out
+
+
 def ours():
     names = {}
     for path in glob.glob("src/world/data/delta-*.world.json"):
@@ -104,7 +178,7 @@ def ours():
 
 def main():
     sources = {}
-    for label, fn in (("GeoNames", geonames), ("Wikidata", wikidata), ("IGN", ign)):
+    for label, fn in (("GeoNames", geonames), ("Wikidata", wikidata), ("IGN", ign_geoportal), ("ViaTigre", viatigre), ("Satellites.pro", satellites_pro)):
         try:
             sources[label] = fn()
             print(f"{label}: {len(sources[label])} nombres")
@@ -132,7 +206,12 @@ def main():
                 close = difflib.get_close_matches(key, list(idx.keys()), n=2, cutoff=0.82)
                 row["sources"][label] = {"match": "parecido" if close else "no", "as": sorted({n for c in close for n in idx[c]})[:3]}
         rows.append(row)
-    json.dump({"bbox": BBOX, "available": [k for k, v in sources.items() if v], "rows": rows}, open("names-report.json", "w"), ensure_ascii=False, indent=1)
+    # Names on those sources that our maps lack (candidates: missing rivers or other spellings)
+    have = {norm(n) for n in ours()}
+    extra = {l: sorted({it["name"] for it in (sources[l] or []) if norm(it["name"]) not in have}) for l in ("IGN", "ViaTigre", "Satellites.pro")}
+    for l, names in extra.items():
+        print(f"{l}: {len(names)} nombres que nuestros mapas no tienen:", names[:300])
+    json.dump({"bbox": BBOX, "missing_in_ours": extra, "available": [k for k, v in sources.items() if v], "rows": rows}, open("names-report.json", "w"), ensure_ascii=False, indent=1)
     labels = list(index.keys())
     with open("names-report.md", "w", encoding="utf-8") as f:
         f.write(f"# Cruce de nombres\n\nFuentes disponibles: {', '.join(labels) or 'ninguna'}\n\n")
