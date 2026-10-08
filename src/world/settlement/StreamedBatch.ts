@@ -9,7 +9,7 @@ import "@babylonjs/core/Meshes/thinInstanceMesh";
 import { crossedQuads } from "../InstancedBatch";
 import { addDistanceFade } from "../distanceFade";
 
-export type BatchShape = "box" | "prism" | "cross" | "blob";
+export type BatchShape = "box" | "prism" | "cross" | "blob" | "hull" | "log";
 
 export interface StreamedBatchOptions {
   shape?: BatchShape;
@@ -54,6 +54,10 @@ export class StreamedBatch {
         ? prism(name, scene)
         : options.shape === "cross"
           ? crossedQuads(name, scene)
+          : options.shape === "hull"
+            ? hull(name, scene)
+            : options.shape === "log"
+              ? MeshBuilder.CreateCylinder(name, { height: 1, diameter: 1, tessellation: 6 }, scene)
           : options.shape === "blob"
             ? MeshBuilder.CreateIcoSphere(name, { radius: 0.5, subdivisions: 1, flat: true }, scene)
             : MeshBuilder.CreateBox(name, { size: 1 }, scene);
@@ -178,6 +182,37 @@ function prism(name: string, scene: Scene): Mesh {
   quad([[A[0], A[1], -0.5], [C[0], C[1], -0.5], [C[0], C[1], 0.5], [A[0], A[1], 0.5]]);
   quad([[B[0], B[1], 0.5], [C[0], C[1], 0.5], [C[0], C[1], -0.5], [B[0], B[1], -0.5]]);
   quad([[A[0], A[1], 0.5], [B[0], B[1], 0.5], [B[0], B[1], -0.5], [A[0], A[1], -0.5]]);
+  const normals: number[] = [];
+  VertexData.ComputeNormals(positions, indices, normals);
+  const mesh = new Mesh(name, scene);
+  const data = new VertexData();
+  data.positions = positions;
+  data.indices = indices;
+  data.normals = normals;
+  data.applyToMesh(mesh);
+  return mesh;
+}
+
+/**
+ * Unit boat hull, flat-shaded: 1 wide (x), 1 long (z, bow at +z), 1 high
+ * (gunwale at y = 1, keel at y = 0), pointed bow, flat transom.
+ */
+function hull(name: string, scene: Scene): Mesh {
+  const top = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.15], [0, 0.5], [-0.5, 0.15]].map(([x, z]) => [x, 1, z]);
+  const bot = [[-0.32, -0.48], [0.32, -0.48], [0.28, 0.12], [0, 0.42], [-0.28, 0.12]].map(([x, z]) => [x, 0, z]);
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const face = (pts: number[][]) => {
+    const base = positions.length / 3;
+    for (const v of pts) positions.push(v[0], v[1], v[2]);
+    for (let k = 1; k < pts.length - 1; k++) indices.push(base, base + k, base + k + 1);
+  };
+  face([...top].reverse()); // deck (seen from above)
+  face(bot); // bottom
+  for (let i = 0; i < 5; i++) {
+    const j = (i + 1) % 5;
+    face([top[i], top[j], bot[j], bot[i]]);
+  }
   const normals: number[] = [];
   VertexData.ComputeNormals(positions, indices, normals);
   const mesh = new Mesh(name, scene);

@@ -68,7 +68,8 @@ void main(void) {
   vec2 s3 = slopeAt(q * 1.4 + vec2(-flow.x, flow.y) * uTime * 0.08);
   vec2 slope = s1 * 0.5 + s2 * 0.35 + s3 * 0.3;
   // Choppier with the wind (a sudestada whips the river up)
-  float rough = 0.45 + 1.1 * uWind.z;
+  // Choppier with the wind, glassy near the banks of narrow arroyos
+  float rough = (0.45 + 1.1 * uWind.z) * mix(0.45, 1.0, smoothstep(2.0, 12.0, shore));
   vec3 N = normalize(vec3(slope.x * rough, 1.0, slope.y * rough));
 
   vec3 toCam = uCameraPos - vWorld;
@@ -77,11 +78,33 @@ void main(void) {
   float NdV = max(dot(N, V), 0.0);
   float fresnel = 0.03 + 0.97 * pow(1.0 - NdV, 5.0);
 
-  // Sky reflected by the ripples; near the banks the trees reflect dark green
+  // Sky reflected by the ripples
   vec3 R = reflect(-V, N);
   vec3 sky = mix(uHorizon, uZenith, pow(clamp(R.y, 0.0, 1.0), 0.6));
-  float underTrees = 1.0 - smoothstep(0.5, 4.0, shore);
-  sky = mix(sky, uBank, underTrees * 0.8);
+
+  // The trees and houses on the bank mirrored in the water (photos of the
+  // Delta: calm arroyos are mirrors). Where does the reflected ray reach the
+  // bank, and is it still below the treetops there? The bank is found from
+  // the shore distance and its gradient; no second render.
+  float e = 2.0 / uWorldSize;
+  vec2 uvS = p / uWorldSize + 0.5;
+  vec2 grad = vec2(
+    texture2D(shoreMap, uvS + vec2(e, 0.0)).r - texture2D(shoreMap, uvS - vec2(e, 0.0)).r,
+    texture2D(shoreMap, uvS + vec2(0.0, e)).r - texture2D(shoreMap, uvS - vec2(0.0, e)).r
+  );
+  vec2 toBank = -normalize(grad + vec2(1e-5));
+  vec2 rh = normalize(R.xz + vec2(1e-5));
+  float facing = dot(rh, toBank);
+  float dBank = shore / max(facing, 0.12);
+  float rise = R.y / max(length(R.xz), 1e-3) * dBank;
+  // Canopy height along the bank: casuarinas and poplars, gaps, lower willows (world units, 8 m)
+  vec2 along = p + rh * dBank;
+  float canopy = 1.2 + 2.2 * smoothstep(0.25, 0.8, fract(sin(dot(floor(along * 0.35), vec2(12.9898, 78.233))) * 43758.5453) * 0.6 + 0.4 * sin(along.x * 0.7 + along.y * 0.5));
+  float mirror = (1.0 - smoothstep(canopy * 0.85, canopy, rise)) * step(0.0, facing) * (1.0 - smoothstep(10.0, 15.0, shore));
+  // Dark green foliage, darker trunks low down, a lighter sky gap between tufts
+  float tuft = 0.55 + 0.45 * sin(along.x * 3.1 + rise * 2.3) * sin(along.y * 2.7 - rise * 1.7);
+  vec3 trees = mix(uBank * 0.6, uBank * 1.35, tuft * smoothstep(0.0, canopy, rise));
+  sky = mix(sky, trees, mirror * 0.92);
 
   // Sediment-laden body color: lighter and yellower in the shallows by the bank
   vec3 body = mix(uShallow, uDeep, smoothstep(0.2, 3.0, shore));
