@@ -9,6 +9,7 @@
  * the browser computes it itself only when that file is missing or stale.
  * See docs/adr/0001-precalcular-el-mundo.md.
  */
+import { splitByCells } from "./chunking";
 import type { River, Vec2, WorldDoc } from "../WorldDoc";
 import { createGrid, isSet, rasterizeAreas, riverCoverage, uncoveredRuns, type WaterGrid } from "../waterGeometry";
 import { getPointOnPath } from "../../utils/helpers";
@@ -18,7 +19,7 @@ import { WaterDistanceField } from "../WaterDistanceField";
 import { fbm, smoothstep } from "./noise";
 
 /** Bump when the layout algorithm changes: stale baked files are then ignored. */
-export const LAYOUT_VERSION = 5;
+export const LAYOUT_VERSION = 6;
 /** Shoreline points are quantized to 1/256 unit (3 cm): small, exact deltas in the baked file. */
 export const POINT_QUANTUM = 256;
 
@@ -54,9 +55,9 @@ export interface WorldLayout {
    */
   points: Float32Array;
   ringStarts: Uint32Array;
-  /** Triangles of the water surface and of the islands, as indices into points. */
-  waterIndices: Uint32Array;
-  landIndices: Uint32Array;
+  /** The water surface and the islands, cut into 256-unit chunks (see chunking.ts). */
+  water: ChunkedMesh;
+  land: ChunkedMesh;
   /** Signed distance to the shore, 0.5 = shore, spanning +-SHORE_SDF_RANGE (R8). */
   shoreSdf: Uint8Array;
   /** Distance from water to the nearest bank, 0..SHORE_RANGE (R8), for the water shader. */
@@ -65,6 +66,72 @@ export interface WorldLayout {
   /** Ground splatmap: dirt and lush grass weights (lawn = the rest), 2 bytes per texel. */
   splatRes: number;
   splat: Uint8Array;
+}
+
+/**
+ * A flat mesh cut into chunks. Each chunk's vertices are first references
+ * to shoreline points (`refs`, ascending: tiny deltas in the file), then the
+ * vertices made by the cuts (`extra`, x, z); its triangles index those
+ * local vertices. `table` has 5 numbers per chunk: cell i, cell j, refs
+ * count, extra count, index count.
+ */
+export interface ChunkedMesh {
+  refs: Uint32Array;
+  extra: Float32Array;
+  indices: Uint32Array;
+  table: Int32Array;
+}
+
+export const CHUNK_TABLE_STRIDE = 5;
+
+/** Cuts a flat indexed mesh (x, z points) into chunks. */
+export function chunkFlatMesh(points: Float32Array, indices: Uint32Array): ChunkedMesh {
+  const n = points.length / 2;
+  const positions = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    positions[i * 3] = points[i * 2];
+    positions[i * 3 + 2] = points[i * 2 + 1];
+  }
+  const chunks = splitByCells({ positions, indices });
+  const refs: number[] = [];
+  const extra: number[] = [];
+  const out: number[] = [];
+  const table = new Int32Array(chunks.length * CHUNK_TABLE_STRIDE);
+  chunks.forEach((c, k) => {
+    const count = c.positions.length / 3;
+    // Shoreline points in order, then the cut vertices along x
+    const order = Array.from({ length: count }, (_, v) => v).sort((a, b) => {
+      const sa = c.source[a];
+      const sb = c.source[b];
+      if (sa >= 0 && sb >= 0) return sa - sb;
+      if (sa >= 0 || sb >= 0) return sa >= 0 ? -1 : 1;
+      return c.positions[a * 3] - c.positions[b * 3] || c.positions[a * 3 + 2] - c.positions[b * 3 + 2];
+    });
+    const rank = new Uint32Array(count);
+    let nRefs = 0;
+    order.forEach((v, r) => {
+      rank[v] = r;
+      if (c.source[v] >= 0) {
+        refs.push(c.source[v]);
+        nRefs++;
+      } else extra.push(quantize(c.positions[v * 3]), quantize(c.positions[v * 3 + 2]));
+    });
+    // Triangles sorted by their lowest vertex, rotated to start there (same
+    // winding): consecutive indices stay close, which gzips much better
+    const tris: Array<[number, number, number]> = [];
+    for (let t = 0; t < c.indices.length; t += 3) {
+      const [a, b, d] = [rank[c.indices[t]], rank[c.indices[t + 1]], rank[c.indices[t + 2]]];
+      tris.push(a <= b && a <= d ? [a, b, d] : b <= a && b <= d ? [b, d, a] : [d, a, b]);
+    }
+    tris.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+    for (const t of tris) out.push(t[0], t[1], t[2]);
+    table.set([c.i, c.j, nRefs, count - nRefs, c.indices.length], k * CHUNK_TABLE_STRIDE);
+  });
+  return { refs: Uint32Array.from(refs), extra: Float32Array.from(extra), indices: Uint32Array.from(out), table };
+}
+
+function quantize(v: number): number {
+  return Math.round(v * POINT_QUANTUM) / POINT_QUANTUM + 0;
 }
 
 export function computeWorldLayout(world: WorldDoc, source: string, progress: (step: string) => void = () => {}): WorldLayout {
@@ -137,8 +204,8 @@ export function computeWorldLayout(world: WorldDoc, source: string, progress: (s
     return r.reversed ? [...ring].reverse() : ring;
   };
   rasterizeAreas(coarse, regions.water.map((p, i) => ({ id: `agua-${i}`, outer: ringOf(p.outer), holes: p.holes.map(ringOf) })));
-  const waterIndices = triangulateIndexed(regions.water, points, ringStarts);
-  const landIndices = triangulateIndexed(regions.land, points, ringStarts);
+  const water = chunkFlatMesh(points, triangulateIndexed(regions.water, points, ringStarts));
+  const land = chunkFlatMesh(points, triangulateIndexed(regions.land, points, ringStarts));
   progress("agua: triangulación");
 
   const index = new ShoreIndex(exact, size, (x, z) => isSet(coarse, x, z));
@@ -192,8 +259,8 @@ export function computeWorldLayout(world: WorldDoc, source: string, progress: (s
     grid: coarse.cells,
     points,
     ringStarts,
-    waterIndices,
-    landIndices,
+    water,
+    land,
     shoreSdf,
     shoreMapRes,
     shoreMap,

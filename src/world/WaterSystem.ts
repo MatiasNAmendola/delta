@@ -13,6 +13,8 @@ import { DeltaWaterMaterial } from "./DeltaWaterMaterial";
 import { mark } from "../utils/perf";
 import { ShoreIndex } from "./shoreline";
 import { WaterConditions } from "./waterConditions";
+import { buildFlatChunks } from "./chunks";
+import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { layoutRings, SHORE_RANGE, SHORE_SDF_RANGE, SHORE_SDF_RES, type WorldLayout } from "./layout/worldLayout";
 
 export { SHORE_SDF_RANGE };
@@ -52,7 +54,7 @@ export class WaterSystem {
   private grid: WaterGrid;
   private shore: Shore;
   private shoreIndex: ShoreIndex;
-  private waterMesh: Mesh | null = null;
+  private waterMesh: TransformNode | null = null;
   private drift = { x: 0, z: 0 };
   /** Tide, current, wind, wakes and sudestada (ADR 0009). */
   readonly conditions: WaterConditions;
@@ -193,33 +195,15 @@ export class WaterSystem {
   }
 
   /** The whole water surface, from the shoreline outline: a single draw call. */
-  private createWaterMesh(): Mesh {
-    const { points, waterIndices } = this.layout;
-    const count = points.length / 2;
-    const positions = new Float32Array(count * 3);
-    const normals = new Float32Array(count * 3);
-    const uvs = new Float32Array(count * 2);
-    for (let i = 0; i < count; i++) {
-      const x = points[i * 2];
-      const z = points[i * 2 + 1];
-      positions[i * 3] = x;
-      positions[i * 3 + 1] = WATER_LEVEL;
-      positions[i * 3 + 2] = z;
-      normals[i * 3 + 1] = 1;
-      uvs[i * 2] = x / 20;
-      uvs[i * 2 + 1] = z / 20;
-    }
-    const mesh = new Mesh("water", this.scene);
-    const vertexData = new VertexData();
-    vertexData.positions = positions;
-    vertexData.indices = waterIndices;
-    vertexData.normals = normals;
-    vertexData.uvs = uvs;
-    vertexData.applyToMesh(mesh);
-    mesh.material = this.water.material;
-    mesh.isPickable = false;
-    mesh.freezeWorldMatrix();
-    return mesh;
+  private createWaterMesh(): TransformNode {
+    // In 2 km chunks (cut at build time) under one node that rises and falls with the tide
+    const root = new TransformNode("water", this.scene);
+    const uv = (x: number, z: number, out: Float32Array, k: number) => {
+      out[k] = x / 20;
+      out[k + 1] = z / 20;
+    };
+    buildFlatChunks("water", this.scene, this.layout.water, this.layout.points, WATER_LEVEL, uv, this.water.material, root);
+    return root;
   }
 
   /**
@@ -240,10 +224,7 @@ export class WaterSystem {
     // The whole surface rises and falls with the tide
     const mesh = this.waterMesh;
     const y = this.level();
-    if (mesh && Math.abs(mesh.position.y - y) > 1e-4) {
-      mesh.position.y = y;
-      mesh.freezeWorldMatrix();
-    }
+    if (mesh && Math.abs(mesh.position.y - y) > 1e-4) mesh.position.y = y;
   }
 
   /** Current water level offset from WATER_LEVEL (tide and sudestada). */

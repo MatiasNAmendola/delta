@@ -6,20 +6,21 @@
  *
  * Gzip is decompressed in the browser with DecompressionStream (no library).
  */
-import { POINT_QUANTUM, type WorldLayout } from "./worldLayout";
+import { POINT_QUANTUM, type ChunkedMesh, type WorldLayout } from "./worldLayout";
 
 const MAGIC = 0x31594c44; // "DLY1" little-endian
 
 type ArrayField = "grid" | "ringStarts" | "shoreSdf" | "shoreMap" | "splat";
 const ARRAYS: ArrayField[] = ["grid", "ringStarts", "shoreSdf", "shoreMap", "splat"];
-type Typed = Uint8Array | Uint32Array | Float32Array | Int32Array;
-const KINDS = { u8: Uint8Array, u32: Uint32Array, f32: Float32Array, i32: Int32Array } as const;
+type Typed = Uint8Array | Uint32Array | Float32Array | Int32Array | Int16Array;
+const KINDS = { u8: Uint8Array, u32: Uint32Array, f32: Float32Array, i32: Int32Array, i16: Int16Array } as const;
 type Kind = keyof typeof KINDS;
 
 function kindOf(a: Typed): Kind {
   if (a instanceof Uint8Array) return "u8";
   if (a instanceof Uint32Array) return "u32";
   if (a instanceof Int32Array) return "i32";
+  if (a instanceof Int16Array) return "i16";
   return "f32";
 }
 
@@ -32,8 +33,17 @@ function entries(l: WorldLayout): Array<[string, Typed]> {
   return [
     ...ARRAYS.map((k) => [k, l[k]] as [string, Typed]),
     ["points.delta", encodePoints(l.points)],
-    ["waterIndices.delta", deltaEncode(l.waterIndices)],
-    ["landIndices.delta", deltaEncode(l.landIndices)],
+    ...chunked("water", l.water),
+    ...chunked("land", l.land),
+  ];
+}
+
+function chunked(name: string, m: ChunkedMesh): Array<[string, Typed]> {
+  return [
+    [`${name}.refs.delta`, deltaEncode(m.refs)],
+    [`${name}.extra.delta`, encodePoints(m.extra)],
+    [`${name}.indices.tri`, triangleEncode(m.indices)],
+    [`${name}.table`, m.table],
   ];
 }
 
@@ -70,6 +80,38 @@ function deltaEncode(a: Uint32Array): Int32Array {
   for (let i = 0; i < a.length; i++) {
     out[i] = a[i] - prev;
     prev = a[i];
+  }
+  return out;
+}
+
+/**
+ * Triangles (sorted by their first, lowest vertex) as three planes: first
+ * vertex as a delta from the previous triangle's, then the other two
+ * relative to it. Small numbers: 16 bits when they all fit.
+ */
+function triangleEncode(idx: Uint32Array): Int16Array | Int32Array {
+  const n = idx.length / 3;
+  const planes = new Int32Array(idx.length);
+  let prev = 0;
+  for (let t = 0; t < n; t++) {
+    const a = idx[t * 3];
+    planes[t] = a - prev;
+    planes[n + t] = idx[t * 3 + 1] - a;
+    planes[2 * n + t] = idx[t * 3 + 2] - a;
+    prev = a;
+  }
+  return planes.every((v) => v >= -32768 && v <= 32767) ? Int16Array.from(planes) : planes;
+}
+
+function triangleDecode(planes: Int16Array | Int32Array): Uint32Array {
+  const n = planes.length / 3;
+  const out = new Uint32Array(planes.length);
+  let a = 0;
+  for (let t = 0; t < n; t++) {
+    a += planes[t];
+    out[t * 3] = a;
+    out[t * 3 + 1] = a + planes[n + t];
+    out[t * 3 + 2] = a + planes[2 * n + t];
   }
   return out;
 }
@@ -128,6 +170,12 @@ export function decodeLayout(bytes: Uint8Array): WorldLayout {
     offset = align4(offset + length * Ctor.BYTES_PER_ELEMENT);
   }
   const get = <T extends Typed>(name: string) => arrays.get(name) as T;
+  const unchunked = (name: string): ChunkedMesh => ({
+    refs: deltaDecode(get<Int32Array>(`${name}.refs.delta`)),
+    extra: decodePoints(get<Int32Array>(`${name}.extra.delta`)),
+    indices: triangleDecode(get<Int16Array | Int32Array>(`${name}.indices.tri`)),
+    table: get<Int32Array>(`${name}.table`),
+  });
   return {
     version: header.version,
     source: header.source,
@@ -136,8 +184,8 @@ export function decodeLayout(bytes: Uint8Array): WorldLayout {
     grid: get<Uint8Array>("grid"),
     points: decodePoints(get<Int32Array>("points.delta")),
     ringStarts: get<Uint32Array>("ringStarts"),
-    waterIndices: deltaDecode(get<Int32Array>("waterIndices.delta")),
-    landIndices: deltaDecode(get<Int32Array>("landIndices.delta")),
+    water: unchunked("water"),
+    land: unchunked("land"),
     shoreSdf: get<Uint8Array>("shoreSdf"),
     shoreMapRes: header.shoreMapRes,
     shoreMap: get<Uint8Array>("shoreMap"),

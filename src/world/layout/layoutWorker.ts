@@ -13,5 +13,7 @@ self.onmessage = (e: MessageEvent<{ world: WorldDoc; source: string }>) => {
 };
 
 function transferables(l: WorldLayout): Transferable[] {
-  return [l.grid, l.points, l.ringStarts, l.waterIndices, l.landIndices, l.shoreSdf, l.shoreMap, l.splat].map((a) => a.buffer as ArrayBuffer);
+  return [l.grid, l.points, l.ringStarts, l.shoreSdf, l.shoreMap, l.splat, ...[l.water, l.land].flatMap((m) => [m.refs, m.extra, m.indices, m.table])].map(
+    (a) => a.buffer as ArrayBuffer
+  );
 }

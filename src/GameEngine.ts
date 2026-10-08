@@ -122,7 +122,8 @@ export class GameEngine {
     );
     this.camera.setTarget(Vector3.Zero());
     this.camera.minZ = 0.05;
-    this.camera.maxZ = this.aerialView ? 3000 : 800;
+    // The fog hides everything past ~350 units: the far plane culls the chunks beyond
+    this.camera.maxZ = this.aerialView ? 3000 : 420;
 
     // Lighting
     const ambient = new HemisphericLight(
@@ -383,7 +384,7 @@ ${this.spec.mission}`, 2800);
     }
 
     // Trees and grass stream in around the camera
-    this.environment.update(dt, this.camera.position, this.boat.position);
+    this.environment.update(dt, this.camera.position, this.boat.position, this.waterSystem.level());
 
     this.scene.render();
   }

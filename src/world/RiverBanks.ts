@@ -10,6 +10,8 @@ import { seededRandom } from "../utils/helpers";
 import type { Vec2 } from "./WorldDoc";
 import { InstancedBoxBatch, propTransform } from "./InstancedBatch";
 import { paintPixels } from "./texturePaint";
+import { StreamedBatch } from "./settlement/StreamedBatch";
+import { buildChunks } from "./chunks";
 
 /** Wall bottom, below the (opaque) water surface. */
 const WALL_FOOT = -0.6 * PROP_SCALE;
@@ -30,14 +32,15 @@ export interface RiverBankOptions {
  * clumps of reeds (juncos) and floating water hyacinth (camalotes).
  */
 export class RiverBanks {
+  private reeds: StreamedBatch;
+  private camalotes: StreamedBatch;
+
   constructor(scene: Scene, rings: Vec2[][], options: RiverBankOptions) {
     const mud = new WallBuilder();
     const wood = new WallBuilder();
-    const reeds = new InstancedBoxBatch("juncos", scene, { specular: new Color3(0.02, 0.02, 0.02), shape: "cross" });
-    const camalotes = new InstancedBoxBatch("camalotes", scene, {
-      shape: "blob",
-      specular: new Color3(0.08, 0.08, 0.08),
-    });
+    // Streamed: tens of thousands along the whole Delta, only the nearby ones drawn
+    const reeds = (this.reeds = new StreamedBatch("juncos", scene, { specular: 0.02, shape: "cross", radius: 70 }));
+    const camalotes = (this.camalotes = new StreamedBatch("camalotes", scene, { shape: "blob", specular: 0.08, radius: 110 }));
     const rng = seededRandom(31);
 
     for (const ring of rings) {
@@ -75,6 +78,12 @@ export class RiverBanks {
     reeds.build();
     camalotes.build();
   }
+
+  /** Brings in the reeds and camalotes around the camera. */
+  update(x: number, z: number): void {
+    this.reeds.update(x, z);
+    this.camalotes.update(x, z);
+  }
 }
 
 /** Vertical quads along the shore, textured by distance walked along it. */
@@ -98,21 +107,12 @@ class WallBuilder {
     this.indices.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
   }
 
-  build(name: string, scene: Scene, material: StandardMaterial, metersPerTile: number): Mesh | null {
-    if (this.indices.length === 0) return null;
+  build(name: string, scene: Scene, material: StandardMaterial, metersPerTile: number): Mesh[] {
+    if (this.indices.length === 0) return [];
     for (let i = 0; i < this.uvs.length; i += 2) this.uvs[i] /= metersPerTile;
-    const mesh = new Mesh(name, scene);
-    const data = new VertexData();
-    data.positions = this.positions;
-    data.normals = this.normals;
-    data.uvs = this.uvs;
-    data.indices = this.indices;
-    data.applyToMesh(mesh);
-    mesh.material = material;
-    mesh.isPickable = false;
-    mesh.freezeWorldMatrix();
     material.freeze();
-    return mesh;
+    // In 2 km chunks: only those in view are drawn
+    return buildChunks(name, scene, { positions: this.positions, normals: this.normals, uvs: this.uvs, indices: this.indices }, material);
   }
 }
 
@@ -183,7 +183,7 @@ const REED_COLORS = [new Color3(0.5, 0.58, 0.28), new Color3(0.66, 0.63, 0.38), 
 const HYACINTH_COLORS = [new Color3(0.2, 0.42, 0.14), new Color3(0.26, 0.5, 0.18), new Color3(0.17, 0.36, 0.12)];
 
 /** Reeds standing in the shallows at the foot of the bank, taller than it. */
-function addReeds(batch: InstancedBoxBatch, x: number, z: number, rng: () => number): void {
+function addReeds(batch: StreamedBatch, x: number, z: number, rng: () => number): void {
   const stalks = 6 + Math.floor(rng() * 6);
   for (let k = 0; k < stalks; k++) {
     const h = 1.1 + rng() * 0.9;
@@ -202,7 +202,7 @@ function addReeds(batch: InstancedBoxBatch, x: number, z: number, rng: () => num
 }
 
 /** Floating water hyacinth clumps drifting against the bank. */
-function addCamalotes(batch: InstancedBoxBatch, x: number, z: number, nx: number, nz: number, rng: () => number): void {
+function addCamalotes(batch: StreamedBatch, x: number, z: number, nx: number, nz: number, rng: () => number): void {
   const count = 2 + Math.floor(rng() * 3);
   for (let k = 0; k < count; k++) {
     const out = 0.5 + rng() * 1.3;
