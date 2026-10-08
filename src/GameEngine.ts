@@ -48,6 +48,8 @@ export class GameEngine {
   private ui!: GameUI;
 
   private gameStarted = false;
+  /** The full map pauses the game. */
+  private mapOpen = false;
   /** Camera angle around the boat while the title screen is up. */
   private menuOrbit = 0.6;
   private gameOver = false;
@@ -165,7 +167,8 @@ export class GameEngine {
     await this.updateLoadingBar(95, "Preparando interfaz...");
 
     // UI
-    this.ui = new GameUI(this.scene, this.world);
+    this.ui = new GameUI(this.scene, this.world, layout);
+    this.ui.onMapToggle((open) => (this.mapOpen = open));
     mark("interfaz");
 
     await this.updateLoadingBar(100, "¡Listo!");
@@ -263,10 +266,12 @@ ${this.spec.mission}`, 2800);
   }
 
   private gameLoop(): void {
+    // The full map covers the screen: skip the 3D frame (battery, and the map stays smooth)
+    if (this.mapOpen) return;
     const dt = this.engine.getDeltaTime() / 1000;
     this.adaptResolution(dt);
 
-    if (this.gameStarted && !this.gameOver) {
+    if (this.gameStarted && !this.gameOver && !this.mapOpen) {
       this.gameTime += dt;
 
       // Check timer
@@ -318,9 +323,9 @@ ${this.spec.mission}`, 2800);
       const second = this.mode!.secondary();
       this.ui.updateSecondary(second.label, second.value);
       this.ui.updateTimer(timeLeft);
-      this.ui.updateMinimap(this.boat.position.x, this.boat.position.z, this.boat.rotation);
       this.updateLocationName();
       const target = this.mode!.target();
+      this.ui.updateMap(this.boat.position.x, this.boat.position.z, this.boat.rotation, target ? { x: target.x, z: target.z, label: target.name } : null);
       if (target) {
         this.ui.updateNextStop(target.label, target.name, distance2D(this.boat.position.x, this.boat.position.z, target.x, target.z));
       }
@@ -492,8 +497,7 @@ ${this.spec.mission}`, 2800);
       }
     }
 
-    const hint = this.mode?.hint();
-    this.ui.updateLocation(hint ? `${nearestRiver} · ${hint}` : nearestRiver);
+    this.ui.updateLocation(nearestRiver, this.mode?.hint() ?? null);
   }
 
   private readonly aerialView = new URLSearchParams(window.location.search).get("view") === "aerial";
