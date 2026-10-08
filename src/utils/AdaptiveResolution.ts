@@ -42,15 +42,16 @@ export function nextResolution(
 }
 
 /**
- * Default policy: never above 2x pixel ratio (1.5x on touch devices), never
- * below 2/3 of the CSS resolution. With a 30 fps cap the thresholds follow
+ * Default policy: never above 2x pixel ratio. On phones never below the CSS
+ * resolution: below it everything turns to mush on a small, sharp screen
+ * (trees look like flat smudges), so a slow phone sheds detail elsewhere.
+ * On desktops, down to 2/3 of it. With a 30 fps cap the thresholds follow
  * the cap, or the resolution would never sharpen again.
  */
 export function defaultPolicy(devicePixelRatio: number, isTouch: boolean, fpsCap = 60): ResolutionPolicy {
-  const maxRatio = isTouch ? 1.5 : 2;
   return {
-    minLevel: round(1 / Math.min(Math.max(devicePixelRatio, 1), maxRatio)),
-    maxLevel: 1.5,
+    minLevel: round(1 / Math.min(Math.max(devicePixelRatio, 1), 2)),
+    maxLevel: isTouch ? 1 : 1.5,
     step: 0.25,
     lowFps: fpsCap <= 30 ? 24 : 28,
     highFps: fpsCap <= 30 ? 29 : 55,

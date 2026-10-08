@@ -1,6 +1,7 @@
 import { gsap } from "gsap";
 import type { WorldDoc } from "../world/WorldDoc";
 import { chooseZone, currentZone, ZONES } from "../world/loadWorld";
+import { enterPlayMode, mountInstallButton } from "./install";
 import { BOAT_TYPES, FAMILIES, type BoatFamily, type BoatTypeId } from "../boat/boatTypes";
 
 /** Start screen tabs: one per boat, or one per family of boats. */
@@ -95,6 +96,7 @@ export class StartScreen {
       this.start();
     });
     this.root.querySelector("#howBtn")!.addEventListener("click", () => this.toggleHow());
+    mountInstallButton(this.root.querySelector(".ss-actions")!, "ss-ghost ss-install");
     // Another section of the Delta: a new world, so the page reloads into it
     const zone = this.root.querySelector<HTMLSelectElement>(".ss-zone select")!;
     zone.addEventListener("change", () => chooseZone(zone.value));
@@ -267,6 +269,8 @@ export class StartScreen {
   }
 
   private start(): void {
+    // Phones: full screen and landscape, without the browser's bars
+    void enterPlayMode();
     if (this.leaving) return;
     this.leaving = true;
     this.intro?.progress(1);
@@ -364,6 +368,9 @@ export function injectStyles(): void {
       padding: 4px 10px; max-width: 70vw;
     }
     .ss-screen .ss-zone select option { color: #1b140a; text-transform: none; }
+    .ss-screen .ss-install { margin-left: 8px; }
+    .ss-screen .ss-install-hint { margin-top: 10px; font-size: 12px; color: var(--muted); }
+    .ss-screen .ss-install-hint b { color: var(--ink); font-weight: 600; }
     .ss-screen .ss-variants { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
     .ss-screen .ss-variant { font: inherit; font-size: 12px; letter-spacing: 0.04em; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(244, 239, 227, 0.25); background: transparent; color: var(--muted); cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s; }
     .ss-screen .ss-variant:hover { color: var(--ink); border-color: rgba(244, 239, 227, 0.5); }

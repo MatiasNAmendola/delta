@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { defaultPolicy, nextResolution } from "../src/utils/AdaptiveResolution";
 
 describe("adaptive resolution", () => {
-  const policy = defaultPolicy(3, true); // phone with DPR 3 → capped at 1.5x
+  const policy = defaultPolicy(3, true); // phone with DPR 3 → 2x at best, never below 1x
 
-  it("caps the starting pixel ratio on phones", () => {
-    expect(policy.minLevel).toBeCloseTo(1 / 1.5, 3);
+  it("caps the pixel ratio at 2x, and phones never go below the screen's CSS resolution", () => {
+    expect(defaultPolicy(3, true).minLevel).toBe(0.5);
+    expect(defaultPolicy(3, true).maxLevel).toBe(1);
+    expect(defaultPolicy(1, false).maxLevel).toBe(1.5);
     expect(defaultPolicy(2, false).minLevel).toBe(0.5);
     expect(defaultPolicy(1, false).minLevel).toBe(1);
   });

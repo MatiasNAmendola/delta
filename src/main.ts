@@ -1,4 +1,7 @@
 import { GameEngine } from "./GameEngine";
+import { watchInstallPrompt } from "./ui/install";
+
+watchInstallPrompt();
 // Fonts are bundled with the game (work offline in the PWA): Fraunces for
 // display, Inter for UI text
 import "@fontsource-variable/fraunces/opsz.css";
@@ -58,8 +61,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Register service worker for PWA
   if ("serviceWorker" in navigator) {
+    // Served from the site's folder (/delta/ on GitHub Pages), not the domain root
     navigator.serviceWorker
-      .register(new URL("/sw.js", import.meta.url).href)
+      .register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })
       .catch(() => {
         // Service worker registration failed - game still works
       });
