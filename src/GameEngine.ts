@@ -15,6 +15,7 @@ import { WakeEffect } from "./world/WakeEffect";
 import { YolaTraffic } from "./world/Yolas";
 import { Boat } from "./boat/Boat";
 import { BOAT_TYPES, parseBoatType, type BoatTypeId, type BoatSpec } from "./boat/boatTypes";
+import { currentZone, ZONES } from "./world/loadWorld";
 import { createMode, type GameMode } from "./game/modes";
 import { probeChannel, RuleBook, type RuleEvent } from "./game/navigationRules";
 import { Traffic } from "./world/Traffic";
@@ -67,6 +68,10 @@ export class GameEngine {
   private gameTime = 0;
   /** Game time when a sudestada blows in (Infinity: not this trip). */
   private sudestadaAt = Infinity;
+  /** Shown where no river is named: the section of the Delta. */
+  private get zoneName(): string {
+    return ZONES.find((z) => z.id === currentZone())?.label.split(" · ")[1] ?? "Delta de Tigre";
+  }
   /** Jump the camera to the boat on the next frame (after a teleport). */
   private snapCamera = false;
   private tideNoticeAt = Infinity;
@@ -578,8 +583,9 @@ ${this.spec.mission}`, 2800);
 
   private updateLocationName(): void {
     // Inside a named water area (real OSM shape)? That name wins
-    let nearestRiver = this.namedAreaAt(this.boat.position.x, this.boat.position.z) ?? "Delta de Tigre";
-    let minDist = nearestRiver === "Delta de Tigre" ? Infinity : -1;
+    const area = this.namedAreaAt(this.boat.position.x, this.boat.position.z);
+    let nearestRiver = area ?? this.zoneName;
+    let minDist = area === null ? Infinity : -1;
 
     for (const river of this.world.rivers) {
       for (const point of river.points) {

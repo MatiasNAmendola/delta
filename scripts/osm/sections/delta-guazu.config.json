@@ -1,0 +1,19 @@
+{
+  "$comment": "Delta section world: Paraná Guazú, Barca Grande y los arroyos de la Tercera Sección. Used by update-map.sh --config.",
+  "bbox": {
+    "south": -34.1106,
+    "west": -58.6214,
+    "north": -33.9094,
+    "east": -58.3786
+  },
+  "origin": {
+    "lat": -34.01,
+    "lon": -58.5
+  },
+  "size": 2800,
+  "metersPerUnit": 8,
+  "id": "delta-guazu",
+  "name": "Delta: Tercera Sección y Paraná Guazú",
+  "overpass": "delta-guazu.overpass.json",
+  "output": "src/world/data/delta-guazu.world.json"
+}

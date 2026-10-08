@@ -1,0 +1,19 @@
+{
+  "$comment": "Delta section world: Barca Grande, Felicaria, Las Cañas y el Paraná Miní, frente a San Fernando. Used by update-map.sh --config.",
+  "bbox": {
+    "south": -34.3006,
+    "west": -58.5916,
+    "north": -34.0994,
+    "east": -58.3484
+  },
+  "origin": {
+    "lat": -34.2,
+    "lon": -58.47
+  },
+  "size": 2800,
+  "metersPerUnit": 8,
+  "id": "delta-segunda",
+  "name": "Delta: Segunda Sección y San Fernando",
+  "overpass": "delta-segunda.overpass.json",
+  "output": "src/world/data/delta-segunda.world.json"
+}
