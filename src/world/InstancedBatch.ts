@@ -9,8 +9,11 @@ import "@babylonjs/core/Meshes/thinInstanceMesh";
 export interface BatchMaterialOptions {
   specular?: Color3;
   emissive?: Color3;
-  /** "blob" = low-poly rounded clump (an icosahedron) instead of a box. */
-  shape?: "box" | "blob";
+  /**
+   * "blob" = low-poly rounded clump (an icosahedron); "cross" = two crossed
+   * vertical quads (4 triangles, for thin stalks) instead of a 12-triangle box.
+   */
+  shape?: "box" | "blob" | "cross";
 }
 
 /**
@@ -32,12 +35,15 @@ export class InstancedBoxBatch {
     this.mesh =
       options.shape === "blob"
         ? MeshBuilder.CreateIcoSphere(name, { radius: 0.5, subdivisions: 1, flat: true }, scene)
-        : MeshBuilder.CreateBox(name, { size: 1 }, scene);
+        : options.shape === "cross"
+          ? crossedQuads(name, scene)
+          : MeshBuilder.CreateBox(name, { size: 1 }, scene);
     const mat = new StandardMaterial(`${name}Mat`, scene);
     // Base color is white: the per-instance color buffer tints it
     mat.diffuseColor = Color3.White();
     mat.specularColor = options.specular ?? new Color3(0.05, 0.05, 0.05);
     if (options.emissive) mat.emissiveColor = options.emissive;
+    if (options.shape === "cross") mat.backFaceCulling = false;
     this.mesh.material = mat;
     this.mesh.isPickable = false;
   }
@@ -81,6 +87,17 @@ export class InstancedBoxBatch {
     this.colors = [];
     return this.mesh;
   }
+}
+
+/** Unit-size cross of two vertical quads (seen from both sides: no back-face culling). */
+function crossedQuads(name: string, scene: Scene): Mesh {
+  const a = MeshBuilder.CreatePlane(`${name}A`, { size: 1 }, scene);
+  const b = MeshBuilder.CreatePlane(`${name}B`, { size: 1 }, scene);
+  b.rotation.y = Math.PI / 2;
+  b.bakeCurrentTransformIntoVertices();
+  const merged = Mesh.MergeMeshes([a, b], true)!;
+  merged.name = name;
+  return merged;
 }
 
 /** Parent transform for a prop: rotation around Y, then translation. */

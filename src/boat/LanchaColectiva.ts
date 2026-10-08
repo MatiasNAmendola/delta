@@ -21,7 +21,7 @@ import {
 } from "../utils/constants";
 import { hexToColor3, clamp } from "../utils/helpers";
 import { WaterSystem } from "../world/WaterSystem";
-import { bestFitRotation, moveHull } from "./hullCollision";
+import { findFloatingPose, moveHull } from "./hullCollision";
 
 /** The boat's root rides this far above the water (the fallback blocks are built around it). */
 const HULL_RIDE_HEIGHT = 0.6;
@@ -267,9 +267,10 @@ export class LanchaColectiva {
 
   /** Places the boat at a spawn point, turned so the whole hull fits on the water. */
   public placeAt(x: number, z: number, preferredRotation: number, waterSystem: WaterSystem): void {
-    this.position.x = x;
-    this.position.z = z;
-    this.rotation = bestFitRotation(x, z, preferredRotation, (px, pz) => waterSystem.isWater(px, pz));
+    const pose = findFloatingPose(x, z, preferredRotation, (px, pz) => waterSystem.isWater(px, pz));
+    this.position.x = pose.x;
+    this.position.z = pose.z;
+    this.rotation = pose.rotation;
     this.speed = 0;
     this.rootNode.position.copyFrom(this.position);
     this.rootNode.rotation.y = this.rotation;

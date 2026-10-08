@@ -8,7 +8,8 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { TerrainMaterial } from "@babylonjs/materials/terrain/terrainMaterial";
 import { WATER_LEVEL, COLORS } from "../utils/constants";
-import { degToRad, type Dock, type ScatterRule, type WorldDoc } from "./WorldDoc";
+import { degToRad, type Dock, type ScatterRule, type Vec2, type WorldDoc } from "./WorldDoc";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { hexToColor3, seededRandom, clamp } from "../utils/helpers";
 import { WaterSystem, type Shore } from "./WaterSystem";
 import { InstancedBoxBatch, propTransform } from "./InstancedBatch";
@@ -16,6 +17,8 @@ import { WaterDistanceField } from "./WaterDistanceField";
 import { placeDockModels } from "./DockModel";
 import { paintPixels } from "./texturePaint";
 import { RiverBanks } from "./RiverBanks";
+import { Forest, type SpeciesName } from "./vegetation/Forest";
+import { Grass } from "./vegetation/Grass";
 import { triangulate } from "./shoreline";
 import type { MooredSpot } from "./Yolas";
 
@@ -28,12 +31,16 @@ export class Environment {
   private berths = new Map<string, Berth>();
   /** Houses next to the water: their shore gets a wooden bulkhead. */
   private waterfrontHouses: Array<{ x: number; z: number }> = [];
+  private houses: Array<{ x: number; z: number }> = [];
+  private forest: Forest;
+  private grass!: Grass;
   private dockSites: Array<{ x: number; z: number; rotation: number; seed: number }> = [];
   private moored: MooredSpot[] = [];
 
   constructor(scene: Scene, waterSystem: WaterSystem, world: WorldDoc) {
     this.scene = scene;
     this.world = world;
+    this.forest = new Forest(scene);
     // ~3 world units per cell (256 for the original 800-unit Delta); also the splatmap size
     const res = world.world.size <= 800 ? 256 : 1024;
     this.waterDistance = new WaterDistanceField(world.world.size, res, (x, z) => waterSystem.isWater(x, z));
@@ -45,12 +52,28 @@ export class Environment {
     for (const dock of world.docks) {
       this.addDock(dock, waterSystem);
     }
-    for (const rule of world.scatter) {
+    // Houses before trees, so trees keep clear of them
+    const rules = [...world.scatter].sort((a, b) => Number(b.prefab === "house") - Number(a.prefab === "house"));
+    for (const rule of rules) {
       this.scatter(rule, waterSystem);
     }
+    this.plantBanks(shore.rings, waterSystem);
+    this.forest.build();
     for (const batch of Object.values(this.props)) {
       batch.build();
     }
+    this.grass = new Grass(
+      scene,
+      // Patches may straddle the bank: the shader drops blades rooted on water
+      (x, z) =>
+        // Skip patches wholly over the water
+        [[0, 0], [1.4, 0], [-1.4, 0], [0, 1.4], [0, -1.4]].some(([dx, dz]) => !waterSystem.isWater(x + dx, z + dz)) &&
+        !this.nearDock(x, z) &&
+        !this.houses.some((h) => Math.abs(h.x - x) < 3 && Math.abs(h.z - z) < 3),
+      WATER_LEVEL + BANK_TOP,
+      waterSystem.createLandMask(),
+      world.world.size
+    );
     void this.buildDocks();
 
     // Island edges: mud banks, and bulkheads where people live and boats stop
@@ -349,35 +372,72 @@ export class Environment {
     this.scene.clearColor = new Color4(0.53, 0.81, 0.92, 1);
     // Fog for atmosphere
     this.scene.fogMode = Scene.FOGMODE_EXP2;
-    this.scene.fogDensity = 0.0012;
+    // Humid haze of the Delta; also hides where the tree streaming ends
+    this.scene.fogDensity = 0.0032;
     this.scene.fogColor = new Color3(0.6, 0.78, 0.85);
   }
 
-  /** Blocky Minecraft-style tree: one trunk and two leaf layers. */
-  private addTree(x: number, z: number, seed: number): void {
+  /** A procedural tree, kept clear of houses, docks and moored boats. */
+  private addTree(x: number, z: number, seed: number, species: SpeciesName, rotation?: number): void {
+    if (this.nearDock(x, z) || this.houses.some((h) => Math.abs(h.x - x) < 3.5 && Math.abs(h.z - z) < 3.5)) return;
     const rng = seededRandom(seed);
-    const p = this.props;
+    this.forest.add({
+      x,
+      y: this.groundY(x, z),
+      z,
+      rotation: rotation ?? rng() * Math.PI * 2,
+      scale: 0.8 + rng() * 0.4,
+      species,
+    });
+  }
 
-    const height = 2 + rng() * 3;
-    const trunkWidth = 0.3 + rng() * 0.2;
-    const barkShade = 0.08 + rng() * 0.06;
-    const trunkColor = new Color3(0.35 + barkShade, 0.22 + barkShade * 0.5, 0.1 + barkShade * 0.3);
+  /**
+   * The wall of vegetation along every bank, as in the photos: willows
+   * leaning over the water, rows of casuarinas, broadleaf trees and some
+   * poplars, a few meters back from the edge. Rings have water on their
+   * left, so land is on the right.
+   */
+  private plantBanks(rings: Vec2[][], waterSystem: WaterSystem): void {
+    const rng = seededRandom(2718);
+    let row: SpeciesName | null = null;
+    let rowLeft = 0;
+    for (const ring of rings) {
+      let next = rng() * 4;
+      let walked = 0;
+      for (let i = 0; i < ring.length; i++) {
+        const [ax, az] = ring[i];
+        const [bx, bz] = ring[(i + 1) % ring.length];
+        const len = Math.hypot(bx - ax, bz - az);
+        if (len === 0) continue;
+        const toWater: [number, number] = [-(bz - az) / len, (bx - ax) / len];
+        while (next < walked + len) {
+          const t = (next - walked) / len;
+          const back = 1.2 + rng() * 2.6;
+          const x = ax + (bx - ax) * t - toWater[0] * back;
+          const z = az + (bz - az) * t - toWater[1] * back;
+          next += 2.6 + rng() * 3.4;
+          if (rng() < 0.18 || waterSystem.isWater(x, z) || this.waterDistance.at(x, z) < 0.8) continue;
 
-    const leafSize = 1.5 + rng() * 1.5;
-    const g1 = 0.35 + rng() * 0.3;
-    const leaf1Color = new Color3(0.1 + rng() * 0.1, g1, 0.08 + rng() * 0.08);
-    const g2 = 0.4 + rng() * 0.25;
-    const leaf2Color = new Color3(0.12 + rng() * 0.08, g2, 0.1 + rng() * 0.06);
-
-    const parent = propTransform(x, this.groundY(x, z), z, rng() * Math.PI * 2);
-    p.trunks.add(parent, [trunkWidth, height, trunkWidth], [0, height / 2, 0], trunkColor);
-    p.leavesLow.add(parent, [leafSize, leafSize * 0.6, leafSize], [0, height, 0], leaf1Color);
-    p.leavesHigh.add(
-      parent,
-      [leafSize * 0.7, leafSize * 0.5, leafSize * 0.7],
-      [0, height + leafSize * 0.5, 0],
-      leaf2Color
-    );
+          let species: SpeciesName;
+          if (rowLeft > 0 && row) {
+            species = row;
+            rowLeft--;
+          } else {
+            const roll = rng();
+            species = roll < 0.38 ? "sauce" : roll < 0.6 ? "casuarina" : roll < 0.9 ? "fronda" : "alamo";
+            // Casuarinas and poplars are planted in rows along the shore
+            if (species === "casuarina" || species === "alamo") {
+              row = species;
+              rowLeft = 3 + Math.floor(rng() * 6);
+            }
+          }
+          // Lean (+x of the generated tree) out over the water
+          const lean = Math.atan2(-toWater[1], toWater[0]) + (rng() - 0.5) * 0.5;
+          this.addTree(x, z, Math.floor(rng() * 1e9), species, lean);
+        }
+        walked += len;
+      }
+    }
   }
 
   /** Delta house; next to the water it stands on stilts. */
@@ -432,29 +492,15 @@ export class Environment {
       const seed = i * rule.instanceSeed.stride + rule.instanceSeed.offset;
       switch (rule.prefab) {
         case "tree":
-          this.addTree(x, z, seed);
-          // Delta banks are a wall of vegetation: grow a small grove at the water
-          if (nearWater) this.addGrove(x, z, seed, waterSystem);
+          // The banks are planted along the shoreline; scattered trees are inland
+          if (!nearWater) this.addTree(x, z, seed, INLAND_SPECIES[seed % INLAND_SPECIES.length]);
           break;
         case "house":
           this.addHouse(x, z, seed, nearWater);
+          this.houses.push({ x, z });
           if (nearWater) this.waterfrontHouses.push({ x, z });
           break;
       }
-    }
-  }
-
-  /** 1-3 extra trees around a bank tree, on dry ground only. */
-  private addGrove(x: number, z: number, seed: number, waterSystem: WaterSystem): void {
-    const rng = seededRandom(seed * 31 + 7);
-    const extra = 1 + Math.floor(rng() * 3);
-    for (let k = 0; k < extra; k++) {
-      const angle = rng() * Math.PI * 2;
-      const r = 1.5 + rng() * 2.5;
-      const tx = x + Math.cos(angle) * r;
-      const tz = z + Math.sin(angle) * r;
-      if (waterSystem.isWater(tx, tz) || this.nearDock(tx, tz)) continue;
-      this.addTree(tx, tz, seed * 97 + k);
     }
   }
 
@@ -492,6 +538,12 @@ export class Environment {
         heading: Math.atan2(along[0] * side, along[1] * side) + (rng() - 0.5) * 0.08,
       });
     }
+  }
+
+  /** Streams trees and grass around the camera. */
+  public update(dt: number, camera: Vector3): void {
+    this.forest.update(camera);
+    this.grass.update(dt, camera);
   }
 
   /** Rowing yolas moored along the bank beside the docks. */
@@ -633,6 +685,9 @@ const COLOR = {
 const ROOF_SHEET_COLORS = [new Color3(0.62, 0.64, 0.66), new Color3(0.27, 0.4, 0.3), new Color3(0.55, 0.22, 0.18)];
 
 /** Half the muelle's depth out over the water (Blender model: 3 m deep). */
+/** Trees scattered away from the water. */
+const INLAND_SPECIES: SpeciesName[] = ["fronda", "fronda", "alamo", "casuarina", "fronda"];
+
 const DOCK_HALF_X = 1.5;
 /** Half its length along the shore (4.2 m), stairs not included. */
 const DOCK_HALF_ALONG = 2.1;
@@ -757,9 +812,6 @@ const ROOF_COLORS = [COLORS.roof, COLORS.roofBlue, "#8b4513", "#2a6a3a"].map(hex
 function createPropBatches(scene: Scene) {
   const matte = new Color3(0.03, 0.03, 0.03);
   return {
-    trunks: new InstancedBoxBatch("trunks", scene, { specular: new Color3(0.02, 0.02, 0.02) }),
-    leavesLow: new InstancedBoxBatch("leavesLow", scene, { specular: matte, emissive: new Color3(0.02, 0.06, 0.02) }),
-    leavesHigh: new InstancedBoxBatch("leavesHigh", scene, { specular: matte, emissive: new Color3(0.02, 0.05, 0.02) }),
     stilts: new InstancedBoxBatch("stilts", scene),
     walls: new InstancedBoxBatch("walls", scene, { specular: matte }),
     roofs: new InstancedBoxBatch("roofs", scene),

@@ -329,6 +329,9 @@ export class GameEngine {
       this.yolas.update(dt);
     }
 
+    // Trees and grass stream in around the camera
+    this.environment.update(dt, this.camera.position);
+
     this.scene.render();
   }
 
