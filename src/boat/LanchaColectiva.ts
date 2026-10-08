@@ -25,6 +25,8 @@ import { bestFitRotation, moveHull } from "./hullCollision";
 
 /** The boat's root rides this far above the water (the fallback blocks are built around it). */
 const HULL_RIDE_HEIGHT = 0.6;
+/** How deep the model's keel sits under the water. */
+const MODEL_DRAFT = 0.25;
 
 export class LanchaColectiva {
   public rootNode: TransformNode;
@@ -69,21 +71,27 @@ export class LanchaColectiva {
       const result = await SceneLoader.ImportMeshAsync(
         "",
         modelsUrl,
-        "lancha-delta.glb",
+        "lancha-optimized.glb",
         this.scene
       );
 
-      // The Blender model (scripts/models/blender/lancha.py) is already in game
-      // units with its bow to +Z and the waterline at y = 0
+      // Measured at the origin first: bounding vectors are in world space
       this.modelContainer = new TransformNode("lanchaModel", this.scene);
-      this.modelContainer.parent = this.rootNode;
-      this.modelContainer.position.y = -HULL_RIDE_HEIGHT; // waterline back at the water surface
       for (const mesh of result.meshes) {
         if (!mesh.parent) {
           mesh.parent = this.modelContainer;
         }
         mesh.isPickable = false;
       }
+
+      // Scale the model to the boat's length and float it: keel slightly
+      // under the water, the rest above
+      const { min, max } = this.modelContainer.getHierarchyBoundingVectors(true);
+      const length = Math.max(max.x - min.x, max.z - min.z) || 1;
+      const scale = BOAT_LENGTH / length;
+      this.modelContainer.scaling.setAll(scale);
+      this.modelContainer.position.y = -HULL_RIDE_HEIGHT - min.y * scale - MODEL_DRAFT;
+      this.modelContainer.parent = this.rootNode;
 
       // Remove fallback blocky boat
       for (const mesh of this.meshes) {
