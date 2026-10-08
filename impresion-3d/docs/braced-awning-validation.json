@@ -1,0 +1,93 @@
+{
+  "added_volume_mm3": 100.61164259510406,
+  "arch_horizontal_advance_per_0_12mm_layer": 0.11920164055545172,
+  "arch_lower_edge_angle_from_vertical_deg": 44.80877030462334,
+  "bracket_foot_contact_mm3": [
+    0.011582088339009608,
+    0.10722656468484892,
+    0.019575381965445282,
+    0.1106758563806262
+  ],
+  "bracket_width_mm": 0.9,
+  "components": 1,
+  "findings": [],
+  "flat_bridge_underside_z_mm": 18.2,
+  "limitation": "Candidate for PLA bridging; not a no-support guarantee. Hull support needs unchanged.",
+  "local_repair_volume_budget_mm3": 0.02,
+  "max_sampled_bridge_mm": 18.114929422754614,
+  "original_removed_mm3": 0.011236857889950139,
+  "output_sha256": "06ef397c42ecb674ae6b7a83888139b941e207205992685247becf285a2dabeb",
+  "sampled_transverse_bridges": [
+    {
+      "clear_span_mm": 2.846835079591091,
+      "supported_at_both_sides": true,
+      "y_mm": -37.199999999999996
+    },
+    {
+      "clear_span_mm": 13.416549562759286,
+      "supported_at_both_sides": true,
+      "y_mm": -36.6
+    },
+    {
+      "clear_span_mm": 14.003847529213495,
+      "supported_at_both_sides": true,
+      "y_mm": -36.0
+    },
+    {
+      "clear_span_mm": 14.59114518512759,
+      "supported_at_both_sides": true,
+      "y_mm": -35.4
+    },
+    {
+      "clear_span_mm": 15.17844267818485,
+      "supported_at_both_sides": true,
+      "y_mm": -34.8
+    },
+    {
+      "clear_span_mm": 15.765740029444078,
+      "supported_at_both_sides": true,
+      "y_mm": -34.199999999999996
+    },
+    {
+      "clear_span_mm": 16.3530373766864,
+      "supported_at_both_sides": true,
+      "y_mm": -33.6
+    },
+    {
+      "clear_span_mm": 16.940334724578406,
+      "supported_at_both_sides": true,
+      "y_mm": -33.0
+    },
+    {
+      "clear_span_mm": 17.52763207366651,
+      "supported_at_both_sides": true,
+      "y_mm": -32.4
+    },
+    {
+      "clear_span_mm": 18.114929422754614,
+      "supported_at_both_sides": true,
+      "y_mm": -31.799999999999997
+    },
+    {
+      "clear_span_mm": 5.600377477503062,
+      "supported_at_both_sides": true,
+      "y_mm": -31.2
+    },
+    {
+      "clear_span_mm": 5.423618107394013,
+      "supported_at_both_sides": true,
+      "y_mm": -31.2
+    },
+    {
+      "clear_span_mm": 5.480245106072777,
+      "supported_at_both_sides": true,
+      "y_mm": -31.2
+    }
+  ],
+  "sliced": false,
+  "source_sha256": "5f43ce2bf937912b09e3064b674bb8a65609054649aa80988de8423c51f355be",
+  "status": "PASS",
+  "volume_mm3": 30869.50088136969,
+  "watertight": true,
+  "winding_consistent": true
+}

@@ -9,3 +9,6 @@ __pycache__/
 
 # Baked world layouts (npm run bake, run by dev/build)
 public/worlds/
+
+# 3D-print meshes (~62 MB; see impresion-3d/README.md for backup)
+impresion-3d/modelos/

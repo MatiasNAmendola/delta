@@ -1,0 +1,24 @@
+{
+  "source_sha256": "7b372b789dd8fe196c0395281e828f5f9004f15d9cd0a54a7ce89e294e5e14de",
+  "source_unchanged": true,
+  "settings_byte_identical": true,
+  "output": "lancha-short-smooth-clean-roof-p1s.3mf",
+  "stl": "lancha-short-smooth-clean-roof-p1s.stl",
+  "watertight": true,
+  "winding_consistent": true,
+  "components": 1,
+  "bounds_mm": [
+    [
+      -16.105051040649414,
+      -46.49858093261719,
+      0.0
+    ],
+    [
+      16.116405487060547,
+      46.50141906738281,
+      20.877643585205078
+    ]
+  ],
+  "removed_accessory_volume_mm3": 16.03211694363199,
+  "proposal": "Short smooth canopy from prior separate variant; raised front accessory shaved to roof surface. Hull and recessed cabin preserved. Cached thumbnails refreshed by subsequent slicing."
+}

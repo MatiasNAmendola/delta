@@ -1,0 +1,15 @@
+{
+  "changed_volume_below_18_49mm_mm3": 1.1789567189978332e-09,
+  "components": 1,
+  "faces": 62378,
+  "findings": [],
+  "method": "Replace upper skins with quadratic crown and raked forward canopy; no global smoothing",
+  "output_sha256": "37798da154170aa4c79885875fdfc8b2476e8d4653c60d590609ee213148e3ea",
+  "protected_region_volume_tolerance_mm3": 0.01,
+  "source_sha256": "06ef397c42ecb674ae6b7a83888139b941e207205992685247becf285a2dabeb",
+  "status": "PASS",
+  "surface_grid_mm": 0.5,
+  "volume_mm3": 30723.4328879558,
+  "watertight": true,
+  "winding_consistent": true
+}

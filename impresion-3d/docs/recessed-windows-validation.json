@@ -1,0 +1,62 @@
+{
+  "bounds_mm": [
+    [
+      -16.105051040649414,
+      -46.49858093261719,
+      0.0
+    ],
+    [
+      16.116405487060547,
+      46.50141906738281,
+      23.806325912475586
+    ]
+  ],
+  "closed_surface_components": 1,
+  "findings": [],
+  "non_manifold_edges": 0,
+  "original_material_removed_mm3": 4.153735960225428e-06,
+  "original_material_tolerance_mm3": 0.005,
+  "original_sha256": "e04367b89f6ac8428eb74045ac80222d512faa5ded543bcd24f0daeece218651",
+  "output_sha256": "5f43ce2bf937912b09e3064b674bb8a65609054649aa80988de8423c51f355be",
+  "previous_volume_mm3": 19204.093163586072,
+  "remaining_mast_volume_mm3": 0.0,
+  "roof_footprint_inset_mm": 1.0,
+  "roof_only_sha256": "80b6c5f1b214c91df6d52b9e48c5d5d66f057b0775a9e030f906aaa85ff6e74a",
+  "section_area_tolerance_mm2": 0.001,
+  "sections": [
+    {
+      "body_area_mm2": 1707.478126448934,
+      "missing_interior_area_mm2": 1.3439565892876709e-17,
+      "z_mm": 5.0
+    },
+    {
+      "body_area_mm2": 1885.365226308936,
+      "missing_interior_area_mm2": 3.6577113645206625e-16,
+      "z_mm": 8.0
+    },
+    {
+      "body_area_mm2": 1933.3355765871815,
+      "missing_interior_area_mm2": 2.186928577940122e-06,
+      "z_mm": 9.5
+    },
+    {
+      "body_area_mm2": 1647.6365289420335,
+      "missing_interior_area_mm2": 5.424907214058246e-06,
+      "z_mm": 12.0
+    },
+    {
+      "body_area_mm2": 1392.9673260238676,
+      "missing_interior_area_mm2": 1.3701436466080405e-05,
+      "z_mm": 15.0
+    },
+    {
+      "body_area_mm2": 1375.5126679714174,
+      "missing_interior_area_mm2": 1.0252632607223766e-05,
+      "z_mm": 17.0
+    }
+  ],
+  "status": "PASS",
+  "volume_mm3": 30768.889238774587,
+  "watertight": true,
+  "winding_consistent": true
+}

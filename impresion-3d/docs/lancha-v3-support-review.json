@@ -1,0 +1,101 @@
+{
+  "actual_object_names": [
+    "lancha-optimized-print-ready-braced-awning-no-mast-93mm.stl"
+  ],
+  "build_items": [
+    {
+      "objectid": "2",
+      "printable": "1",
+      "transform": "1 0 0 0 1 0 0 0 1 128 128 11.903163",
+      "{http://schemas.microsoft.com/3dmanufacturing/production/2015/06}UUID": "00000002-b1ec-4553-aec9-835e5b724bb4"
+    }
+  ],
+  "cached_preview_names": [
+    "lancha-optimized-print-ready-solid-body-recessed-windows-no-mast-93mm.stl",
+    "lancha-optimized-print-ready-braced-awning-no-mast-93mm.stl"
+  ],
+  "emitted_settings": {
+    "bridge_no_support": "0",
+    "enable_support": "1",
+    "filament_settings_id": "\"Bambu PLA Basic @BBL P1S 0.4 nozzle\"",
+    "filament_type": "PLA",
+    "layer_height": "0.12",
+    "print_settings_id": "0.20mm Standard @BBL X1C",
+    "printer_model": "Bambu Lab P1S",
+    "printer_settings_id": "Bambu Lab P1S 0.4 nozzle",
+    "sparse_infill_density": "15%",
+    "support_bottom_z_distance": "0.2",
+    "support_critical_regions_only": "1",
+    "support_object_xy_distance": "0.35",
+    "support_on_build_plate_only": "0",
+    "support_remove_small_overhang": "1",
+    "support_style": "default",
+    "support_threshold_angle": "30",
+    "support_top_z_distance": "0.2",
+    "support_type": "tree(auto)"
+  },
+  "extruded_filament_mm_by_feature": {
+    "Bridge": 335.69427,
+    "Brim": 67.14739,
+    "Custom": 31.4,
+    "Floating vertical shell": 212.82693,
+    "Gap infill": 46.93306,
+    "Inner wall": 683.79593,
+    "Internal solid infill": 820.24516,
+    "Outer wall": 930.31977,
+    "Overhang wall": 51.74314,
+    "Sparse infill": 1569.1641,
+    "Support": 731.96005,
+    "Support interface": 5.79965,
+    "Top surface": 143.90459
+  },
+  "gcode_header": [
+    "; BambuStudio 02.08.02.61",
+    "; model printing time: 1h 16m 22s; total estimated time: 1h 22m 39s",
+    "; total layer number: 196",
+    "; total filament length [mm] : 5630.93",
+    "; total filament volume [cm^3] : 13543.98",
+    "; total filament weight [g] : 17.07",
+    "; filament_density: 1.26",
+    "; filament_diameter: 1.75",
+    "; max_z_height: 23.84",
+    "; filament: 1",
+    "; support_material_on_wipe_tower: 0"
+  ],
+  "interface_filament_mm_by_height": {
+    "14_to_19mm": 1.11559,
+    "6_to_14mm": 3.9275,
+    "below_6mm": 0.75656
+  },
+  "method": "Positive extrusion during XY moves/arcs; excludes E-only unretraction and negative wipe. Interface height bands are not unique contact attribution. No support-only time inferred.",
+  "saved_settings": {
+    "bridge_no_support": "0",
+    "enable_support": "1",
+    "filament_settings_id": [
+      "Bambu PLA Basic @BBL P1S 0.4 nozzle"
+    ],
+    "filament_type": [
+      "PLA"
+    ],
+    "layer_height": "0.12",
+    "print_settings_id": "0.20mm Standard @BBL X1C",
+    "printer_model": "Bambu Lab P1S",
+    "printer_settings_id": "Bambu Lab P1S 0.4 nozzle",
+    "sparse_infill_density": "15%",
+    "support_bottom_z_distance": "0.2",
+    "support_critical_regions_only": "1",
+    "support_object_xy_distance": "0.35",
+    "support_on_build_plate_only": "0",
+    "support_remove_small_overhang": "1",
+    "support_style": "default",
+    "support_threshold_angle": "30",
+    "support_top_z_distance": "0.2",
+    "support_type": "tree(auto)"
+  },
+  "source": "lancha-optimized-reinforced-v3-p1s.3mf",
+  "source_sha256": "7b372b789dd8fe196c0395281e828f5f9004f15d9cd0a54a7ce89e294e5e14de",
+  "source_unchanged": true,
+  "stale_preview": true,
+  "support_estimated_g": 2.2359,
+  "support_percent_deposited_filament": 13.175
+}
