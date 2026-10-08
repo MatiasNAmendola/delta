@@ -13,6 +13,7 @@ import { hexToColor3, seededRandom, clamp } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
 import { InstancedBoxBatch, propTransform } from "./InstancedBatch";
 import { WaterDistanceField } from "./WaterDistanceField";
+import { placeDockModels } from "./DockModel";
 import type { BeachedSpot } from "./Yolas";
 
 export class Environment {
@@ -24,7 +25,7 @@ export class Environment {
   private berths = new Map<string, Berth>();
   /** Side of one terrain mesh quad, in world units. */
   private terrainQuad = 12.5;
-  private dockSites: Array<{ x: number; z: number }> = [];
+  private dockSites: Array<{ x: number; z: number; rotation: number; seed: number }> = [];
   private beached: BeachedSpot[] = [];
 
   constructor(scene: Scene, waterSystem: WaterSystem, world: WorldDoc) {
@@ -46,6 +47,7 @@ export class Environment {
     for (const batch of Object.values(this.props)) {
       batch.build();
     }
+    void this.buildDocks();
   }
 
   /** Simple value noise for coherent terrain patterns */
@@ -473,7 +475,8 @@ export class Environment {
     const side = rng() < 0.5 ? 1 : -1;
     const count = 2 + Math.floor(rng() * 3);
     for (let k = 0; k < count; k++) {
-      const off = side * (DOCK_HALF_X + 2.5 + k * 0.9);
+      // Clear of the deck and of the side stairs
+      const off = side * (DOCK_HALF_ALONG + 2.2 + k * 0.9);
       let x = site.x + along[0] * off;
       let z = site.z + along[1] * off;
       // Slide across the shore line to this spot's own water's edge
@@ -527,21 +530,38 @@ export class Environment {
   }
 
   /**
-   * Bus-boat stop modeled on real Delta muelles: plank deck raised on piles
-   * with cross bracing, white railing, a gable-roofed quincho and stairs down
-   * to the water. Local +x is the water side, where the boat comes alongside.
+   * Places a bus-boat stop on the bank (its berth, and yolas pulled up
+   * beside it). The muelle itself is drawn later by buildDocks; local +x is
+   * the open side facing the water, where the boat comes alongside.
    */
   private addDock(dock: Dock, waterSystem: WaterSystem): void {
-    const p = this.props;
     const rng = seededRandom(hashString(dock.id));
     const site = placeOnBank(dock, waterSystem, DOCK_HALF_X);
     this.berths.set(dock.id, site.berth);
-    this.dockSites.push({ x: site.x, z: site.z });
+    this.dockSites.push({ x: site.x, z: site.z, rotation: site.rotation, seed: hashString(dock.id) });
     if (site.toWater && rng() < 0.6) this.beachYolas(site, site.toWater, rng, waterSystem);
+  }
+
+  /** The Blender muelle at every dock; box docks if the model can't load. */
+  private async buildDocks(): Promise<void> {
+    const placements = this.dockSites.map((site) => propTransform(site.x, WATER_LEVEL, site.z, site.rotation));
+    try {
+      await placeDockModels(this.scene, placements);
+    } catch (error) {
+      console.warn("Dock model failed to load, using box docks:", error);
+      const fallback = createPropBatches(this.scene);
+      for (const site of this.dockSites) this.addBoxDock(fallback, site);
+      for (const batch of Object.values(fallback)) batch.build();
+    }
+  }
+
+  /** Box-built muelle (fallback): same layout as the Blender model, coarser. */
+  private addBoxDock(p: PropBatches, site: { x: number; z: number; rotation: number; seed: number }): void {
+    const rng = seededRandom(site.seed);
     const parent = propTransform(site.x, WATER_LEVEL, site.z, site.rotation);
     const deckTop = 1.3;
-    const halfX = DOCK_HALF_X; // deck 4 x 3
-    const halfZ = 1.5;
+    const halfX = DOCK_HALF_X;
+    const halfZ = DOCK_HALF_ALONG;
 
     // Piles from the river bottom up to the deck, plus diagonal bracing
     for (const px of [-halfX + 0.15, 0, halfX - 0.15]) {
@@ -635,7 +655,10 @@ const REED_COLORS = [new Color3(0.55, 0.6, 0.3), new Color3(0.68, 0.64, 0.4), ne
 /** Corrugated roofs of Delta quinchos: galvanized grey, green and oxide red. */
 const ROOF_SHEET_COLORS = [new Color3(0.62, 0.64, 0.66), new Color3(0.27, 0.4, 0.3), new Color3(0.55, 0.22, 0.18)];
 
-const DOCK_HALF_X = 2.0;
+/** Half the muelle's depth out over the water (Blender model: 3 m deep). */
+const DOCK_HALF_X = 1.5;
+/** Half its length along the shore (4.2 m), stairs not included. */
+const DOCK_HALF_ALONG = 2.1;
 /** The ground mesh sits this far below the water level. */
 const GROUND_OFFSET = -0.3;
 /** Height (relative to the ground mesh) of land next to water: just under the surface. */
