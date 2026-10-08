@@ -90,7 +90,7 @@ export class InstancedBoxBatch {
 }
 
 /** Unit-size cross of two vertical quads (seen from both sides: no back-face culling). */
-function crossedQuads(name: string, scene: Scene): Mesh {
+export function crossedQuads(name: string, scene: Scene): Mesh {
   const a = MeshBuilder.CreatePlane(`${name}A`, { size: 1 }, scene);
   const b = MeshBuilder.CreatePlane(`${name}B`, { size: 1 }, scene);
   b.rotation.y = Math.PI / 2;

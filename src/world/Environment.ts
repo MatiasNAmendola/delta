@@ -18,7 +18,11 @@ import { mark } from "../utils/perf";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import type { WorldLayout } from "./layout/worldLayout";
 import { fbm } from "./layout/noise";
-import { placeDockModels } from "./DockModel";
+import { placeDockModels, type DockModels } from "./DockModel";
+import { buildFlatChunks } from "./chunks";
+import type { Material } from "@babylonjs/core/Materials/material";
+import { ClearanceGrid, HOUSE_RADIUS, planLots } from "./settlement/lots";
+import { Settlement } from "./settlement/Settlement";
 import { paintPixels } from "./texturePaint";
 import { RiverBanks } from "./RiverBanks";
 import { Forest, type SpeciesName } from "./vegetation/Forest";
@@ -33,8 +37,13 @@ export class Environment {
   private waterDistance: WaterDistanceField;
   private berths = new Map<string, Berth>();
   /** Houses next to the water: their shore gets a wooden bulkhead. */
-  private waterfrontHouses: Array<{ x: number; z: number }> = [];
-  private houses: Array<{ x: number; z: number }> = [];
+  /** Houses, their gardens and private docks: trees and grass keep clear. */
+  private occupied = new ClearanceGrid(4);
+  /** Bank points of the houses (bulkheads along the shore there). */
+  private waterfront = new ClearanceGrid(8);
+  private settlement: Settlement | null = null;
+  private riverBanks: RiverBanks | null = null;
+  private dockModels: DockModels | null = null;
   private forest: Forest;
   private grass!: Grass;
   private dockSites: Array<{ x: number; z: number; rotation: number; seed: number }> = [];
@@ -62,8 +71,8 @@ export class Environment {
       this.addDock(dock, waterSystem);
     }
     // Houses before trees, so trees keep clear of them
-    const rules = [...world.scatter].sort((a, b) => Number(b.prefab === "house") - Number(a.prefab === "house"));
-    for (const rule of rules) {
+    this.buildSettlement(world, waterSystem, shore.rings);
+    for (const rule of world.scatter) {
       this.scatter(rule, waterSystem);
     }
     mark("casas y muelles");
@@ -80,7 +89,7 @@ export class Environment {
         // Skip patches wholly over the water
         [[0, 0], [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5]].some(([dx, dz]) => !waterSystem.isWater(x + dx, z + dz)) &&
         !this.nearDock(x, z) &&
-        !this.houses.some((h) => Math.abs(h.x - x) < 3 * PROP_SCALE && Math.abs(h.z - z) < 3 * PROP_SCALE),
+        !this.occupied.blocked(x, z, 0.3),
       WATER_LEVEL + BANK_TOP,
       waterSystem.createShoreDistanceTexture(),
       SHORE_SDF_RANGE,
@@ -90,15 +99,17 @@ export class Environment {
     void this.buildDocks();
 
     // Island edges: mud banks, and bulkheads where people live and boats stop
-    new RiverBanks(scene, shore.rings, {
+    const bulkheads = new ClearanceGrid(8);
+    const clearSpots = new ClearanceGrid(8);
+    for (const d of this.dockSites) {
+      bulkheads.add(d.x, d.z, 14 * PROP_SCALE);
+      clearSpots.add(d.x, d.z, 10 * PROP_SCALE);
+    }
+    for (const b of this.berths.values()) clearSpots.add(b.x, b.z, 6 * PROP_SCALE);
+    this.riverBanks = new RiverBanks(scene, shore.rings, {
       bankTop: BANK_TOP,
-      isBulkhead: (x, z) =>
-        this.dockSites.some((d) => Math.hypot(d.x - x, d.z - z) < 14 * PROP_SCALE) ||
-        this.waterfrontHouses.some((h) => Math.hypot(h.x - x, h.z - z) < 9 * PROP_SCALE) ||
-        this.fbm(x * 0.012, z * 0.012, 2, 77) > 0.68,
-      keepClear: (x, z) =>
-        this.dockSites.some((d) => Math.hypot(d.x - x, d.z - z) < 10 * PROP_SCALE) ||
-        [...this.berths.values()].some((b) => Math.hypot(b.x - x, b.z - z) < 6 * PROP_SCALE),
+      isBulkhead: (x, z) => bulkheads.blocked(x, z) || this.waterfront.blocked(x, z) || this.fbm(x * 0.012, z * 0.012, 2, 77) > 0.68,
+      keepClear: (x, z) => clearSpots.blocked(x, z),
     });
     mark("barrancas");
   }
@@ -114,32 +125,7 @@ export class Environment {
    */
   private createGround(): void {
     const size = this.world.world.size;
-    const { points: vertices, landIndices: indices } = this.layout;
-    const count = vertices.length / 2;
-    const positions = new Float32Array(count * 3);
-    const normals = new Float32Array(count * 3);
-    const uvs = new Float32Array(count * 2);
-    for (let i = 0; i < count; i++) {
-      const x = vertices[i * 2];
-      const z = vertices[i * 2 + 1];
-      positions[i * 3] = x;
-      positions[i * 3 + 1] = WATER_LEVEL + BANK_TOP;
-      positions[i * 3 + 2] = z;
-      normals[i * 3 + 1] = 1;
-      // Same mapping as the splatmap: u along +x, v along +z over the whole world
-      uvs[i * 2] = x / size + 0.5;
-      uvs[i * 2 + 1] = z / size + 0.5;
-    }
-    const ground = new Mesh("ground", this.scene);
-    const data = new VertexData();
-    data.positions = positions;
-    data.normals = normals;
-    data.uvs = uvs;
-    data.indices = indices;
-    data.applyToMesh(ground);
-    ground.isPickable = false;
-    ground.freezeWorldMatrix();
-
+    let material: Material;
     try {
       const terrainMat = new TerrainMaterial("terrainMat", this.scene);
 
@@ -173,7 +159,7 @@ export class Environment {
       // Earcut doesn't guarantee one winding: draw both faces
       terrainMat.backFaceCulling = false;
 
-      ground.material = terrainMat;
+      material = terrainMat;
       // Static: freeze once textures are in (the CDN grass may swap in later and unfreezes it)
       terrainMat.freeze();
       mark("islas: texturas");
@@ -185,8 +171,15 @@ export class Environment {
       (fallback.diffuseTexture as Texture).vScale = 80;
       fallback.specularColor = new Color3(0.05, 0.05, 0.05);
       fallback.backFaceCulling = false;
-      ground.material = fallback;
+      material = fallback;
     }
+    // In 2 km chunks: only those in view and within the far plane are drawn
+    // Same mapping as the splatmap: u along +x, v along +z over the whole world
+    const uv = (x: number, z: number, out: Float32Array, k: number) => {
+      out[k] = x / size + 0.5;
+      out[k + 1] = z / size + 0.5;
+    };
+    buildFlatChunks("ground", this.scene, this.layout.land, this.layout.points, WATER_LEVEL + BANK_TOP, uv, material);
   }
 
   /** World y of the ground, to stand trees and houses on it (the islands are flat). */
@@ -338,7 +331,7 @@ export class Environment {
   /** A procedural tree, kept clear of houses, docks and moored boats. */
   private addTree(x: number, z: number, seed: number, species: SpeciesName, rotation?: number): void {
     const clear = 3.5 * PROP_SCALE;
-    if (this.nearDock(x, z) || this.houses.some((h) => Math.abs(h.x - x) < clear && Math.abs(h.z - z) < clear)) return;
+    if (this.nearDock(x, z) || this.occupied.blocked(x, z, clear * 0.5)) return;
     const rng = seededRandom(seed);
     this.forest.add({
       x,
@@ -416,35 +409,6 @@ export class Environment {
     }
   }
 
-  /** Delta house; next to the water it stands on stilts. */
-  private addHouse(x: number, z: number, seed: number, onStilts: boolean): void {
-    const rng = seededRandom(seed);
-    const p = this.props;
-    const parent = propTransform(x, this.groundY(x, z), z, rng() * Math.PI * 2, PROP_SCALE);
-
-    const w = 2 + rng() * 2;
-    const h = 1.5 + rng() * 1.5;
-    const d = 2 + rng() * 2;
-
-    if (onStilts) {
-      for (let sx = -1; sx <= 1; sx += 2) {
-        for (let sz = -1; sz <= 1; sz += 2) {
-          p.stilts.add(parent, [0.2, 1.5, 0.2], [(sx * w) / 2.5, 0.75, (sz * d) / 2.5], COLOR.wood);
-        }
-      }
-    }
-    const baseY = onStilts ? 1.5 : 0;
-
-    const wallColor = WALL_COLORS[Math.floor(rng() * WALL_COLORS.length)];
-    p.walls.add(parent, [w, h, d], [0, baseY + h / 2, 0], wallColor);
-
-    const roofColor = ROOF_COLORS[Math.floor(rng() * ROOF_COLORS.length)];
-    p.roofs.add(parent, [w + 0.5, 0.3, d + 0.5], [0, baseY + h + 0.15, 0], roofColor);
-    p.roofs.add(parent, [w * 0.5, 0.5, d + 0.3], [0, baseY + h + 0.5, 0], roofColor);
-
-    p.doors.add(parent, [0.6, 1.0, 0.05], [0, baseY + 0.5, d / 2 + 0.03], COLOR.woodDark);
-  }
-
   /**
    * Deterministic placement from a World Doc scatter rule: candidates land
    * only on dry ground; next to water they are always placed, inland only
@@ -472,9 +436,7 @@ export class Environment {
           if (!nearWater) this.addGrove(x, z, seed, waterSystem);
           break;
         case "house":
-          this.addHouse(x, z, seed, nearWater);
-          this.houses.push({ x, z });
-          if (nearWater) this.waterfrontHouses.push({ x, z });
+          // Houses line the banks now (buildSettlement)
           break;
       }
     }
@@ -516,8 +478,43 @@ export class Environment {
     }
   }
 
-  /** Streams trees and grass around the camera. */
-  public update(dt: number, camera: Vector3, focus?: { x: number; z: number }): void {
+  /**
+   * The houses and private docks along the banks (ADR 0011), wherever the
+   * World Doc has a "house" scatter rule.
+   */
+  private buildSettlement(world: WorldDoc, waterSystem: WaterSystem, rings: Vec2[][]): void {
+    const rule = world.scatter.find((r) => r.prefab === "house");
+    if (!rule) return;
+    const avoid = [
+      ...this.dockSites.map((d) => ({ x: d.x, z: d.z, r: 7 })),
+      ...[...this.berths.values()].map((b) => ({ x: b.x, z: b.z, r: 4 })),
+    ];
+    const lots = planLots(rings, (x, z) => waterSystem.isWater(x, z), {
+      worldHalf: world.world.size / 2,
+      avoid,
+      seed: rule.seed,
+      density: SETTLEMENT_DENSITY,
+    });
+    for (const lot of lots) {
+      this.occupied.add(lot.hx, lot.hz, HOUSE_RADIUS);
+      this.waterfront.add(lot.x, lot.z, 1.6);
+      // The path and the dock: from the house down to the end of the muelle
+      for (let t = -1.2; t <= lot.dockLength + 0.6; t += 0.5) this.occupied.add(lot.x + lot.nx * t, lot.z + lot.nz * t, 0.45);
+    }
+    this.settlement = new Settlement(this.scene, lots, { groundY: this.groundY(0, 0) });
+    mark(`casas (${lots.length})`);
+  }
+
+  /** Houses and docks drawn now (for ?perf=1). */
+  public settlementStats(): { houses: number; instances: number; visible: number } {
+    return { houses: this.settlement?.lots.length ?? 0, ...(this.settlement?.stats ?? { instances: 0, visible: 0 }) };
+  }
+
+  /** Streams trees, grass and houses around the camera. */
+  public update(dt: number, camera: Vector3, focus?: { x: number; z: number }, level = 0): void {
+    this.settlement?.update(camera.x, camera.z, level);
+    this.riverBanks?.update(camera.x, camera.z);
+    this.dockModels?.update(camera.x, camera.z);
     this.forest.update(camera, focus);
     this.grass.update(dt, camera);
   }
@@ -552,7 +549,7 @@ export class Environment {
   private async buildDocks(): Promise<void> {
     const placements = this.dockSites.map((site) => propTransform(site.x, WATER_LEVEL, site.z, site.rotation, PROP_SCALE));
     try {
-      await placeDockModels(this.scene, placements);
+      this.dockModels = await placeDockModels(this.scene, placements);
     } catch (error) {
       console.warn("Dock model failed to load, using box docks:", error);
       const fallback = createPropBatches(this.scene);
@@ -676,6 +673,8 @@ const BERTH_GAP = 1.5 * PROP_SCALE;
 const BANK_TOP = 0.6 * PROP_SCALE;
 /** How far from the World Doc point a dock may move to reach the bank. */
 const MAX_BANK_SEARCH = 40;
+/** Share of the banks with houses (the rest is wild island). */
+const SETTLEMENT_DENSITY = 0.55;
 /** Fallback search for docks placed mid-river on the widest rivers. */
 const WIDE_BANK_SEARCH = 160;
 
@@ -797,17 +796,11 @@ function hashString(text: string): number {
   return (h >>> 0) % 2147483646 + 1;
 }
 
-const WALL_COLORS =["#d4c5a0", "#c9b896", "#b8a882", "#e0d5b8"].map(hexToColor3);
-const ROOF_COLORS = [COLORS.roof, COLORS.roofBlue, "#8b4513", "#2a6a3a"].map(hexToColor3);
 
 /** One draw call per kind of prop part, shared by every instance in the world. */
 function createPropBatches(scene: Scene) {
-  const matte = new Color3(0.03, 0.03, 0.03);
   return {
-    stilts: new InstancedBoxBatch("stilts", scene),
-    walls: new InstancedBoxBatch("walls", scene, { specular: matte }),
     roofs: new InstancedBoxBatch("roofs", scene),
-    doors: new InstancedBoxBatch("doors", scene),
     dockPlatforms: new InstancedBoxBatch("dockPlatforms", scene),
     dockPosts: new InstancedBoxBatch("dockPosts", scene),
     signs: new InstancedBoxBatch("signs", scene, { emissive: new Color3(0.05, 0.05, 0.05) }),
