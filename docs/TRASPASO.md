@@ -65,8 +65,8 @@ npx tsc --noEmit
    - Bajos / Bajo del Temor.
 7. **Vista dron** (ADR 0006) y **clubes emblemáticos** (ADR 0007).
 8. **Archivos y repo:**
-   - LICENSE, README y CREDITS;
-   - `.env*` en `.gitignore`;
+   - [x] LICENSE, README y CREDITS;
+   - [x] `.env*` en `.gitignore` (commit `4f33c4f`);
    - decidir si se purga `public/models/lancha.zip` del historial. Para eso hay que reescribir la historia, y eso solo se hace con aprobación explícita.
 
 ## Reglas de trabajo
