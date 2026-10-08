@@ -115,7 +115,7 @@ export class WaterSystem {
       return 5;
     };
     const rings = shorelineRings({ res, size, wet: (i, j) => grid.cells[i * res + j] === 1 }).map((r) =>
-      roughenRing(r, SHORE_STEP, SHORE_ROUGHNESS, room)
+      roughenRing(r, SHORE_STEP, SHORE_ROUGHNESS, room, size / 2)
     );
     const regions = buildRegions(rings, size);
     this.shore = { rings, water: regions.water, land: regions.land };
