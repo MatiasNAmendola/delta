@@ -144,13 +144,18 @@ def ign_geoportal():
         print(base, "capas:", layers)
         layers = [l for l in layers if "aguas_continentales" in l] or layers
         for layer in layers:
-            url = (base + "?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&srsName=EPSG:4326"
-                   f"&typeNames={urllib.parse.quote(layer)}&bbox={BBOX[0]},{BBOX[1]},{BBOX[2]},{BBOX[3]},EPSG:4326&count=5000")
-            try:
-                fc = json.loads(get(url, 180))
-            except Exception as e:  # noqa: BLE001
-                print("  ", layer, "falló:", e)
-                continue
+            fc = {"features": []}
+            # Axis order differs between servers: try lat,lon and lon,lat
+            for bb in (f"{BBOX[0]},{BBOX[1]},{BBOX[2]},{BBOX[3]},urn:ogc:def:crs:EPSG::4326", f"{BBOX[1]},{BBOX[0]},{BBOX[3]},{BBOX[2]},EPSG:4326"):
+                url = (base + "?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&srsName=EPSG:4326"
+                       f"&typeNames={urllib.parse.quote(layer)}&bbox={bb}&count=5000")
+                try:
+                    fc = json.loads(get(url, 180))
+                except Exception as e:  # noqa: BLE001
+                    print("  ", layer, "falló:", e)
+                    continue
+                if fc.get("features"):
+                    break
             n0 = len(out)
             feats = fc.get("features", [])
             if feats:

@@ -3,19 +3,23 @@
   "rename": {
     "Río URíon": {
       "to": "Río Urión",
-      "source": "OSM tenía solo la mayúscula mal («URíon»). Un aviso inmobiliario ubica una isla «sobre río Urión a 300 metros del arroyo Borazo» (argenprop.com, partido de Tigre), y en el mapa el Arroyo Boraso desemboca en este río. Antes se había corregido a «Río Unión» por error: esa grafía no apareció en ninguna fuente sobre Tigre. Confianza: probable; falta una fuente oficial."
+      "source": "Confirmado por 3 fuentes: GeoNames «Río Urión» (exacto), ViaTigre «Río Urion» (viatigre.com.ar/tigre/delta/mapa/) y un aviso de argenprop («río Urion a 300 m del arroyo Borazo»). OSM tenía mal la mayúscula. Antes se había corregido por error a «Río Unión»."
     },
     "Arroyo Panatanosito": {
       "to": "Arroyo Pantanosito",
       "source": "Errata: junto al Arroyo Pantanoso (diminutivo)"
     },
-    "Arroyo Pay Carabi": {
-      "to": "Arroyo Paycarabí",
-      "source": "Misma vía que «Arroyo Paycarabí» (OSM y avisos de San Fernando)"
-    },
     "Arroyo las Casas": {
       "to": "Arroyo Las Casas",
       "source": "Mayúscula del nombre propio"
+    },
+    "Arroyo Paycarabí": {
+      "to": "Arroyo Pay Carabi",
+      "source": "GeoNames y ViaTigre escriben «Pay Carabi», separado; OSM tenía las dos formas."
+    },
+    "Arroyo Gelves": {
+      "to": "Arroyo Gelvez",
+      "source": "GeoNames y ViaTigre escriben «Gelvez»; también aparece así en avisos."
     }
   },
   "drop": {
