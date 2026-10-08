@@ -44,7 +44,12 @@ window.addEventListener("DOMContentLoaded", () => {
       mark("mundo descargado");
       return world;
     })
-    .then((world) => new GameEngine(canvas, world))
+    .then((world) => {
+      const game = new GameEngine(canvas, world);
+      // Dev builds: the game is reachable from the console and test scripts
+      if (import.meta.env.DEV) (window as unknown as { __game: GameEngine }).__game = game;
+      return game;
+    })
     .catch((error) => {
       console.error("Could not load the world:", error);
       const text = document.getElementById("loadingText");

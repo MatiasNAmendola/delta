@@ -4,6 +4,7 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { BoatSpec } from "./boatTypes";
 
@@ -251,40 +252,249 @@ export function buildTravesia(scene: Scene, spec: BoatSpec): BoatModel {
   };
 }
 
-export function buildOpen(scene: Scene, spec: BoatSpec): BoatModel {
-  const root = new TransformNode("open", scene);
+/**
+ * Racing single scull (1x): a needle of a shell, outriggers and one sculler
+ * facing the stern. `vest` dresses the rower in the club's colors.
+ */
+export function buildSingle(scene: Scene, spec: BoatSpec, vest = new Color3(0.15, 0.3, 0.7), name: string = spec.id): BoatModel {
+  const root = new TransformNode(name, scene);
   const L = spec.length;
-  loftHull(scene, "open", root, {
+  loftHull(scene, name, root, {
     length: L,
-    halfBeam: (s) => (spec.width / 2) * (s < 0.6 ? 0.92 + 0.08 * Math.sin((s / 0.6) * (Math.PI / 2)) : Math.max(0, 1 - ((s - 0.6) / 0.4) ** 1.8) ** 0.7),
-    sheer: (s) => 0.075 + 0.03 * Math.max(0, (s - 0.5) / 0.5) ** 2,
-    keel: (s) => -0.04 + 0.035 * Math.max(0, (s - 0.7) / 0.3) ** 2,
+    halfBeam: (s) => (spec.width / 2) * Math.sin(Math.PI * Math.min(1, s * 1.05)) ** 0.8,
+    sheer: () => 0.022,
+    keel: (s) => -0.018 + 0.012 * (2 * s - 1) ** 6,
+    bands: [[null, new Color3(0.93, 0.93, 0.92)]],
+    deck: new Color3(0.55, 0.32, 0.15),
+    bilge: 0.5,
+  });
+  const metal = new Color3(0.75, 0.75, 0.78);
+  box(scene, root, `${name}_rigger`, [0.2, 0.006, 0.012], [0, 0.065, 0.02], metal);
+  const rower = person(scene, root, `${name}_remero`, M, vest);
+  rower.position.set(0, 0.02, -0.03);
+  rower.rotation.y = Math.PI;
+  const oars: Array<{ pivot: TransformNode; side: number }> = [];
+  for (const side of [1, -1]) {
+    const pivot = oar(scene, root, `${name}_remo${side}`, 2.9 * M, vest);
+    pivot.position.set(side * 0.1, 0.07, 0.02);
+    if (side < 0) pivot.rotation.y = Math.PI;
+    oars.push({ pivot, side });
+  }
+  return {
+    root,
+    animate(phase, effort) {
+      const sweep = Math.sin(phase) * 0.55 * Math.max(0.2, effort);
+      const dip = -0.2 + Math.cos(phase) * 0.12;
+      for (const { pivot, side } of oars) {
+        pivot.rotation.y = (side < 0 ? Math.PI : 0) - side * sweep;
+        pivot.rotation.z = dip;
+      }
+      rower.rotation.x = -Math.sin(phase) * 0.35 * effort;
+      rower.position.z = -0.03 + Math.sin(phase) * 0.02 * effort;
+    },
+  };
+}
+
+/** An outboard motor hung on the transom; it trims up at speed. */
+function outboard(scene: Scene, parent: TransformNode, name: string, L: number, size: number, cowl: Color3): TransformNode {
+  const motor = new TransformNode(`${name}_motor`, scene);
+  motor.parent = parent;
+  motor.position.set(0, 0.06 * size, -L / 2 - 0.01 * size);
+  box(scene, motor, `${name}_motor_capot`, [0.05 * size, 0.06 * size, 0.06 * size], [0, 0.04 * size, -0.02 * size], cowl);
+  box(scene, motor, `${name}_motor_pata`, [0.015 * size, 0.1 * size, 0.02 * size], [0, -0.04 * size, -0.02 * size], new Color3(0.2, 0.2, 0.22));
+  return motor;
+}
+
+/** Fine bow, full stern: the planform of a planing hull. */
+const planingBeam = (width: number) => (s: number) =>
+  (width / 2) * (s < 0.6 ? 0.92 + 0.08 * Math.sin((s / 0.6) * (Math.PI / 2)) : Math.max(0, 1 - ((s - 0.6) / 0.4) ** 1.8) ** 0.7);
+
+/** Runabout / bowrider: white fiberglass with a colored stripe, windshield and console. */
+export function buildRunabout(scene: Scene, spec: BoatSpec): BoatModel {
+  const root = new TransformNode(spec.id, scene);
+  const L = spec.length;
+  const k = L / 0.8;
+  loftHull(scene, spec.id, root, {
+    length: L,
+    halfBeam: planingBeam(spec.width),
+    sheer: (s) => (0.075 + 0.03 * Math.max(0, (s - 0.5) / 0.5) ** 2) * k,
+    keel: (s) => (-0.04 + 0.035 * Math.max(0, (s - 0.7) / 0.3) ** 2) * k,
     bands: [
       [0.0, new Color3(0.85, 0.86, 0.86)],
-      [0.025, new Color3(0.08, 0.2, 0.5)],
+      [0.025 * k, new Color3(0.08, 0.2, 0.5)],
       [null, new Color3(0.95, 0.95, 0.94)],
     ],
     deck: new Color3(0.82, 0.8, 0.74),
     bilge: 0.85,
   });
   const white = new Color3(0.94, 0.94, 0.93);
-  box(scene, root, "open_consola", [0.07, 0.07, 0.07], [0.02, 0.11, 0.02], white);
-  const glass = box(scene, root, "open_parabrisas", [0.1, 0.035, 0.005], [0.02, 0.165, 0.06], new Color3(0.2, 0.3, 0.35));
+  box(scene, root, `${spec.id}_consola`, [0.07 * k, 0.07 * k, 0.07 * k], [0.02 * k, 0.11 * k, 0.02 * k], white);
+  const glass = box(scene, root, `${spec.id}_parabrisas`, [0.1 * k, 0.035 * k, 0.005], [0.02 * k, 0.165 * k, 0.06 * k], new Color3(0.2, 0.3, 0.35));
   glass.rotation.x = -0.4;
-  box(scene, root, "open_asiento", [0.12, 0.03, 0.06], [0, 0.09, -0.12], new Color3(0.85, 0.82, 0.75));
-  const driver = person(scene, root, "open_conductor", M, new Color3(0.9, 0.2, 0.15));
-  driver.position.set(0.02, 0.075, -0.06);
-  // Outboard motor on the transom
-  const motor = new TransformNode("open_motor", scene);
-  motor.parent = root;
-  motor.position.set(0, 0.06, -L / 2 - 0.01);
-  box(scene, motor, "open_motor_capot", [0.05, 0.06, 0.06], [0, 0.04, -0.02], new Color3(0.12, 0.12, 0.13));
-  box(scene, motor, "open_motor_pata", [0.015, 0.1, 0.02], [0, -0.04, -0.02], new Color3(0.2, 0.2, 0.22));
+  box(scene, root, `${spec.id}_asiento`, [0.12 * k, 0.03 * k, 0.06 * k], [0, 0.09 * k, -0.12 * k], new Color3(0.85, 0.82, 0.75));
+  // Bimini top over the cockpit
+  box(scene, root, `${spec.id}_bimini`, [0.2 * k, 0.006, 0.16 * k], [0, 0.26 * k, -0.08 * k], new Color3(0.1, 0.18, 0.35));
+  for (const x of [-0.095, 0.095]) box(scene, root, `${spec.id}_bimini_caño`, [0.005, 0.17 * k, 0.005], [x * k, 0.175 * k, -0.02 * k], new Color3(0.7, 0.7, 0.72));
+  const driver = person(scene, root, `${spec.id}_conductor`, M, new Color3(0.9, 0.2, 0.15));
+  driver.position.set(0.02 * k, 0.075 * k, -0.06 * k);
+  const motor = outboard(scene, root, spec.id, L, k, new Color3(0.12, 0.12, 0.13));
   return {
     root,
     animate(_phase, effort) {
-      // The motor trims up a little at speed
       motor.rotation.x = -0.15 * effort;
+    },
+  };
+}
+
+/** Aluminum fishing boat: low gray hull, bench seats, small outboard, a fisherman with his rod. */
+export function buildPesca(scene: Scene, spec: BoatSpec): BoatModel {
+  const root = new TransformNode(spec.id, scene);
+  const L = spec.length;
+  const W = spec.width;
+  loftHull(scene, spec.id, root, {
+    length: L,
+    halfBeam: (s) => (W / 2) * (s < 0.65 ? 1 : Math.max(0, 1 - ((s - 0.65) / 0.35) ** 2) ** 0.6),
+    sheer: (s) => 0.06 + 0.02 * Math.max(0, (s - 0.6) / 0.4) ** 2,
+    keel: (s) => -0.025 + 0.03 * Math.max(0, (s - 0.75) / 0.25) ** 2,
+    bands: [
+      [0.0, new Color3(0.42, 0.44, 0.45)],
+      [null, new Color3(0.68, 0.7, 0.72)],
+    ],
+    bilge: 0.4,
+  });
+  // Open hull: floor and three bench seats
+  box(scene, root, "pesca_piso", [W * 0.85, 0.004, L * 0.75], [0, 0.0, -L * 0.04], new Color3(0.5, 0.52, 0.53));
+  for (const z of [-0.32, 0, 0.26]) box(scene, root, "pesca_banco", [W * 0.9, 0.008, 0.045], [0, 0.045, z * L], new Color3(0.62, 0.64, 0.66));
+  const fisher = person(scene, root, "pesca_pescador", M, new Color3(0.25, 0.4, 0.22));
+  fisher.position.set(0, 0.045, 0.26 * L);
+  const rod = MeshBuilder.CreateCylinder("pesca_caña", { height: 0.32, diameterTop: 0.002, diameterBottom: 0.006, tessellation: 5 }, scene);
+  rod.material = material(scene, "pesca_caña", new Color3(0.15, 0.15, 0.15));
+  rod.parent = root;
+  rod.isPickable = false;
+  rod.position.set(0.05, 0.16, 0.36 * L);
+  rod.rotation.set(0.9, 0, -0.5);
+  const helmsman = person(scene, root, "pesca_timonel", M, new Color3(0.8, 0.55, 0.15));
+  helmsman.position.set(0, 0.045, -0.32 * L);
+  const motor = outboard(scene, root, spec.id, L, 0.7, new Color3(0.1, 0.1, 0.11));
+  return {
+    root,
+    animate(phase, effort) {
+      motor.rotation.x = -0.1 * effort;
+      rod.rotation.z = -0.5 + Math.sin(phase * 0.7) * 0.05;
+    },
+  };
+}
+
+/** Classic varnished mahogany runabout (Riva style): long bow deck, cream seats, chrome. */
+export function buildClasica(scene: Scene, spec: BoatSpec): BoatModel {
+  const root = new TransformNode(spec.id, scene);
+  const L = spec.length;
+  const k = L / 0.8;
+  const mahogany = new Color3(0.42, 0.2, 0.09);
+  loftHull(scene, spec.id, root, {
+    length: L,
+    halfBeam: planingBeam(spec.width),
+    sheer: (s) => (0.07 + 0.025 * Math.max(0, (s - 0.45) / 0.55) ** 2) * k,
+    keel: (s) => (-0.035 + 0.03 * Math.max(0, (s - 0.7) / 0.3) ** 2) * k,
+    bands: [
+      [0.0, new Color3(0.12, 0.1, 0.09)],
+      [0.012 * k, new Color3(0.92, 0.9, 0.85)],
+      [null, mahogany],
+    ],
+    deck: new Color3(0.5, 0.26, 0.12),
+    bilge: 0.9,
+  });
+  // Varnish shines
+  root.getChildMeshes().forEach((m) => {
+    const mat = m.material as StandardMaterial;
+    if (mat && mat.diffuseColor.r > 0.35 && mat.diffuseColor.g < 0.3) mat.specularColor = new Color3(0.6, 0.5, 0.4);
+  });
+  const cream = new Color3(0.93, 0.88, 0.76);
+  // Two cockpits behind the long bow deck
+  box(scene, root, "clasica_cabina1", [spec.width * 0.75, 0.02 * k, 0.12 * k], [0, 0.075 * k, -0.02 * k], cream);
+  box(scene, root, "clasica_cabina2", [spec.width * 0.75, 0.02 * k, 0.12 * k], [0, 0.075 * k, -0.2 * k], cream);
+  const glass = box(scene, root, "clasica_parabrisas", [spec.width * 0.7, 0.04 * k, 0.004], [0, 0.11 * k, 0.06 * k], new Color3(0.55, 0.6, 0.62));
+  glass.rotation.x = -0.5;
+  (glass.material as StandardMaterial).specularColor = new Color3(0.9, 0.9, 0.9);
+  const flag = box(scene, root, "clasica_bandera", [0.002, 0.03 * k, 0.045 * k], [0, 0.12 * k, -L / 2 + 0.02], new Color3(0.45, 0.65, 0.88));
+  flag.position.z -= 0.02;
+  const driver = person(scene, root, "clasica_conductor", M, new Color3(0.95, 0.95, 0.93));
+  driver.position.set(0.04 * k, 0.07 * k, -0.02 * k);
+  const guest = person(scene, root, "clasica_invitada", M, new Color3(0.75, 0.15, 0.2));
+  guest.position.set(-0.04 * k, 0.07 * k, -0.2 * k);
+  return { root, animate() {} };
+}
+
+/** Rigid inflatable: gray tubes all around, center console, big outboard. */
+export function buildSemirrigido(scene: Scene, spec: BoatSpec): BoatModel {
+  const root = new TransformNode(spec.id, scene);
+  const L = spec.length;
+  const W = spec.width;
+  const beam = planingBeam(W * 0.8);
+  loftHull(scene, spec.id, root, {
+    length: L,
+    halfBeam: beam,
+    sheer: () => 0.035,
+    keel: (s) => -0.035 + 0.03 * Math.max(0, (s - 0.7) / 0.3) ** 2,
+    bands: [[null, new Color3(0.9, 0.9, 0.9)]],
+    deck: new Color3(0.3, 0.3, 0.3),
+    bilge: 0.8,
+  });
+  // The tube: a tube mesh along the gunwale, closing at the bow
+  const tubeR = W * 0.11;
+  const path: Vector3[] = [];
+  const n = 24;
+  for (let i = 0; i <= n; i++) {
+    const s = 0.02 + (i / n) * 0.96;
+    path.push(new Vector3(beam(s) + tubeR * 0.6, 0.045, -L / 2 + s * L));
+  }
+  for (let i = n; i >= 0; i--) {
+    const s = 0.02 + (i / n) * 0.96;
+    path.push(new Vector3(-beam(s) - tubeR * 0.6, 0.045, -L / 2 + s * L));
+  }
+  const tube = MeshBuilder.CreateTube("semirrigido_tubo", { path, radius: tubeR, tessellation: 10, cap: Mesh.CAP_ALL }, scene);
+  tube.material = material(scene, "semirrigido_tubo", new Color3(0.28, 0.3, 0.32), 0.2);
+  tube.parent = root;
+  tube.isPickable = false;
+  box(scene, root, "semirrigido_consola", [0.07, 0.08, 0.07], [0, 0.075, 0.0], new Color3(0.85, 0.85, 0.85));
+  const driver = person(scene, root, "semirrigido_conductor", M, new Color3(0.95, 0.5, 0.1));
+  driver.position.set(0, 0.035, -0.09);
+  const motor = outboard(scene, root, spec.id, L, 1.1, new Color3(0.08, 0.08, 0.09));
+  return {
+    root,
+    animate(_phase, effort) {
+      motor.rotation.x = -0.15 * effort;
+    },
+  };
+}
+
+/** Personal watercraft: sit-on hull, handlebar, rider; jet propelled. */
+export function buildMoto(scene: Scene, spec: BoatSpec): BoatModel {
+  const root = new TransformNode(spec.id, scene);
+  const L = spec.length;
+  const W = spec.width;
+  loftHull(scene, spec.id, root, {
+    length: L,
+    halfBeam: planingBeam(W),
+    sheer: (s) => 0.04 + 0.025 * Math.max(0, (s - 0.5) / 0.5),
+    keel: (s) => -0.02 + 0.025 * Math.max(0, (s - 0.7) / 0.3) ** 2,
+    bands: [
+      [0.0, new Color3(0.1, 0.1, 0.12)],
+      [null, new Color3(0.95, 0.85, 0.1)],
+    ],
+    deck: new Color3(0.15, 0.15, 0.17),
+    bilge: 0.95,
+  });
+  box(scene, root, "moto_asiento", [W * 0.35, 0.025, L * 0.4], [0, 0.055, -L * 0.1], new Color3(0.08, 0.08, 0.09));
+  const bar = box(scene, root, "moto_manubrio", [W * 0.7, 0.006, 0.006], [0, 0.09, L * 0.16], new Color3(0.15, 0.15, 0.15));
+  const rider = person(scene, root, "moto_piloto", M, new Color3(0.1, 0.35, 0.8));
+  rider.position.set(0, 0.06, -L * 0.04);
+  return {
+    root,
+    animate(_phase, effort) {
+      // Rider leans forward at speed
+      rider.rotation.x = 0.25 * effort;
+      bar.rotation.x = 0;
     },
   };
 }

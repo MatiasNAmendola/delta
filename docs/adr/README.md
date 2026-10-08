@@ -12,7 +12,8 @@ Cada ADR registra una decisión: el contexto, qué decidimos, qué otras opcione
 | [0006](0006-vista-dron.md) | Vista de dron | Propuesta |
 | [0007](0007-clubes-emblematicos.md) | Clubes y edificios emblemáticos (IA, fotogrametría) | Propuesta |
 | [0008](0008-rio-y-clima-reales.md) | Altura del río y clima del día real | Propuesta |
-| [0009](0009-corrientes-y-sudestada.md) | Corrientes y sudestada | Aceptada |
+| [0009](0009-corrientes-y-sudestada.md) | Corrientes, marea, olas y sudestada; flotabilidad | Implementada |
+| [0010](0010-embarcaciones-y-regatas.md) | Lanchas particulares y regatas de remo | Implementada |
 
 ## Cómo medimos
 

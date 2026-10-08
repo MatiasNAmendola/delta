@@ -60,7 +60,7 @@ describe("RuleBook", () => {
   });
 
   it("fines speeding in an arroyo once, then rests", () => {
-    const book = new RuleBook(BOAT_TYPES.open);
+    const book = new RuleBook(BOAT_TYPES.runabout);
     const fast = base({ speed: 0.3, probe: { port: 1, starboard: 1, width: 2 } });
     const events = [];
     for (let i = 0; i < 60; i++) events.push(...book.update(1 / 60, fast));

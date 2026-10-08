@@ -10,6 +10,7 @@ import type { Dock, WorldDoc } from "../world/WorldDoc";
 import { WATER_LEVEL } from "../utils/constants";
 import { distance2D } from "../utils/helpers";
 import { ARROYO_WIDTH, probeChannel } from "./navigationRules";
+import { RegattaMode } from "./regattaMode";
 
 /** What every mode needs from the game. */
 export interface ModeContext {
@@ -21,6 +22,11 @@ export interface ModeContext {
   start: { x: number; z: number };
   notify(message: string, ms?: number): void;
   addScore(points: number): void;
+  /** Moves the boat (e.g. to a regatta's start), turned to fit the water. */
+  placeBoat(x: number, z: number, heading: number): void;
+  /** The river's current at a point (units/s) and its level offset. */
+  current(x: number, z: number): [number, number];
+  level(): number;
 }
 
 export interface Target {
@@ -65,7 +71,7 @@ function nearestDocks(ctx: ModeContext, x: number, z: number, skip: number): num
 }
 
 /** Floating marker over the current goal: an amber beam and a buoy, gently bobbing. */
-class GoalMarker {
+export class GoalMarker {
   private beam: Mesh;
   private buoy: Mesh;
   private t = 0;
@@ -359,7 +365,7 @@ function findQuietSpots(ctx: ModeContext, count: number, avoid: Array<{ x: numbe
   return picked;
 }
 
-/** Lancha open: time trial to dock after dock; fines from the rules add up. */
+/** Private launches: time trial to dock after dock; fines from the rules add up. */
 class TimeTrialMode implements GameMode {
   private targetIndex = -1;
   private legTime = 0;
@@ -436,9 +442,16 @@ export function createMode(id: BoatTypeId, ctx: ModeContext): GameMode {
       return new PassengerMode(ctx);
     case "travesia":
       return new RouteMode(ctx);
+    case "single":
+      return new RegattaMode(ctx);
     case "kayak":
       return new ExploreMode(ctx);
-    case "open":
+    case "pesca":
+      return new ExploreMode(ctx);
+    case "runabout":
+    case "clasica":
+    case "semirrigido":
+    case "moto":
       return new TimeTrialMode(ctx);
   }
 }
