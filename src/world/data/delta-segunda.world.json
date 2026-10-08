@@ -1281,22 +1281,6 @@
       ]
     },
     {
-      "id": "cruce-bajos-del-temor-a-punta-moran",
-      "name": "Cruce bajos del temor a punta moran",
-      "width": 8,
-      "points": [
-        [-175.66, -1140.88],
-        [-130.37, -1114.41],
-        [-80.88, -1098.42],
-        [-60.65, -1078.99],
-        [-33.27, -1039.66],
-        [-145.85, -1005.27],
-        [-168.57, -1008.21],
-        [-197.9, -1005.67],
-        [-285.23, -967.87]
-      ]
-    },
-    {
       "id": "arroyo-capitancito",
       "name": "Arroyo Capitancito",
       "width": 8,
