@@ -68,7 +68,7 @@ GeoNames tiene sus propias erratas (por ejemplo "Tarapuati", "Caviotas", "Noranc
 | Pozos del Barca Grande | Canal Pozos del Barca Grande | GeoNames y Wikidata |
 
 ## Faltantes conocidos
-- **Río Carapachay:** no está en el extracto de OSM, pero ViaTigre lo lista. Hay que agregarlo desde otra fuente con geometría (IGN o Provincia).
+- **Río Carapachay:** no está en el extracto de OSM, pero ViaTigre lo lista. Se bajó el trazado oficial del IGN (`scripts/osm/supplements/ign-rio-carapachay.geojson`: 3 tramos y 156 puntos, desde -34,384/-58,597 hasta -34,270/-58,641 en el Paraná de las Palmas). **No se usó como agua:** queda a una mediana de 581 m (percentil 90: 870 m) de cualquier curso de agua de OSM, y solo el 6 % del trazado cae sobre agua del mapa. Es una cartografía generalizada; dibujarla abriría un canal a través de islas. Hace falta identificar a qué canal real corresponde, con una máscara de agua satelital o con el conocimiento de un vecino, y nombrarlo ahí. Los cursos de OSM más cercanos son el Arroyo Esperita, el Caraguatá, el de los Nogales y el Cruz Colorada.
 - **Canal Buenos Aires:** Wikidata lo tiene y nuestro mapa también (el usuario lo nombró).
 
 ## Próximo
