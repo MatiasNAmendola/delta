@@ -1,9 +1,11 @@
 name: Deploy to GitHub Pages
 
+# The live game is published from `claude/delta-boat-game-qlfo3` (its own
+# deploy workflow). This branch holds the earlier Three.js line of work, and
+# the repo has a single Pages site, so deploying from here on every push
+# replaced the live game. Deploy from here only when asked, by hand.
 on:
-  push:
-    branches:
-      - "**"
+  workflow_dispatch:
 
 permissions:
   contents: read
