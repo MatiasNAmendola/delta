@@ -2,6 +2,8 @@ import { gsap } from "gsap";
 import type { WorldDoc } from "../world/WorldDoc";
 import { chooseZone, currentZone, ZONES } from "../world/loadWorld";
 import { enterPlayMode, mountInstallButton } from "./install";
+import { handlingHelp, handlingMode, setHandlingMode, type HandlingMode } from "../controls/handlingInput";
+import { handlingKind } from "../boat/handling";
 import { BOAT_TYPES, FAMILIES, type BoatFamily, type BoatTypeId } from "../boat/boatTypes";
 
 /** Start screen tabs: one per boat, or one per family of boats. */
@@ -109,6 +111,12 @@ export class StartScreen {
     );
     // Variant chips of the private launches (re-rendered with the detail)
     this.root.querySelector(".ss-boat-detail")!.addEventListener("click", (e) => {
+      const modeChip = (e.target as HTMLElement).closest<HTMLElement>(".ss-mode");
+      if (modeChip) {
+        setHandlingMode(modeChip.dataset.mode as HandlingMode);
+        this.renderDetail();
+        return;
+      }
       const chip = (e.target as HTMLElement).closest<HTMLElement>(".ss-variant");
       if (chip) this.choose(chip.dataset.boat as BoatTypeId);
     });
@@ -178,10 +186,20 @@ export class StartScreen {
     const variants = b.family
       ? `<div class="ss-variants" role="radiogroup" aria-label="${FAMILIES[b.family].label}">${FAMILIES[b.family].boats.map((id) => `<button type="button" role="radio" class="ss-variant" data-boat="${id}" aria-checked="${id === b.id}">${BOAT_TYPES[id].short}</button>`).join("")}</div>`
       : "";
+    const mode = handlingMode();
+    const touch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    const handling = `
+      <div class="ss-variants ss-handling" role="radiogroup" aria-label="Manejo">
+        <span class="ss-handling-label">Manejo</span>
+        <button type="button" role="radio" class="ss-variant ss-mode" data-mode="clasico" aria-checked="${mode === "clasico"}">Clásico</button>
+        <button type="button" role="radio" class="ss-variant ss-mode" data-mode="realista" aria-checked="${mode === "realista"}">Realista</button>
+      </div>
+      ${mode === "realista" ? `<p class="ss-handling-help">${handlingHelp(handlingKind(b), touch)}</p>` : ""}`;
     this.root.querySelector<HTMLElement>(".ss-boat-detail")!.innerHTML = `
       ${variants}
       <p class="ss-boat-mission"><b>${b.mission}.</b> ${b.tagline}.</p>
-      <div class="ss-bars">${bar("Velocidad", b.stats.velocidad)}${bar("Maniobra", b.stats.maniobra)}${bar("Olas", b.stats.olas)}</div>`;
+      <div class="ss-bars">${bar("Velocidad", b.stats.velocidad)}${bar("Maniobra", b.stats.maniobra)}${bar("Olas", b.stats.olas)}</div>
+      ${handling}`;
   }
 
   onPlayClick(callback: () => void): void {
@@ -371,6 +389,9 @@ export function injectStyles(): void {
     .ss-screen .ss-install { margin-left: 8px; }
     .ss-screen .ss-install-hint { margin-top: 10px; font-size: 12px; color: var(--muted); }
     .ss-screen .ss-install-hint b { color: var(--ink); font-weight: 600; }
+    .ss-screen .ss-handling { margin-top: 10px; margin-bottom: 0; align-items: center; }
+    .ss-screen .ss-handling-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+    .ss-screen .ss-handling-help { margin-top: 8px; font-size: 12.5px; line-height: 1.5; color: var(--muted); max-width: 52ch; }
     .ss-screen .ss-variants { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
     .ss-screen .ss-variant { font: inherit; font-size: 12px; letter-spacing: 0.04em; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(244, 239, 227, 0.25); background: transparent; color: var(--muted); cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s; }
     .ss-screen .ss-variant:hover { color: var(--ink); border-color: rgba(244, 239, 227, 0.5); }

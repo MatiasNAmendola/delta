@@ -1,11 +1,20 @@
 import { Scene } from "@babylonjs/core/scene";
 import { ThrottleLever } from "./throttleLever";
 
+/** Buttons for the realistic handling: keys by name, touch buttons as "touch-up/down/left/right". */
+export interface RawInput {
+  /** Pressed since the last update. */
+  pressed: Set<string>;
+  /** Held down now. */
+  held: Set<string>;
+}
+
 export interface ControlState {
   throttle: number; // -1 to 1
   steering: number; // -1 to 1
   action: boolean; // dock action
   gyroSteering: number | null;
+  raw: RawInput;
   cameraAngleOffset: number; // radians offset from behind-boat
   cameraPitchOffset: number; // up/down offset
 }
@@ -18,6 +27,7 @@ export class MobileControls {
     gyroSteering: null,
     cameraAngleOffset: 0,
     cameraPitchOffset: 0,
+    raw: { pressed: new Set(), held: new Set() },
   };
 
   private isMobile: boolean;
@@ -27,6 +37,9 @@ export class MobileControls {
   private gyroListener: ((e: DeviceOrientationEvent) => void) | null = null;
   private controlsDiv!: HTMLDivElement;
   private keysDown = new Set<string>();
+  /** Buttons pressed since the last update (realistic handling). */
+  private pressed = new Set<string>();
+  private touchHeld = new Set<string>();
   /** The throttle stays where it is left (see throttleLever.ts). */
   readonly lever = new ThrottleLever();
   private actionPressed = false;
@@ -62,6 +75,7 @@ export class MobileControls {
     const leverKey = (key: string): 1 | -1 | 0 => (key === "w" || key === "arrowup" ? 1 : key === "s" || key === "arrowdown" ? -1 : 0);
     window.addEventListener("keydown", (e) => {
       const key = e.key.toLowerCase();
+      if (!e.repeat) this.pressed.add(key);
       this.keysDown.add(key);
       if (e.key === " " || e.key === "e") {
         this.actionPressed = true;
@@ -182,7 +196,7 @@ export class MobileControls {
       <div style="position:fixed;bottom:10px;left:10px;background:rgba(0,0,0,0.7);
         color:#e8d5a3;padding:10px 15px;border-radius:8px;font-size:13px;
         font-family:monospace;z-index:100;pointer-events:none;">
-        W/↑ S/↓ Acelerador (tocá: un punto · mantené: suave) &nbsp; X Punto muerto &nbsp; A/← D/→ Timón &nbsp; ESPACIO Parada &nbsp; Click-derecho Cámara
+        <span id="desktopKeys">W/↑ S/↓ Acelerador (tocá: un punto · mantené: suave) &nbsp; X Punto muerto &nbsp; A/← D/→ Timón</span> &nbsp; ESPACIO Parada &nbsp; Click-derecho Cámara
       </div>
     `;
     document.body.appendChild(hint);
@@ -296,18 +310,18 @@ export class MobileControls {
     }, 5000);
 
     // The lever stays where it is left: tap for one notch, hold to move it smoothly
-    this.setupTouchButton("btnForward", () => this.lever.press(1), () => this.lever.release());
-    this.setupTouchButton("btnReverse", () => this.lever.press(-1), () => this.lever.release());
+    this.setupTouchButton("btnForward", () => this.lever.press(1), () => this.lever.release(), "touch-up");
+    this.setupTouchButton("btnReverse", () => this.lever.press(-1), () => this.lever.release(), "touch-down");
     this.setupTouchButton("btnLeft", () => {
       this.controlState.steering = -1;
     }, () => {
       this.controlState.steering = 0;
-    });
+    }, "touch-left");
     this.setupTouchButton("btnRight", () => {
       this.controlState.steering = 1;
     }, () => {
       this.controlState.steering = 0;
-    });
+    }, "touch-right");
     this.setupTouchButton("btnAction", () => {
       this.actionPressed = true;
     }, () => {});
@@ -327,9 +341,23 @@ export class MobileControls {
   private setupTouchButton(
     id: string,
     onDown: () => void,
-    onUp: () => void
+    onUp: () => void,
+    name?: string
   ): void {
     const btn = document.getElementById(id)!;
+    if (name) {
+      const down = onDown;
+      const up = onUp;
+      onDown = () => {
+        this.pressed.add(name);
+        this.touchHeld.add(name);
+        down();
+      };
+      onUp = () => {
+        this.touchHeld.delete(name);
+        up();
+      };
+    }
 
     btn.addEventListener("touchstart", (e) => {
       e.preventDefault();
@@ -479,6 +507,29 @@ export class MobileControls {
     }
   }
 
+  /** The desktop key reminder (it changes with the realistic handling). */
+  public setKeysHint(html: string): void {
+    const el = document.getElementById("desktopKeys");
+    if (el) el.innerHTML = html;
+  }
+
+  /** What the four buttons say (they change meaning with the realistic handling). */
+  public setLabels(labels: { up: string; down: string; left: string; right: string }): void {
+    const set = (id: string, text: string) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = text;
+      el.style.fontSize = text.length > 2 ? "11px" : "";
+      el.style.fontWeight = text.length > 2 ? "600" : "";
+      el.style.textAlign = "center";
+      el.style.lineHeight = "1.1";
+    };
+    set("btnForward", labels.up);
+    set("btnReverse", labels.down);
+    set("btnLeft", labels.left);
+    set("btnRight", labels.right);
+  }
+
   /** Call to recalibrate gyro to current position */
   public recalibrateGyro(): void {
     this.gyroCalibrated = false;
@@ -527,7 +578,9 @@ export class MobileControls {
     this.controlState.action = this.actionPressed;
     this.actionPressed = false;
 
-    return { ...this.controlState };
+    const raw: RawInput = { pressed: this.pressed, held: new Set([...this.keysDown, ...this.touchHeld]) };
+    this.pressed = new Set();
+    return { ...this.controlState, raw };
   }
 
   public dispose(): void {

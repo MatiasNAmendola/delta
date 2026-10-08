@@ -180,8 +180,8 @@ export class GameUI {
   }
 
   /** Throttle lever, actual speed and the slow-zone limit (fractions of top speed). */
-  public updateThrottle(lever: number, speed: number, zone: SlowZone, limit: number): void {
-    this.throttle.update(lever, speed, zone, limit);
+  public updateThrottle(lever: number, speed: number, zone: SlowZone, limit: number, label?: string): void {
+    this.throttle.update(lever, speed, zone, limit, label);
   }
 
   public updateScore(score: number): void {

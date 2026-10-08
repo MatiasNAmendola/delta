@@ -14,6 +14,8 @@ const DETENT = 0.45;
 
 export class ThrottleLever {
   value = 0;
+  /** Lever travel per tap (0.5 = the five positions of a telegraph). */
+  notch = NOTCH;
   private dir = 0;
   private held = 0;
   private detent = 0;
@@ -22,7 +24,7 @@ export class ThrottleLever {
   press(dir: 1 | -1): void {
     this.dir = dir;
     this.held = 0;
-    this.value = nextNotch(this.value, dir);
+    this.value = nextNotch(this.value, dir, this.notch);
   }
 
   release(): void {
@@ -54,8 +56,8 @@ export class ThrottleLever {
 }
 
 /** The next notch from `value` in direction `dir` (a value on a notch moves a whole notch). */
-export function nextNotch(value: number, dir: 1 | -1): number {
-  const steps = value / NOTCH;
+export function nextNotch(value: number, dir: 1 | -1, notch = NOTCH): number {
+  const steps = value / notch;
   const next = dir > 0 ? Math.floor(steps + 1e-6) + 1 : Math.ceil(steps - 1e-6) - 1;
-  return Math.max(-1, Math.min(1, next * NOTCH));
+  return Math.max(-1, Math.min(1, next * notch));
 }

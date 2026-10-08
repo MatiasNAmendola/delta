@@ -1,0 +1,253 @@
+[
+  {
+    "via": "Río Luján",
+    "seccion": "Primera Sección",
+    "restriccion": "velocidad_max",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "media",
+    "fuente": "https://mail.centronaval.org.ar/yccn/instrucciones-regatas/DISPOSICIONES-PREFECTURA-2016.doc",
+    "confianza": "confirmado",
+    "revision_juez": "Norma (Disp. PZDE RI7 02/15, vigente desde 23/01/2015, embarcaciones a motor deportivas y comerciales en la Primera Sección) confirmada por el juez; la inclusión de esta vía surge del extracto de los autores y no fue reverificada. Sin valor numérico: la regla es 'velocidad mínima sin generar oleaje'. Vigencia actual no confirmada (posible reemplazo bajo Ordenanza 1/18 DPSN)."
+  },
+  {
+    "via": "Río Sarmiento",
+    "seccion": "Primera Sección",
+    "restriccion": "velocidad_max",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "media",
+    "fuente": "https://mail.centronaval.org.ar/yccn/instrucciones-regatas/DISPOSICIONES-PREFECTURA-2016.doc",
+    "confianza": "confirmado",
+    "revision_juez": "Norma (Disp. PZDE RI7 02/15, vigente desde 23/01/2015, embarcaciones a motor deportivas y comerciales en la Primera Sección) confirmada por el juez; la inclusión de esta vía surge del extracto de los autores y no fue reverificada. Sin valor numérico: la regla es 'velocidad mínima sin generar oleaje'. Vigencia actual no confirmada (posible reemplazo bajo Ordenanza 1/18 DPSN)."
+  },
+  {
+    "via": "Río Carapachay",
+    "seccion": "Primera Sección",
+    "restriccion": "velocidad_max",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "media",
+    "fuente": "https://mail.centronaval.org.ar/yccn/instrucciones-regatas/DISPOSICIONES-PREFECTURA-2016.doc",
+    "confianza": "confirmado",
+    "revision_juez": "Norma (Disp. PZDE RI7 02/15, vigente desde 23/01/2015, embarcaciones a motor deportivas y comerciales en la Primera Sección) confirmada por el juez; la inclusión de esta vía surge del extracto de los autores y no fue reverificada. Sin valor numérico: la regla es 'velocidad mínima sin generar oleaje'. Vigencia actual no confirmada (posible reemplazo bajo Ordenanza 1/18 DPSN)."
+  },
+  {
+    "via": "Arroyo Caraguatá",
+    "seccion": "Primera Sección",
+    "restriccion": "velocidad_max",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "media",
+    "fuente": "https://mail.centronaval.org.ar/yccn/instrucciones-regatas/DISPOSICIONES-PREFECTURA-2016.doc",
+    "confianza": "confirmado",
+    "revision_juez": "Norma (Disp. PZDE RI7 02/15, vigente desde 23/01/2015, embarcaciones a motor deportivas y comerciales en la Primera Sección) confirmada por el juez; la inclusión de esta vía surge del extracto de los autores y no fue reverificada. Sin valor numérico: la regla es 'velocidad mínima sin generar oleaje'. Vigencia actual no confirmada (posible reemplazo bajo Ordenanza 1/18 DPSN)."
+  },
+  {
+    "via": "Arroyo Dorado",
+    "seccion": "Primera Sección",
+    "restriccion": "velocidad_max",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "media",
+    "fuente": "https://mail.centronaval.org.ar/yccn/instrucciones-regatas/DISPOSICIONES-PREFECTURA-2016.doc",
+    "confianza": "confirmado",
+    "revision_juez": "Norma (Disp. PZDE RI7 02/15, vigente desde 23/01/2015, embarcaciones a motor deportivas y comerciales en la Primera Sección) confirmada por el juez; la inclusión de esta vía surge del extracto de los autores y no fue reverificada. Sin valor numérico: la regla es 'velocidad mínima sin generar oleaje'. Vigencia actual no confirmada (posible reemplazo bajo Ordenanza 1/18 DPSN)."
+  },
+  {
+    "via": "Arroyo Pajarito",
+    "seccion": "Primera Sección",
+    "restriccion": "velocidad_max",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "media",
+    "fuente": "https://mail.centronaval.org.ar/yccn/instrucciones-regatas/DISPOSICIONES-PREFECTURA-2016.doc",
+    "confianza": "confirmado",
+    "revision_juez": "Norma (Disp. PZDE RI7 02/15, vigente desde 23/01/2015, embarcaciones a motor deportivas y comerciales en la Primera Sección) confirmada por el juez; la inclusión de esta vía surge del extracto de los autores y no fue reverificada. Sin valor numérico: la regla es 'velocidad mínima sin generar oleaje'. Vigencia actual no confirmada (posible reemplazo bajo Ordenanza 1/18 DPSN)."
+  },
+  {
+    "via": "Arroyo Abra Vieja",
+    "seccion": "Primera Sección",
+    "restriccion": "velocidad_max",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "media",
+    "fuente": "https://mail.centronaval.org.ar/yccn/instrucciones-regatas/DISPOSICIONES-PREFECTURA-2016.doc",
+    "confianza": "confirmado",
+    "revision_juez": "Norma (Disp. PZDE RI7 02/15, vigente desde 23/01/2015, embarcaciones a motor deportivas y comerciales en la Primera Sección) confirmada por el juez; la inclusión de esta vía surge del extracto de los autores y no fue reverificada. Sin valor numérico: la regla es 'velocidad mínima sin generar oleaje'. Vigencia actual no confirmada (posible reemplazo bajo Ordenanza 1/18 DPSN)."
+  },
+  {
+    "via": "Río Tigre",
+    "seccion": "Primera Sección",
+    "restriccion": "prioridad_remo",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "leve",
+    "fuente": "https://barcosmagazine.com/esp/nuevas-disposiciones-pna-zonas-de-fondeo-y-de-practicas-de-deportes-nauticos/",
+    "confianza": "probable"
+  },
+  {
+    "via": "Canal Aliviador",
+    "seccion": "Primera Sección",
+    "restriccion": "prioridad_remo",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "leve",
+    "fuente": "https://barcosmagazine.com/esp/nuevas-disposiciones-pna-zonas-de-fondeo-y-de-practicas-de-deportes-nauticos/",
+    "confianza": "probable",
+    "fuente_adicional": "https://intranet.hcdiputados-ba.gov.ar/proyectos/10-11D2286012018-05-0715-44-45.pdf",
+    "revision_juez": "Un pedido de informes legislativo (2018, no es norma) afirma que en el Canal Aliviador (Pista Nacional de Remo) no navegan embarcaciones de gran calado y se practica remo. Se mantiene 'probable'."
+  },
+  {
+    "via": "Arroyo Abra Vieja",
+    "seccion": "Primera Sección",
+    "restriccion": "prioridad_remo",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "leve",
+    "fuente": "https://barcosmagazine.com/esp/nuevas-disposiciones-pna-zonas-de-fondeo-y-de-practicas-de-deportes-nauticos/",
+    "confianza": "probable"
+  },
+  {
+    "via": "Río Sarmiento",
+    "seccion": "Primera Sección",
+    "restriccion": "prioridad_remo",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "leve",
+    "fuente": "https://barcosmagazine.com/esp/nuevas-disposiciones-pna-zonas-de-fondeo-y-de-practicas-de-deportes-nauticos/",
+    "confianza": "probable"
+  },
+  {
+    "via": "Arroyo Caraguatá",
+    "seccion": "Primera Sección",
+    "restriccion": "prioridad_remo",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "leve",
+    "fuente": "https://barcosmagazine.com/esp/nuevas-disposiciones-pna-zonas-de-fondeo-y-de-practicas-de-deportes-nauticos/",
+    "confianza": "probable"
+  },
+  {
+    "via": "Arroyo Rama Negra",
+    "seccion": "Primera Sección",
+    "restriccion": "prioridad_remo",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "media",
+    "fuente": "http://elnavegantedeltatour.blogspot.com/2009/10/zona-de-privilegio.html",
+    "confianza": "probable",
+    "revision_juez": "Fuente: blog de 2009, anterior a la Disp. 02/15. Crónicas de kayak confirman uso remero (arroyo angosto, bajíos con bajante, oleaje de lanchas molesta): https://weekend.perfil.com/noticias/kayak-2/kayakismo-cabalgando-el-rama-negra.phtml. Se mantiene 'probable'."
+  },
+  {
+    "via": "Arroyo Rama Negra",
+    "seccion": "Primera Sección",
+    "restriccion": "no_colectivas",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva"
+    ],
+    "penalizacion_sugerida": "media",
+    "fuente": null,
+    "confianza": "recuerdo_del_usuario_contradicho",
+    "revision_juez": "Ninguna norma hallada. Una guía (Tripadvisor, Sendero de Caminatas Arroyo Rama Negra) afirma que se accede por la línea pública de la Interisleña, lo que contradice esta restricción. Puede tratarse de un tramo (p. ej. Rama Negra Chico) y no de todo el arroyo. No usar como regla dura sin verificar en campo o con los PDF de las líneas 451/452.",
+    "fuente_contraria": "https://www.tripadvisor.com/Attraction_Review-g312762-d1893473-Reviews-Sendero_de_Caminatas_Arroyo_Rama_Negra-Tigre_Province_of_Buenos_Aires_Central_Arg.html"
+  },
+  {
+    "via": "Arroyo Gambado",
+    "seccion": "Primera Sección",
+    "restriccion": "eslora_max",
+    "valor": null,
+    "unidad": "m",
+    "aplica_a": [
+      "colectiva",
+      "particular"
+    ],
+    "penalizacion_sugerida": "grave",
+    "fuente": null,
+    "confianza": "recuerdo_del_usuario",
+    "revision_juez": "El arroyo existe y es ruta habitual de remo/kayak (Luján - Fulminante - Gambado - Sarmiento); hay guardería/escuela de kayak sobre el Gambado a ~800 m del Luján (https://aremar.com.ar/). No se halló ninguna norma de Prefectura que restrinja eslora ni otorgue prioridad al remo en el Gambado; no figura en la lista conocida de la Disp. 02/15. Tratar como regla de diseño, no legal."
+  },
+  {
+    "via": "Arroyo Gambado",
+    "seccion": "Primera Sección",
+    "restriccion": "prioridad_remo",
+    "valor": null,
+    "unidad": null,
+    "aplica_a": [
+      "colectiva",
+      "particular",
+      "moto"
+    ],
+    "penalizacion_sugerida": "media",
+    "fuente": null,
+    "confianza": "recuerdo_del_usuario",
+    "revision_juez": "El arroyo existe y es ruta habitual de remo/kayak (Luján - Fulminante - Gambado - Sarmiento); hay guardería/escuela de kayak sobre el Gambado a ~800 m del Luján (https://aremar.com.ar/). No se halló ninguna norma de Prefectura que restrinja eslora ni otorgue prioridad al remo en el Gambado; no figura en la lista conocida de la Disp. 02/15. Tratar como regla de diseño, no legal."
+  }
+]
