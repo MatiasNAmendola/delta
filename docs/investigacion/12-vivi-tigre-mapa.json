@@ -1,0 +1,668 @@
+{
+ "fuente": {
+  "autor": "Municipio de Tigre – Secretaría de Turismo («Viví Tigre»)",
+  "pagina": "https://vivitigre.gob.ar/mapa-digital/",
+  "archivos": [
+   {
+    "url": "https://vivitigre.gob.ar/wp-content/uploads/2026/03/A3-MAPA-TURISMO-DELTA_EDIT-Agosto-2026-1.jpg",
+    "sha256": "689295324f7d7639d216d02bee4dc43a570769250fdeb8f58c170158ed044a4f",
+    "px": [
+     2618,
+     1892
+    ]
+   },
+   {
+    "url": "https://vivitigre.gob.ar/wp-content/uploads/2026/03/A3-MAPA-TURISMO-DELTA_EDIT-Agosto-2026-2.jpg",
+    "sha256": "8306bcc1601a9cdacaa9c963809d1b1cd32604e65334dec310863ae88ee71d4e",
+    "px": [
+     2618,
+     1892
+    ]
+   }
+  ],
+  "edicion": "Agosto 2026",
+  "consultado": "2026-10-08",
+  "atribucion": "Fuente: Municipio de Tigre – Viví Tigre",
+  "metodo": "transcripción manual; 'px' = centro del marcador en la cara 1 (2618x1892), ±15 px, esquemático (no georreferenciado)"
+ },
+ "servicios": [
+  {
+   "nombre": "Destacamento Policía de Islas",
+   "px": [
+    1635,
+    867
+   ]
+  },
+  {
+   "nombre": "Servicio de Emergencias Tigre (SET)",
+   "px": [
+    1695,
+    877
+   ]
+  },
+  {
+   "nombre": "Servicio de Emergencias Tigre (SET)",
+   "px": [
+    1103,
+    1011
+   ]
+  },
+  {
+   "nombre": "Información turística",
+   "px": [
+    1741,
+    1512
+   ]
+  },
+  {
+   "nombre": "Estación Fluvial",
+   "px": [
+    1810,
+    1508
+   ]
+  }
+ ],
+ "puntos": [
+  {
+   "ref": "1",
+   "nombre": "Refugio 31",
+   "categoria": "alojamiento",
+   "px": [
+    1983,
+    690
+   ],
+   "nota": null
+  },
+  {
+   "ref": "2",
+   "nombre": "Delta Eco Hotel",
+   "categoria": "alojamiento",
+   "px": [
+    1282,
+    1178
+   ],
+   "nota": null
+  },
+  {
+   "ref": "3",
+   "nombre": "Hostería Atelier",
+   "categoria": "alojamiento",
+   "px": [
+    1429,
+    389
+   ],
+   "nota": null
+  },
+  {
+   "ref": "4",
+   "nombre": "Solar del Delta",
+   "categoria": "alojamiento",
+   "px": [
+    1033,
+    322
+   ],
+   "nota": null
+  },
+  {
+   "ref": "5",
+   "nombre": "La Morada",
+   "categoria": "alojamiento",
+   "px": [
+    1206,
+    1224
+   ],
+   "nota": null
+  },
+  {
+   "ref": "6",
+   "nombre": "La Posada del Abra",
+   "categoria": "alojamiento",
+   "px": [
+    1776,
+    1258
+   ],
+   "nota": null
+  },
+  {
+   "ref": "7",
+   "nombre": "Hostel Delta",
+   "categoria": "alojamiento",
+   "px": [
+    1960,
+    1505
+   ],
+   "nota": null
+  },
+  {
+   "ref": "8",
+   "nombre": "Al Delta Suites",
+   "categoria": "cabañas",
+   "px": [
+    1758,
+    1217
+   ],
+   "nota": null
+  },
+  {
+   "ref": "9",
+   "nombre": "Aires del Delta",
+   "categoria": "cabañas",
+   "px": [
+    1741,
+    1410
+   ],
+   "nota": null
+  },
+  {
+   "ref": "10",
+   "nombre": "Cabañas del Espera - SUTPA Tigre",
+   "categoria": "cabañas",
+   "px": [
+    1585,
+    1126
+   ],
+   "nota": null
+  },
+  {
+   "ref": "11",
+   "nombre": "Mi Rancho",
+   "categoria": "cabañas",
+   "px": [
+    1732,
+    1250
+   ],
+   "nota": null
+  },
+  {
+   "ref": "12",
+   "nombre": "El Sitio Dorado",
+   "categoria": "cabañas",
+   "px": [
+    1892,
+    906
+   ],
+   "nota": null
+  },
+  {
+   "ref": "13",
+   "nombre": "Aire de Proa",
+   "categoria": "restaurante",
+   "px": [
+    1593,
+    1333
+   ],
+   "nota": null
+  },
+  {
+   "ref": "14",
+   "nombre": "Alpenhaus",
+   "categoria": "restaurante",
+   "px": [
+    1630,
+    932
+   ],
+   "nota": null
+  },
+  {
+   "ref": "15",
+   "nombre": "Atelier Chez Lissie",
+   "categoria": "restaurante",
+   "px": [
+    1454,
+    431
+   ],
+   "nota": null
+  },
+  {
+   "ref": "16",
+   "nombre": "Bababeach",
+   "categoria": "restaurante",
+   "px": [
+    1566,
+    812
+   ],
+   "nota": null
+  },
+  {
+   "ref": "17",
+   "nombre": "Bajos del Paraná",
+   "categoria": "restaurante",
+   "px": [
+    1706,
+    450
+   ],
+   "nota": null
+  },
+  {
+   "ref": "18",
+   "nombre": "Bemvelon",
+   "categoria": "restaurante",
+   "px": [
+    1915,
+    1096
+   ],
+   "nota": null
+  },
+  {
+   "ref": "19",
+   "nombre": "Bonanza",
+   "categoria": "restaurante",
+   "px": [
+    1113,
+    902
+   ],
+   "nota": null
+  },
+  {
+   "ref": "20",
+   "nombre": "Danilo Restaurante",
+   "categoria": "restaurante",
+   "px": [
+    834,
+    959
+   ],
+   "nota": null
+  },
+  {
+   "ref": "21",
+   "nombre": "El Hornero",
+   "categoria": "restaurante",
+   "px": [
+    1869,
+    1195
+   ],
+   "nota": null
+  },
+  {
+   "ref": "22",
+   "nombre": "El Remanso",
+   "categoria": "restaurante",
+   "px": [
+    1793,
+    1132
+   ],
+   "nota": null
+  },
+  {
+   "ref": "23",
+   "nombre": "Gato Blanco",
+   "categoria": "restaurante",
+   "px": [
+    1737,
+    979
+   ],
+   "nota": null
+  },
+  {
+   "ref": "24",
+   "nombre": "Isla Bruma",
+   "categoria": "restaurante",
+   "px": [
+    1659,
+    1436
+   ],
+   "nota": null
+  },
+  {
+   "ref": "25",
+   "nombre": "Isla Centenario",
+   "categoria": "restaurante",
+   "px": [
+    1761,
+    1365
+   ],
+   "nota": null
+  },
+  {
+   "ref": "26",
+   "nombre": "Isla El Descanso",
+   "categoria": "restaurante",
+   "px": [
+    1727,
+    1151
+   ],
+   "nota": null
+  },
+  {
+   "ref": "27",
+   "nombre": "Kanoo Resto",
+   "categoria": "restaurante",
+   "px": [
+    1814,
+    1431
+   ],
+   "nota": null
+  },
+  {
+   "ref": "28",
+   "nombre": "La Martita",
+   "categoria": "restaurante",
+   "px": [
+    1829,
+    1132
+   ],
+   "nota": null
+  },
+  {
+   "ref": "29",
+   "nombre": "Las Rosas",
+   "categoria": "restaurante",
+   "px": [
+    1635,
+    1234
+   ],
+   "nota": null
+  },
+  {
+   "ref": "30",
+   "nombre": "Las Velas",
+   "categoria": "restaurante",
+   "px": [
+    1569,
+    623
+   ],
+   "nota": null
+  },
+  {
+   "ref": "31",
+   "nombre": "Los Charly V y C",
+   "categoria": "restaurante",
+   "px": [
+    1839,
+    1174
+   ],
+   "nota": null
+  },
+  {
+   "ref": "32",
+   "nombre": "Parrilla El Camoati",
+   "categoria": "restaurante",
+   "px": [
+    2005,
+    1388
+   ],
+   "nota": null
+  },
+  {
+   "ref": "33",
+   "nombre": "Parrilla Tornado",
+   "categoria": "restaurante",
+   "px": [
+    2003,
+    1343
+   ],
+   "nota": null
+  },
+  {
+   "ref": "34",
+   "nombre": "Saiba Beach",
+   "categoria": "restaurante",
+   "px": [
+    2016,
+    1132
+   ],
+   "nota": null
+  },
+  {
+   "ref": "35",
+   "nombre": "Timón Dorado",
+   "categoria": "restaurante",
+   "px": [
+    1741,
+    1292
+   ],
+   "nota": null
+  },
+  {
+   "ref": "36",
+   "nombre": "Recreo Banco Provincia",
+   "categoria": "recreo-camping",
+   "px": null,
+   "nota": "no figura en el mapa de la cara 1 (solo en el listado)"
+  },
+  {
+   "ref": "37",
+   "nombre": "Recreo El Alcázar",
+   "categoria": "recreo-camping",
+   "px": [
+    1765,
+    1441
+   ],
+   "nota": null
+  },
+  {
+   "ref": "38",
+   "nombre": "Recreo Galeón de Oro",
+   "categoria": "recreo-camping",
+   "px": [
+    1723,
+    1373
+   ],
+   "nota": null
+  },
+  {
+   "ref": "39",
+   "nombre": "Recreo Faro Delta",
+   "categoria": "recreo-camping",
+   "px": [
+    1619,
+    1399
+   ],
+   "nota": null
+  },
+  {
+   "ref": "40",
+   "nombre": "Recreo Isla Caribetá",
+   "categoria": "recreo-camping",
+   "px": [
+    1740,
+    1098
+   ],
+   "nota": null
+  },
+  {
+   "ref": "41",
+   "nombre": "Recreo Luz y Fuerza",
+   "categoria": "recreo-camping",
+   "px": [
+    1693,
+    1220
+   ],
+   "nota": null
+  },
+  {
+   "ref": "42",
+   "nombre": "Recreo Parque Lyfe",
+   "categoria": "recreo-camping",
+   "px": [
+    1135,
+    1212
+   ],
+   "nota": null
+  },
+  {
+   "ref": "43",
+   "nombre": "Bandoneón a Bordo",
+   "categoria": "actividad",
+   "px": [
+    1795,
+    1461
+   ],
+   "nota": null
+  },
+  {
+   "ref": "44",
+   "nombre": "Bonanza Deltaventura",
+   "categoria": "actividad",
+   "px": [
+    1072,
+    882
+   ],
+   "nota": null
+  },
+  {
+   "ref": "45",
+   "nombre": "Delta en Kayak",
+   "categoria": "actividad",
+   "px": [
+    1789,
+    1391
+   ],
+   "nota": null
+  },
+  {
+   "ref": "46",
+   "nombre": "Establecimiento apícola Fé y Esperanza",
+   "categoria": "actividad",
+   "px": [
+    1874,
+    1147
+   ],
+   "nota": null
+  },
+  {
+   "ref": "47",
+   "nombre": "Kanoo - Tour Kayak",
+   "categoria": "actividad",
+   "px": [
+    1740,
+    1339
+   ],
+   "nota": null
+  },
+  {
+   "ref": "48",
+   "nombre": "Parador Cara Sur Beach",
+   "categoria": "actividad",
+   "px": [
+    1833,
+    1394
+   ],
+   "nota": null
+  },
+  {
+   "ref": "49",
+   "nombre": "Patricio Redman - Kayak",
+   "categoria": "actividad",
+   "px": [
+    1689,
+    1479
+   ],
+   "nota": null
+  },
+  {
+   "ref": "50",
+   "nombre": "Reserva Monte Blanco",
+   "categoria": "actividad",
+   "px": [
+    1621,
+    980
+   ],
+   "nota": null
+  },
+  {
+   "ref": "51",
+   "nombre": "Sculls - Kayak",
+   "categoria": "actividad",
+   "px": [
+    1685,
+    1285
+   ],
+   "nota": null
+  },
+  {
+   "ref": "52",
+   "nombre": "Ainda Mais Delta Tour",
+   "categoria": "atraccion",
+   "px": null,
+   "nota": "no figura en el mapa de la cara 1 (solo en el listado)"
+  },
+  {
+   "ref": "53",
+   "nombre": "Escuadrón Paintball",
+   "categoria": "atraccion",
+   "px": [
+    928,
+    1460
+   ],
+   "nota": null
+  },
+  {
+   "ref": "54",
+   "nombre": "Equestria",
+   "categoria": "atraccion",
+   "px": [
+    872,
+    1458
+   ],
+   "nota": null
+  },
+  {
+   "ref": "55",
+   "nombre": "EUCA Tigre",
+   "categoria": "atraccion",
+   "px": [
+    1388,
+    1449
+   ],
+   "nota": null
+  },
+  {
+   "ref": "56",
+   "nombre": "Remeros Plaza",
+   "categoria": "atraccion",
+   "px": [
+    961,
+    1555
+   ],
+   "nota": null
+  },
+  {
+   "ref": "57",
+   "nombre": "Torrepueblo",
+   "categoria": "atraccion",
+   "px": [
+    796,
+    1287
+   ],
+   "nota": null
+  },
+  {
+   "ref": "A",
+   "nombre": "Museo Sarmiento",
+   "categoria": "museo",
+   "px": [
+    1652,
+    1161
+   ],
+   "nota": null
+  },
+  {
+   "ref": "B",
+   "nombre": "Casa Museo Haroldo Conti",
+   "categoria": "museo",
+   "px": [
+    1691,
+    1410
+   ],
+   "nota": null
+  },
+  {
+   "ref": "C",
+   "nombre": "Casa Museo Xul Solar",
+   "categoria": "museo",
+   "px": [
+    890,
+    1198
+   ],
+   "nota": null
+  },
+  {
+   "ref": "D",
+   "nombre": "Museo de Arte en el Delta Argentino",
+   "categoria": "museo",
+   "px": null,
+   "nota": "no figura en el mapa de la cara 1 (solo en el listado)"
+  }
+ ]
+}

@@ -145,6 +145,7 @@ Peso = peso propuesto para votar **nombres** (Parte B); 0 = no vota (solo geomet
   - **Líneas de lanchas colectivas** con su boletería en la Estación Fluvial: Líneas Delta (boletería 1), Jilguero (2) e Interisleña (3 y 4). Los recorridos están dibujados en colores; el de Jilguero va por el Carapachay.
   - **Puntos de interés:** museos, Puerto de Frutos, recreos, paseos y servicios.
   - **Uso:** referencia para validar nombres y recorridos y para ubicar puntos de interés y rutas de colectivas en el juego, con la atribución «Fuente: Municipio de Tigre – Viví Tigre». No se copia la imagen al repositorio; los datos se transcriben a mano, con fecha y fuente.
+  - **Actualización del mismo día: el folleto está publicado.** Es https://vivitigre.gob.ar/mapa-digital/ (la cara del Delta es `A3-MAPA-TURISMO-DELTA_EDIT-Agosto-2026-1.jpg` y `-2.jpg`). Los recorridos y los puntos transcriptos, con el SHA-256 de cada archivo, están en el doc 12.
 
 ### A11. Municipio de San Fernando (islas de Segunda y Tercera sección, Reserva de Biosfera)
 
