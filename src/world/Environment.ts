@@ -23,6 +23,8 @@ import { buildFlatChunks } from "./chunks";
 import type { Material } from "@babylonjs/core/Materials/material";
 import { ClearanceGrid, HOUSE_RADIUS, planLots } from "./settlement/lots";
 import { Settlement } from "./settlement/Settlement";
+import { Skyline, ZONE_ORIGINS } from "./Skyline";
+import { seasonFor, gardensInFlower, type Season } from "./season";
 import { paintPixels } from "./texturePaint";
 import { RiverBanks } from "./RiverBanks";
 import { Forest, type SpeciesName } from "./vegetation/Forest";
@@ -42,7 +44,11 @@ export class Environment {
   /** Bank points of the houses (bulkheads along the shore there). */
   private waterfront = new ClearanceGrid(8);
   private settlement: Settlement | null = null;
+  private gardens = new ClearanceGrid(8);
+  /** Season by the real date (season.ts): leaf colors, bare trees, flowers. */
+  readonly season!: Season;
   private riverBanks: RiverBanks | null = null;
+  private skyline: Skyline | null = null;
   private dockModels: DockModels | null = null;
   private forest: Forest;
   private grass!: Grass;
@@ -57,7 +63,8 @@ export class Environment {
   ) {
     this.scene = scene;
     this.world = world;
-    this.forest = new Forest(scene);
+    this.season = seasonFor();
+    this.forest = new Forest(scene, this.season);
     // ~3 world units per cell (256 for the original 800-unit Delta); also the splatmap size
     const res = world.world.size <= 800 ? 256 : 1024;
     this.waterDistance = new WaterDistanceField(world.world.size, res, (x, z) => waterSystem.isWaterCoarse(x, z));
@@ -65,6 +72,9 @@ export class Environment {
     mark("islas: distancias");
     this.createGround();
     this.createSkybox();
+    // Tigre, Nordelta and the other towns on the horizon, where they really are
+    const origin = ZONE_ORIGINS[world.world.id];
+    if (origin) this.skyline = new Skyline(scene, origin, new Color3(0.72, 0.8, 0.86));
     this.props = createPropBatches(scene);
     // Docks first: vegetation and houses keep clear of where they end up
     for (const dock of world.docks) {
@@ -332,7 +342,7 @@ export class Environment {
   /** A procedural tree, kept clear of houses, docks and moored boats. */
   private addTree(x: number, z: number, seed: number, species: SpeciesName, rotation?: number): void {
     const clear = 3.5 * PROP_SCALE;
-    if (this.nearDock(x, z) || this.occupied.blocked(x, z, clear * 0.5)) return;
+    if (this.nearDock(x, z) || this.occupied.blocked(x, z, clear * 0.5) || this.gardens.blocked(x, z)) return;
     const rng = seededRandom(seed);
     this.forest.add({
       x,
@@ -498,11 +508,18 @@ export class Environment {
     });
     for (const lot of lots) {
       this.occupied.add(lot.hx, lot.hz, HOUSE_RADIUS);
+      // The lawn around the house and down to the river: no trees (photos)
+      this.gardens.add(lot.hx, lot.hz, HOUSE_RADIUS * 2.1);
+      this.gardens.add((lot.hx + lot.x) / 2, (lot.hz + lot.z) / 2, HOUSE_RADIUS * 1.2);
       this.waterfront.add(lot.x, lot.z, 1.6);
       // The path and the dock: from the house down to the end of the muelle
       for (let t = -1.2; t <= lot.dockLength + 0.6; t += 0.5) this.occupied.add(lot.x + lot.nx * t, lot.z + lot.nz * t, 0.45);
     }
-    this.settlement = new Settlement(this.scene, lots, { groundY: this.groundY(0, 0) });
+    // Marinas and boat clubs (named OSM water areas) fill up with moored boats
+    const marinas = (world.waterAreas ?? [])
+      .filter((a) => a.name && /marina|n[aá]utic|guarder|yacht|amarra|club/i.test(a.name))
+      .map((a) => ({ outer: a.outer as Array<[number, number]>, isWater: (x: number, z: number) => waterSystem.isWater(x, z) }));
+    this.settlement = new Settlement(this.scene, lots, { groundY: this.groundY(0, 0), marinas, flowers: gardensInFlower(this.season) });
     mark(`casas (${lots.length})`);
   }
 
@@ -521,6 +538,7 @@ export class Environment {
     this.settlement?.update(camera.x, camera.z, level);
     this.riverBanks?.update(camera.x, camera.z);
     this.dockModels?.update(camera.x, camera.z);
+    this.skyline?.update(camera);
     this.forest.update(camera, focus);
     this.grass.update(dt, camera);
   }

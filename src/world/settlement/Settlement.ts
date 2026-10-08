@@ -30,7 +30,18 @@ const FLOAT = c("#9aa3a7");
 export interface SettlementOptions {
   /** World y of the island ground. */
   groundY: number;
+  /** Gardens in flower (spring and summer): santa ritas by the houses. */
+  flowers?: boolean;
+  /** Marinas and boat clubs (OSM water areas): filled with rows of moored boats. */
+  marinas?: Array<{ outer: Array<[number, number]>; isWater: (x: number, z: number) => boolean }>;
 }
+
+/** Colors of the boats you see moored in the Delta: white fibreglass, some blue, red, varnished wood. */
+const HULL = ["#f2f2ee", "#f2f2ee", "#eceae2", "#2f4f7a", "#9b2f26", "#6b4226", "#e8e2d0"].map(c);
+/** Santa rita (bougainvillea) colours: magenta, fuchsia, pink, orange. */
+const BLOOM = ["#c2186b", "#d63384", "#e05a9b", "#e8743b", "#b5179e"].map(c);
+/** Painted docks: red, white, green, blue (photos of the Delta). */
+const PAINT = ["#a8322c", "#efebe2", "#2f6a4a", "#2f4f7a"].map(c);
 
 /**
  * The houses and private docks of the Delta (ADR 0011): procedural houses
@@ -45,8 +56,10 @@ export class Settlement {
   private gables: StreamedBatch;
   private near: StreamedBatch;
   private glass: StreamedBatch;
-  /** Pontones: they rise and fall with the tide. */
+  /** Pontones and moored boats: they rise and fall with the tide. */
   private floating: StreamedBatch;
+  private hulls: StreamedBatch;
+  private blooms: StreamedBatch;
   private batches: StreamedBatch[];
 
   constructor(scene: Scene, readonly lots: Lot[], private o: SettlementOptions) {
@@ -55,12 +68,15 @@ export class Settlement {
     this.near = new StreamedBatch("casasDetalles", scene, { radius: NEAR });
     this.glass = new StreamedBatch("casasVentanas", scene, { radius: NEAR, specular: 0.5 });
     this.floating = new StreamedBatch("pontones", scene, { radius: FAR });
-    this.batches = [this.far, this.gables, this.near, this.glass, this.floating];
+    this.hulls = new StreamedBatch("lanchasAmarradas", scene, { radius: FAR, shape: "hull", specular: 0.3 });
+    this.blooms = new StreamedBatch("santaRitas", scene, { radius: NEAR * 1.6, shape: "blob", specular: 0.05, emissive: new Color3(0.08, 0.02, 0.05) });
+    this.batches = [this.far, this.gables, this.near, this.glass, this.floating, this.hulls, this.blooms];
     for (const lot of lots) {
       const rng = seededRandom(lot.seed || 1);
       this.house(lot, rng);
       this.dock(lot, rng);
     }
+    for (const m of o.marinas ?? []) this.marina(m);
     for (const b of this.batches) b.build();
   }
 
@@ -68,6 +84,7 @@ export class Settlement {
   update(cameraX: number, cameraZ: number, level: number): void {
     for (const b of this.batches) b.update(cameraX, cameraZ);
     this.floating.mesh.position.y = level;
+    this.hulls.mesh.position.y = level;
   }
 
   get stats(): { instances: number; visible: number } {
@@ -82,6 +99,15 @@ export class Settlement {
       .multiply(Matrix.RotationY(lot.rotation + (rng() - 0.5) * 0.25))
       .multiply(Matrix.Translation(lot.hx, this.o.groundY, lot.hz));
     const pick = <T>(list: T[]) => list[Math.floor(rng() * list.length)];
+    // Santa ritas (bougainvillea) climbing by the house in spring and summer (photos)
+    if (this.o.flowers && rng() < 0.55) {
+      const color = pick(BLOOM);
+      for (let k = 0, n = 2 + Math.floor(rng() * 3); k < n; k++) {
+        const a = rng() * Math.PI * 2;
+        const size = 1.4 + rng() * 1.6;
+        this.blooms.add(parent, [size, size * (1.1 + rng() * 0.6), size], [Math.cos(a) * 5.5, size * 0.55, Math.sin(a) * 5 + 1], color);
+      }
+    }
     switch (lot.house) {
       case "palafito":
         return this.palafito(parent, rng, pick(WOOD_PAINT), pick(SHEET_ROOF), pick(TRIM));
@@ -116,6 +142,28 @@ export class Settlement {
       // White frame below the window
       const sill: [number, number, number] = facing === "z" ? [1.35, 0.12, 0.18] : [0.18, 0.12, 1.35];
       this.near.add(parent, sill, [pos[0], pos[1] - 0.62, pos[2]], RAIL);
+    }
+  }
+
+  /** Railing along both sides of a walkway (only when the dock is painted). */
+  private railing(parent: Matrix, width: number, from: number, to: number, deckY: number, paint: Color3 | null): void {
+    if (!paint) return;
+    for (const side of [-1, 1]) {
+      const x = (side * width) / 2;
+      this.near.add(parent, [0.08, 0.08, to - from], [x, deckY + 0.95, (from + to) / 2], paint);
+      for (let z = from + 0.3; z <= to; z += 1.6) this.near.add(parent, [0.08, 0.95, 0.08], [x, deckY + 0.5, z], paint);
+    }
+  }
+
+  /** Steps from the end of a dock down into the water (photo: the red deck with stairs). */
+  private stepsDown(parent: Matrix, end: number, deckY: number, plank: Color3, paint: Color3 | null): void {
+    const steps = Math.max(2, Math.round(deckY / 0.3));
+    for (let k = 1; k <= steps; k++) {
+      this.near.add(parent, [1.1, 0.08, 0.32], [0, deckY - k * (deckY / steps), end + 0.15 + k * 0.3], plank);
+    }
+    for (const side of [-1, 1]) {
+      const run = steps * 0.3;
+      this.near.add(parent, [0.07, 0.07, Math.hypot(run, deckY + 0.9)], [side * 0.58, deckY / 2 + 0.45, end + run / 2 + 0.15], paint ?? PILE, [Math.atan2(deckY, run), 0, 0]);
     }
   }
 
@@ -154,6 +202,10 @@ export class Settlement {
     this.windows(parent, 2, w * 0.55, [0, h + 1.5, d / 2 + 0.03], "z");
     this.windows(parent, 2, d * 0.5, [w / 2 + 0.03, h + 1.5, 0], "x");
     this.windows(parent, 2, d * 0.5, [-w / 2 - 0.03, h + 1.5, 0], "x");
+    // A wooden ladder against the side too (photo: palafito with its ladder)
+    const lx = w / 2 + 0.35;
+    for (const dz of [-0.35, 0.35]) this.near.add(parent, [0.08, h + 1.1, 0.08], [lx, (h + 1.1) / 2, -d * 0.2 + dz], VARNISH[1], [0, 0, -0.12]);
+    for (let y = 0.35; y < h + 0.6; y += 0.35) this.near.add(parent, [0.06, 0.05, 0.7], [lx - y * 0.12, y, -d * 0.2], VARNISH[1]);
     // Stairs down from the gallery towards the river
     const run = h * 1.2;
     this.near.add(parent, [1.1, 0.18, Math.hypot(run, h)], [w * 0.3, h / 2, d / 2 + gal + run / 2], DECK[1], [Math.atan2(h, run), 0, 0]);
@@ -212,6 +264,50 @@ export class Settlement {
     this.near.add(parent, [w + 1, 0.1, 0.1], [0, h + 1.0, d / 2 + 2], RAIL);
   }
 
+  /**
+   * A small boat moored alongside: hull (floating with the tide), a console
+   * and windshield or a cabin. In metres, inside `parent`, bow towards +z.
+   */
+  private mooredBoat(parent: Matrix, x: number, z: number, rng: () => number, heading = 0): void {
+    const len = 4.5 + rng() * 3;
+    const beam = 1.7 + rng() * 0.6;
+    const local = Matrix.RotationY(heading).multiply(Matrix.Translation(x, 0, z)).multiply(parent);
+    const color = HULL[Math.floor(rng() * HULL.length)];
+    this.hulls.add(local, [beam, 0.9, len], [0, -0.35, 0], color);
+    if (rng() < 0.6) {
+      // Open boat: console and a windshield
+      this.floating.add(local, [0.6, 0.8, 0.6], [0, 0.85, -len * 0.05], c("#e9e6dc"));
+      this.floating.add(local, [0.7, 0.35, 0.08], [0, 1.4, len * 0.05], GLASS);
+    } else {
+      // Little cabin
+      this.floating.add(local, [beam * 0.75, 0.8, len * 0.38], [0, 0.95, len * 0.05], c("#efece4"));
+    }
+  }
+
+  /** Rows of moored boats with pontoons between them, inside a marina's water. */
+  private marina(m: { outer: Array<[number, number]>; isWater: (x: number, z: number) => boolean }): void {
+    const xs = m.outer.map((p) => p[0]);
+    const zs = m.outer.map((p) => p[1]);
+    const rng = seededRandom(Math.floor(Math.abs(xs[0] * 1000 + zs[0])) + 7);
+    const inside = (x: number, z: number) => pointIn(m.outer, x, z) && m.isWater(x, z);
+    const slot = 3.2 * M; // a berth every 3.2 m
+    const row = 18 * M; // pontoon rows every 18 m
+    for (let z = Math.min(...zs) + row / 2; z < Math.max(...zs); z += row) {
+      let run = 0;
+      for (let x = Math.min(...xs); x < Math.max(...xs); x += slot) {
+        if (!inside(x, z) || !inside(x, z + 6 * M) || !inside(x, z - 6 * M)) {
+          run = 0;
+          continue;
+        }
+        const parent = Matrix.Scaling(M, M, M).multiply(Matrix.Translation(x, WATER_LEVEL, z));
+        // Floating pontoon along the row, boats on both sides
+        this.floating.add(parent, [3.2, 0.4, 1.6], [0, 0.2, 0], FLOAT);
+        for (const side of [-1, 1]) if (rng() < 0.85) this.mooredBoat(parent, 0, side * 4.3, rng, side > 0 ? 0 : Math.PI);
+        run++;
+      }
+    }
+  }
+
   private dock(lot: Lot, rng: () => number): void {
     // Origin on the shoreline at the water level, +z towards the water
     const parent = Matrix.Scaling(M, M, M)
@@ -222,6 +318,8 @@ export class Settlement {
     const plank = DECK[Math.floor(rng() * DECK.length)];
     const len = lot.dockLength / M;
     const width = 1.5 + rng() * 0.6;
+    // Painted railings on about half the docks (red, white, green, blue)
+    const paint = rng() < 0.55 ? PAINT[Math.floor(rng() * PAINT.length)] : null;
     const walkway = (from: number, to: number, wd: number, x = 0) => {
       this.far.add(parent, [wd, 0.18, to - from], [x, deckY, (from + to) / 2], plank);
       for (let z = from + 0.4; z <= to; z += 2.2) {
@@ -236,8 +334,9 @@ export class Settlement {
       }
       case "simple": {
         walkway(-1, len, width);
-        // Ladder at the end
-        this.near.add(parent, [0.5, deckY + 0.6, 0.08], [width / 2 - 0.4, deckY / 2 - 0.3, len + 0.05], PILE);
+        this.railing(parent, width, -1, len, deckY, paint);
+        this.stepsDown(parent, len, deckY, plank, paint);
+        if (rng() < 0.65) this.mooredBoat(parent, width / 2 + 1.3, len - 2, rng);
         return;
       }
       case "te": {
@@ -247,6 +346,9 @@ export class Settlement {
         for (const x of [-head / 2, 0, head / 2]) this.near.add(parent, [0.22, deckY + 2, 0.22], [x, deckY - 1, len + 0.9], PILE);
         // Bollards for mooring
         for (const x of [-head / 2 + 0.4, head / 2 - 0.4]) this.near.add(parent, [0.25, 0.45, 0.25], [x, deckY + 0.3, len + 0.8], c("#2b2b2b"));
+        this.railing(parent, width, -1, len - 1, deckY, paint);
+        // Moored along the head of the T
+        if (rng() < 0.8) this.mooredBoat(parent, 0, len + 2.4, rng, Math.PI / 2);
         return;
       }
       case "glorieta": {
@@ -261,6 +363,8 @@ export class Settlement {
         this.near.add(parent, [s, 0.08, 0.08], [0, deckY + 0.95, len + s / 2], RAIL);
         const roof = SHEET_ROOF[Math.floor(rng() * SHEET_ROOF.length)];
         this.gables.add(parent, [s + 0.6, 1.2, s + 0.6], [0, deckY + 2.4, len], roof);
+        this.stepsDown(parent, len + s / 2 - 0.4, deckY, plank, paint);
+        if (rng() < 0.5) this.mooredBoat(parent, s / 2 + 1.3, len, rng);
         return;
       }
       case "ponton": {
@@ -272,8 +376,19 @@ export class Settlement {
         const pw = 5 + rng() * 3;
         this.floating.add(parent, [pw, 0.5, 2.6], [0, 0.15, fixed + ramp + 1.3], FLOAT);
         this.floating.add(parent, [pw, 0.1, 2.6], [0, 0.45, fixed + ramp + 1.3], plank);
+        if (rng() < 0.85) this.mooredBoat(parent, 0, fixed + ramp + 4, rng, Math.PI / 2);
         return;
       }
     }
   }
+}
+
+function pointIn(ring: Array<[number, number]>, x: number, z: number): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, zi] = ring[i];
+    const [xj, zj] = ring[j];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
 }

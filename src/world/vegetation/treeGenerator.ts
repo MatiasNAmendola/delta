@@ -74,8 +74,9 @@ export const SPECIES: Record<string, Species> = {
   // Casuarina: tall straight trunk, feathery dark tufts along the upper half
   casuarina: {
     name: "casuarina",
-    trunkHeight: [7, 9],
-    trunkRadius: 0.2,
+    // Real casuarinas of the Delta: 20-30 m, much taller than the houses (photos)
+    trunkHeight: [9.5, 12.5],
+    trunkRadius: 0.24,
     lean: 0.08,
     levels: 2,
     children: [7, 10],

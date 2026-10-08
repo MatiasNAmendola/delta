@@ -5,6 +5,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { Matrix } from "@babylonjs/core/Maths/math.vector";
 import { PROP_SCALE, WATER_LEVEL } from "../utils/constants";
 import { seededRandom } from "../utils/helpers";
 import type { Vec2 } from "./WorldDoc";
@@ -46,6 +47,7 @@ export const REFLECTIVITY_RES = 2048;
 export class RiverBanks {
   private reeds: StreamedBatch;
   private camalotes: StreamedBatch;
+  private logs: StreamedBatch;
   /** Reflection coefficient of the shore around each point (R8: Kr·255), row 0 at -z. */
   readonly reflectivity: Uint8Array;
   private readonly size: number;
@@ -56,6 +58,8 @@ export class RiverBanks {
     // Streamed: tens of thousands along the whole Delta, only the nearby ones drawn
     const reeds = (this.reeds = new StreamedBatch("juncos", scene, { specular: 0.02, shape: "cross", radius: 70 }));
     const camalotes = (this.camalotes = new StreamedBatch("camalotes", scene, { shape: "blob", specular: 0.08, radius: 110 }));
+    // Fallen trunks lying from the bank into the water (photos of the Delta)
+    const logs = (this.logs = new StreamedBatch("troncos", scene, { shape: "log", specular: 0.04, radius: 90 }));
     const rng = seededRandom(31);
     this.size = options.worldSize;
     this.reflectivity = new Uint8Array(REFLECTIVITY_RES * REFLECTIVITY_RES);
@@ -81,8 +85,9 @@ export class RiverBanks {
             const x = a[0] + ((b[0] - a[0]) * t) / len;
             const z = a[1] + ((b[1] - a[1]) * t) / len;
             const roll = rng();
-            if (roll < 0.03) addReeds(reeds, x + nx * 0.3 * PROP_SCALE, z + nz * 0.3 * PROP_SCALE, rng);
-            else if (roll < 0.045) addCamalotes(camalotes, x, z, nx, nz, rng);
+            if (roll < 0.065) addReeds(reeds, x + nx * 0.3 * PROP_SCALE, z + nz * 0.3 * PROP_SCALE, rng);
+            else if (roll < 0.08) addCamalotes(camalotes, x, z, nx, nz, rng);
+            else if (roll < 0.085) addLog(logs, x, z, nx, nz, rng);
           }
         }
         walked += len;
@@ -95,6 +100,7 @@ export class RiverBanks {
     wood.build("tablestacado", scene, createBulkheadMaterial(scene, waterline), 2.4 * PROP_SCALE);
     reeds.build();
     camalotes.build();
+    logs.build();
   }
 
   /** Marks a stretch of shore (and a texel around it) with its reflection coefficient. */
@@ -135,6 +141,7 @@ export class RiverBanks {
   update(x: number, z: number): void {
     this.reeds.update(x, z);
     this.camalotes.update(x, z);
+    this.logs.update(x, z);
   }
 }
 
@@ -265,4 +272,23 @@ function addCamalotes(batch: StreamedBatch, x: number, z: number, nx: number, nz
     const parent = propTransform(px, WATER_LEVEL + 0.05 * PROP_SCALE, pz, rng() * Math.PI, PROP_SCALE);
     batch.add(parent, [0.9 + rng() * 0.9, 0.35, 0.7 + rng() * 0.7], [0, 0, 0], tone);
   }
+}
+
+const LOG_COLORS = [new Color3(0.32, 0.26, 0.2), new Color3(0.42, 0.36, 0.3), new Color3(0.25, 0.21, 0.17)];
+
+/** A fallen trunk: from the bank out into the water at an angle, half sunk (metres scaled to world units). */
+function addLog(batch: StreamedBatch, x: number, z: number, nx: number, nz: number, rng: () => number): void {
+  const M = 1 / 8;
+  const length = (6 + rng() * 7) * M;
+  const diameter = (0.35 + rng() * 0.35) * M;
+  // Mostly out over the water, turned a bit along the bank
+  const turn = (rng() - 0.5) * 1.4;
+  const dx = nx * Math.cos(turn) - nz * Math.sin(turn);
+  const dz = nz * Math.cos(turn) + nx * Math.sin(turn);
+  const cx = x + dx * length * 0.35;
+  const cz = z + dz * length * 0.35;
+  const yaw = Math.atan2(dx, dz);
+  // Cylinder along y: lay it down along the heading, the far end lower (sinking)
+  const parent = Matrix.RotationX(Math.PI / 2 + 0.06).multiply(Matrix.RotationY(yaw)).multiply(Matrix.Translation(cx, WATER_LEVEL + diameter * 0.1, cz));
+  batch.add(parent, [diameter, length, diameter], [0, 0, 0], LOG_COLORS[Math.floor(rng() * LOG_COLORS.length)]);
 }
