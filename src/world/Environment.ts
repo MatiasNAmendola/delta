@@ -709,42 +709,35 @@ function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockS
   let edge: [number, number] = [dock.x, dock.z]; // last water point before the bank
 
   if (wet(dock.x, dock.z)) {
-    // Walk both ways across the river; the closer bank wins
+    // The nearest real bank: across the river first (the closer side wins),
+    // then in any direction (a confluence in the middle of a wide river; the
+    // Paraná is up to 1 km across). A bank only counts with solid ground
+    // behind it, so a dock never ends up on a sand bar or the world's edge.
+    const solid = (ex: number, ez: number, ux: number, uz: number) =>
+      [0.5, 1.5, 3].every((k) => !wet(ex - ux * k, ez - uz * k)) && Math.max(Math.abs(ex), Math.abs(ez)) < waterSystem.worldHalf - 4;
     const a = degToRad(dock.rotationDeg);
-    const across: [number, number] = [Math.cos(a), -Math.sin(a)];
+    const rays: Array<[number, number, number]> = [
+      [Math.cos(a), -Math.sin(a), MAX_BANK_SEARCH],
+      [-Math.cos(a), Math.sin(a), MAX_BANK_SEARCH],
+    ];
+    for (let k = 0; k < 32; k++) rays.push([Math.cos((k / 32) * Math.PI * 2), Math.sin((k / 32) * Math.PI * 2), WIDE_BANK_SEARCH]);
     let best = Infinity;
-    for (const s of [1, -1]) {
-      for (let t = 0.1; t <= MAX_BANK_SEARCH; t += 0.1) {
-        const x = dock.x + s * across[0] * t;
-        const z = dock.z + s * across[1] * t;
-        if (!wet(x, z)) {
-          if (t < best) {
-            best = t;
-            dir = [-s * across[0], -s * across[1]];
-            edge = [x - s * across[0] * 0.1, z - s * across[1] * 0.1];
-          }
-          break;
+    for (let i = 0; i < rays.length; i++) {
+      const [ux, uz, max] = rays[i];
+      // Across the river in fine steps; the radial fallback only if nothing was found across
+      if (i >= 2 && dir) break;
+      for (let t = 0.1; t <= max && t < best; t += i < 2 ? 0.1 : 0.5) {
+        if (wet(dock.x + ux * t, dock.z + uz * t)) continue;
+        let u = t;
+        while (u > 0 && !wet(dock.x + ux * u, dock.z + uz * u)) u -= 0.1;
+        const ex = dock.x + ux * u;
+        const ez = dock.z + uz * u;
+        if (solid(ex, ez, -ux, -uz)) {
+          best = t;
+          dir = [-ux, -uz];
+          edge = [ex, ez];
         }
-      }
-    }
-    if (!dir) {
-      // A confluence in the middle of a wide river (the Paraná is up to 1 km
-      // across): the nearest bank in any direction
-      let best2 = Infinity;
-      for (let k = 0; k < 32; k++) {
-        const ang = (k / 32) * Math.PI * 2;
-        const d: [number, number] = [Math.cos(ang), Math.sin(ang)];
-        for (let t = 0.5; t <= WIDE_BANK_SEARCH && t < best2; t += 0.5) {
-          if (!wet(dock.x + d[0] * t, dock.z + d[1] * t)) {
-            best2 = t;
-            dir = [-d[0], -d[1]];
-            // Walk back to the last water point before the bank
-            let u = t;
-            while (u > 0 && !wet(dock.x + d[0] * u, dock.z + d[1] * u)) u -= 0.1;
-            edge = [dock.x + d[0] * u, dock.z + d[1] * u];
-            break;
-          }
-        }
+        break;
       }
     }
   } else {
