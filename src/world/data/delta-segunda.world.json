@@ -904,8 +904,8 @@
       ]
     },
     {
-      "id": "arroyo-caracoles",
-      "name": "Arroyo Caracoles",
+      "id": "arroyo-caracolas",
+      "name": "Arroyo Caracolas",
       "width": 8,
       "points": [
         [-239.61, -676.1],
@@ -4025,8 +4025,8 @@
       "rotationDeg": 140.53
     },
     {
-      "id": "arroyo-caracoles-y-arroyo-felicarita",
-      "name": "Arroyo Caracoles y Arroyo Felicarita",
+      "id": "arroyo-caracolas-y-arroyo-felicarita",
+      "name": "Arroyo Caracolas y Arroyo Felicarita",
       "x": -523.04,
       "z": -631.48,
       "rotationDeg": -158.65

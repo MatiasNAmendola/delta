@@ -16,11 +16,11 @@ Desde el entorno de desarrollo, el proxy bloquea las cuatro (error 403 de túnel
 
 | Fuente | Qué devolvió | Uso |
 |---|---|---|
-| [ign.gob.ar](https://www.ign.gob.ar/) y [geoportal.ign.gob.ar](https://geoportal.ign.gob.ar/) | Responden. El geoportal usa el GeoServer `wms.ign.gob.ar/geoserver/ows`, que publica capas WFS de hidrografía: `ign:lineas_de_aguas_continentales_perenne`, `_intermitentes`, `BH010` a `BH030` y `BI020`; `ign:areas_de_aguas_continentales_*`; `ign:puntos_de_aguas_continentales_*`. Con el recuadro del Delta devolvieron 0 elementos; se reintenta con el otro orden de ejes | Fuente oficial: queda como referencia principal cuando devuelva datos |
+| [ign.gob.ar](https://www.ign.gob.ar/) y [geoportal.ign.gob.ar](https://geoportal.ign.gob.ar/) | **258 nombres oficiales** de la capa WFS `ign:lineas_de_aguas_continentales_*` (campos `fna` = nombre completo, `gna` = tipo, `nam` = nombre; fuente `sag: IGN`), pidiendo el recuadro en orden lon,lat. Cubre poco la Primera Sección (no tiene Tigre, Abra Vieja ni Urión), pero sí tiene el **Río Carapachay** con su geometría. Grafías propias del IGN: "Felicariu", "Pay Curabí" y "Paycarabh", probablemente erratas. El geoportal usa el GeoServer `wms.ign.gob.ar/geoserver/ows`, que publica capas WFS de hidrografía: `ign:lineas_de_aguas_continentales_perenne`, `_intermitentes`, `BH010` a `BH030` y `BI020`; `ign:areas_de_aguas_continentales_*`; `ign:puntos_de_aguas_continentales_*`. Con el recuadro del Delta devolvieron 0 elementos; se reintenta con el otro orden de ejes | Fuente oficial: queda como referencia principal cuando devuelva datos |
 | [viatigre.com.ar/tigre/delta/mapa/](https://viatigre.com.ar/tigre/delta/mapa/) | Lista de 36 ríos y arroyos de la Primera Sección. Incluye **Río Urion**, **Arroyo Gelvez**, **Arroyo Pay Carabi**, **Río Carapachay** (falta en nuestro mapa), Canal Rompani y Canal Honda | Guía turística local; cuenta como una fuente |
 | [satellites.pro](https://satellites.pro/plano/mapa_de_Delta_del_Tigre.Argentina) | El mapa se dibuja con JavaScript a partir de teselas; la página no trae nombres en texto | No sirve para cruzar nombres |
 
-**Resultado (corrida del workflow del 2026-10-08):** 100 de 210 nombres confirmados por al menos una fuente.
+**Resultado (última corrida del workflow, 2026-10-08):** 105 de 210 nombres confirmados por al menos una de las cuatro fuentes que responden (GeoNames, Wikidata, IGN y ViaTigre). Corrida anterior: 100 de 210 nombres confirmados por al menos una fuente.
 
 ## Corregido en el importador (`scripts/osm/name-fixes.json`)
 | En OSM | En el juego | Por qué |
@@ -29,6 +29,8 @@ Desde el entorno de desarrollo, el proxy bloquea las cuatro (error 403 de túnel
 | Arroyo Panatanosito | Arroyo Pantanosito | Errata; GeoNames confirma el "Arroyo Pantanoso" vecino |
 | Arroyo Paycarabí (OSM) | **Arroyo Pay Carabi** | GeoNames y ViaTigre lo escriben separado. *Antes se había unificado al revés, por error.* |
 | Arroyo Gelves | **Arroyo Gelvez** | GeoNames, ViaTigre y avisos |
+| Canal Honda | **Canal Hondo** | IGN (oficial) y GeoNames; ViaTigre dice "Honda" |
+| Arroyo Caracoles | **Arroyo Caracolas** | IGN (oficial) y GeoNames |
 | Arroyo las Casas | Arroyo Las Casas | Mayúscula |
 | Ayo Pacu | Arroyo Pacu | "Ayo" es la abreviatura de Arroyo |
 | Arroyo Sin Nombre | (se quitó) | Era un marcador, no un nombre |
@@ -56,12 +58,10 @@ GeoNames tiene sus propias erratas (por ejemplo "Tarapuati", "Caviotas", "Noranc
 |---|---|---|
 | Arroyo Chileno | Arroyo Chileño | GeoNames |
 | Arroyo Correa | Arroyo Correas | GeoNames |
-| Arroyo Caracoles | Arroyo Caracolas | GeoNames |
 | Arroyo Tutuparé | Arroyo Tuyuparé | GeoNames |
 | Arroyo Guazú Nambí | Arroyo Guazunamby | GeoNames |
 | Arroyo Manzano de Medina | Arroyo Manzanos de Medina | GeoNames |
 | Bajos del Temor | Bajo del Temor | GeoNames |
-| Canal Honda | Canal Hondo | GeoNames |
 | Aguaje del Durazno | Arroyo Durazno | GeoNames |
 | Aguaje del mojarras | — | Probable "Aguaje de las Mojarras" |
 | Arroyo de los Lobos | Arroyo Lobos / Los Lobos | GeoNames |
