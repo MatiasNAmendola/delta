@@ -1040,22 +1040,6 @@
       ]
     },
     {
-      "id": "cruce-bajos-del-temor-a-punta-moran",
-      "name": "Cruce bajos del temor a punta moran",
-      "width": 8,
-      "points": [
-        [628.83, 931.74],
-        [674.05, 958.21],
-        [723.45, 974.2],
-        [743.64, 993.63],
-        [770.97, 1032.97],
-        [658.59, 1067.35],
-        [635.91, 1064.41],
-        [606.63, 1066.95],
-        [519.46, 1104.75]
-      ]
-    },
-    {
       "id": "arroyo-rinconada",
       "name": "Arroyo Rinconada",
       "width": 8,
@@ -1664,7 +1648,7 @@
     },
     {
       "id": "arroyo-las-casas",
-      "name": "Arroyo las Casas",
+      "name": "Arroyo Las Casas",
       "width": 8,
       "points": [
         [-142.91, 0.18],

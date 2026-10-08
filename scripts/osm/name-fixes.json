@@ -1,12 +1,26 @@
 {
   "$comment": "Corrections to OpenStreetMap waterway names, applied by the importer (osmToWorld.ts). Only clear typos are fixed here; doubtful spellings stay as in OSM until an official source (IGN, Provincia, SHN, Prefectura) confirms them. See docs/investigacion/07-fuentes-del-mapa.md (part C). Each fix should also be reported upstream to OSM.",
   "rename": {
-    "Río URíon": { "to": "Río Unión", "source": "Atlas Ambiental de Buenos Aires rotula «Río Unión»; «URíon» es una errata de tipeo" },
-    "Arroyo Panatanosito": { "to": "Arroyo Pantanosito", "source": "Errata: junto al Arroyo Pantanoso (diminutivo)" },
-    "Arroyo Pay Carabi": { "to": "Arroyo Paycarabí", "source": "Misma vía que «Arroyo Paycarabí» (OSM y avisos de San Fernando)" }
+    "Río URíon": {
+      "to": "Río Unión",
+      "source": "Atlas Ambiental de Buenos Aires rotula «Río Unión»; «URíon» es una errata de tipeo"
+    },
+    "Arroyo Panatanosito": {
+      "to": "Arroyo Pantanosito",
+      "source": "Errata: junto al Arroyo Pantanoso (diminutivo)"
+    },
+    "Arroyo Pay Carabi": {
+      "to": "Arroyo Paycarabí",
+      "source": "Misma vía que «Arroyo Paycarabí» (OSM y avisos de San Fernando)"
+    },
+    "Arroyo las Casas": {
+      "to": "Arroyo Las Casas",
+      "source": "Mayúscula del nombre propio"
+    }
   },
   "drop": {
     "Arroyo Sin Nombre": "Marcador puesto en el campo name, no es un nombre real",
-    "Arroyo sin nombre": "Idem"
+    "Arroyo sin nombre": "Idem",
+    "Cruce bajos del temor a punta moran": "Es una ruta de cruce cargada como vía de agua, no un río"
   }
 }

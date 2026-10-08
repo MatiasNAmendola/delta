@@ -1,0 +1,50 @@
+# 10 · Cruce de nombres de ríos y arroyos (medido)
+
+**Fecha:** 2026-10-08.
+**Cómo se midió:** el workflow `Check river names` (`scripts/names/check_names.py`) corre en GitHub Actions cada vez que cambian los mapas. Compara los 211 nombres de nuestros mapas (cuatro zonas, sacados de OpenStreetMap) contra dos fuentes independientes y deja el reporte completo como artefacto del workflow:
+- **GeoNames:** volcado de Argentina, rasgos hidrográficos dentro del Delta, 250 nombres, licencia CC BY 4.0.
+- **Wikidata:** cursos de agua con coordenadas en la zona, 120 nombres, licencia CC0.
+
+El IGN (WFS) no respondió (504); el workflow lo reintenta en cada corrida.
+
+## Resultado
+- **98 de 211 nombres confirmados** (✅ exacto o ≈ con otra grafía) por al menos una de las dos fuentes. Entre ellos, todos los ríos principales: Luján, Tigre, Sarmiento, San Antonio, Capitán, Paraná de las Palmas, Paraná Miní, Paraná Guazú, Reconquista, y también Abra Vieja, Caraguatá, Dorado, Pajarito, Rama Negra, Antequera, Toro, Felicaria y Canal de Vinculación.
+- **Sin confirmar no significa mal.** Los arroyos chicos casi no están en estas fuentes. Por ejemplo, Gambado y Fulminante no aparecen en ninguna de las dos.
+
+## Corregido en el importador (`scripts/osm/name-fixes.json`)
+| En OSM | En el juego | Por qué |
+|---|---|---|
+| Río URíon | Río Unión | Errata; GeoNames: "Arroyo Unión" y Atlas Ambiental: "Río Unión" |
+| Arroyo Panatanosito | Arroyo Pantanosito | Errata; GeoNames confirma el "Arroyo Pantanoso" vecino |
+| Arroyo Pay Carabi | Arroyo Paycarabí | La misma vía tiene las dos grafías en OSM |
+| Arroyo las Casas | Arroyo Las Casas | Mayúscula |
+| Ayo Pacu | Arroyo Pacu | "Ayo" es la abreviatura de Arroyo |
+| Arroyo Sin Nombre | (se quitó) | Era un marcador, no un nombre |
+| Cruce bajos del temor a punta moran | (se quitó) | Es una ruta de cruce, no un río |
+
+## Grafías en duda (no se cambian sin una fuente oficial o un vecino)
+GeoNames tiene sus propias erratas (por ejemplo "Tarapuati", "Caviotas", "Norancito"), así que una diferencia con GeoNames sola no alcanza para cambiar un nombre.
+
+| En el juego (OSM) | Otra grafía | Fuente |
+|---|---|---|
+| Arroyo Gelves | Arroyo Gelvez | GeoNames y avisos |
+| Arroyo Chileno | Arroyo Chileño | GeoNames |
+| Arroyo Correa | Arroyo Correas | GeoNames |
+| Arroyo Caracoles | Arroyo Caracolas | GeoNames |
+| Arroyo Tutuparé | Arroyo Tuyuparé | GeoNames |
+| Arroyo Guazú Nambí | Arroyo Guazunamby | GeoNames |
+| Arroyo Manzano de Medina | Arroyo Manzanos de Medina | GeoNames |
+| Bajos del Temor | Bajo del Temor | GeoNames |
+| Canal Honda | Canal Hondo | GeoNames |
+| Aguaje del Durazno | Arroyo Durazno | GeoNames |
+| Aguaje del mojarras | — | Probable "Aguaje de las Mojarras" |
+| Arroyo de los Lobos | Arroyo Lobos / Los Lobos | GeoNames |
+| Pozos del Barca Grande | Canal Pozos del Barca Grande | GeoNames y Wikidata |
+
+## Faltantes conocidos
+- **Río Carapachay:** no está en el extracto de OSM.
+- **Canal Buenos Aires:** Wikidata lo tiene y nuestro mapa también (el usuario lo nombró).
+
+## Próximo
+- Insistir con el IGN y sumar la capa "Cursos de agua" de la Provincia (CC BY 4.0) al workflow.
+- Lo que resuelvan las fuentes oficiales o los vecinos se agrega a `name-fixes.json`, con su fuente.
