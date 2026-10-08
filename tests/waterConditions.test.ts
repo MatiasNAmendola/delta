@@ -88,3 +88,31 @@ describe("wakes", () => {
     expect(ahead).toBe(0);
   });
 });
+
+describe("waves bouncing off the shore", () => {
+  // A straight wall along z = 6: land beyond it
+  const wallAt = (kr: number) => (x: number, z: number) => {
+    const d = 6 - z;
+    return d > 0 && d < 2 ? { mx: x, mz: z + 2 * d, kr } : null;
+  };
+  const wake = { x: 0, z: 0, heading: 0, strength: 1, length: 2 };
+
+  it("a wall sends the wake back, a natural bank barely", () => {
+    const calm = new WaterConditions([river], toBank, 0);
+    const wall = new WaterConditions([river], toBank, 0);
+    const bank = new WaterConditions([river], toBank, 0);
+    wall.wall = wallAt(0.9);
+    bank.wall = wallAt(0.15);
+    // Heading -z away from the wall: its wake spreads back towards it
+    for (const c of [calm, wall, bank]) c.wakes = [{ ...wake, z: -8, heading: Math.PI }];
+    let dWall = 0;
+    let dBank = 0;
+    for (let x = -3; x <= 3; x += 0.05) {
+      const base = calm.height(x, 5) - calm.level();
+      dWall = Math.max(dWall, Math.abs(wall.height(x, 5) - wall.level() - base));
+      dBank = Math.max(dBank, Math.abs(bank.height(x, 5) - bank.level() - base));
+    }
+    expect(dWall).toBeGreaterThan(0.001);
+    expect(dBank).toBeLessThan(dWall * 0.3);
+  });
+});

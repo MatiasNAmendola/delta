@@ -96,6 +96,11 @@ export class WaterSystem {
     return this.shoreIndex.isWater(worldX, worldZ);
   }
 
+  /** Signed distance (units) to the shore: positive on land, negative on water, within ±max. */
+  public shoreDistance(x: number, z: number, max = 2): number {
+    return this.shoreIndex.signedDistance(x, z, max);
+  }
+
   /**
    * Signed distance to the shore for the whole world (R: 0.5 at the shore,
    * above on land, below on water, spanning +-SHORE_SDF_RANGE). Bilinear

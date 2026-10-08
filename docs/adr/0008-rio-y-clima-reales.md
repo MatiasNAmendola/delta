@@ -1,6 +1,6 @@
 # 0008 · Altura del río y clima del día real
 
-**Estado:** Propuesta · **Fecha:** 2026-10-08
+**Estado:** Implementada en parte (2026-10-08) · **Fecha:** 2026-10-08
 
 ## Idea
 Que el Delta del juego tenga la altura del río y el clima de hoy: marea, crecida o bajante, nubes, lluvia y viento. Apps como "Altura del río" o "Mareas Argentinas" toman esos datos de fuentes oficiales.
@@ -35,3 +35,15 @@ Ninguna se pudo probar desde el entorno de desarrollo, que bloquea esos dominios
 - El cron de GitHub se atrasa y se apaga después de 60 días sin actividad.
 - La licencia de las series del SHN no está explícita: citar la fuente y preguntarle al SHN.
 - Open-Meteo no es gratis para uso comercial.
+
+## Implementación (2026-10-08)
+Probado desde GitHub Actions ([investigacion/06](../investigacion/06-prueba-de-fuentes.md)):
+- Open-Meteo y la API a5 del INA responden con `Access-Control-Allow-Origin: *`. Por eso el juego los lee **directo desde el navegador**, sin backend ni cron (`src/world/liveConditions.ts`), con una caché de 20 minutos.
+- **Altura real en San Fernando** (río Luján): serie 52 de la red de escalas de Prefectura, de las últimas 30 h. Se usan la última medición y la tendencia de ~3 h (creciente o bajante).
+  - El nivel del juego se desplaza (H − 1,1 m) / 8 m por unidad, acotado entre −0,12 y +0,15 unidades para que las islas sigan dibujadas.
+  - La marea simulada sigue a partir de esa tendencia.
+- **Viento real de Tigre:** velocidad, ráfagas y dirección (Open-Meteo).
+- **Sudestada real:** viento del cuadrante SE (100°–170°) de 30 km/h o más, o ráfagas de 55 km/h o más, o el río a menos de 0,3 m del nivel de alerta (3,00 m).
+- Al zarpar se avisa: "Hoy en San Fernando: 1,57 m, creciente · viento SE 22 km/h (INA · Open-Meteo)".
+- `?clima=sudestada` / `?clima=calma` siguen forzando la simulación. Si las fuentes fallan, se simula como antes.
+- **El SMN no se usa:** sus JSON públicos tienen datos de 2019 y 2022.

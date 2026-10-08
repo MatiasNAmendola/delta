@@ -68,3 +68,18 @@ Además, el patrón cambia mucho entre una lancha colectiva, una lancha que plan
 - [Wake shapes behind planing hull forms (Savitsky, TRB)](https://trid.trb.org/View/402408)
 - [Kapustin y otros, ancho de la estela turbulenta ∝ t^0,4 (EGU 2010)](https://meetingorganizer.copernicus.org/EGU2010/EGU2010-387.pdf)
 - [Structure and persistence of ship wakes (arXiv:1807.00441)](https://arxiv.org/pdf/1807.00441)
+
+## Agregado (2026-10-08, v2): estela irregular y rebote en la costa
+Base: [docs/investigacion/04-olas-estelas-y-costas.md](../investigacion/04-olas-estelas-y-costas.md), revisado por un juez.
+- **Irregularidad:** las estelas reales no son un patrón perfecto.
+  - Hay grupos de olas a lo largo del tren: 4 a 40 olas, de 6 a 40 s, con la mayor entre las primeras 1 a 3 (Bhowmik, USGS 92-S013).
+  - El shader modula la amplitud por grupos (0,65–1,35), cada brazo de la V distinto, y deja que la fase varíe (±0,8 rad).
+- **Rebote en la costa (método de la imagen):**
+  - La ola reflejada es la estela evaluada en el punto espejado del otro lado de la orilla, multiplicada por el coeficiente de reflexión Kr de ese tramo.
+  - **Tablestacado de madera:** Kr = 0,9 (rango 0,8–0,95; pared vertical ≈ 0,9 según Allsop).
+  - **Barranca natural de barro con juncos:** Kr = 0,15 (estimado; dentro del rango 0,05–0,3).
+  - La ola que llega más la que vuelve forman el clapotis frente a los tablestacados.
+  - El mapa de Kr se pinta con los mismos tramos que dibuja `RiverBanks`, así que lo que ves es lo que refleja.
+  - Se calcula hasta ~16 m de la orilla, que es el alcance de la textura de distancia a la costa.
+- **El bote lo siente:** `waterConditions.height` suma la reflexión de las estelas del tráfico con la misma regla (función `wall` en `GameEngine.connectShoreReflections`).
+- **Pendiente:** reflexiones múltiples en canales angostos (Kr^n) y rotura de la ola en la barranca (espuma).

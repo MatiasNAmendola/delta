@@ -45,6 +45,13 @@ export class WaterConditions {
   sudestada: SudestadaState = { intensity: 0, active: false };
   wakes: Wake[] = [];
   private sudestadaTarget = 0;
+  /**
+   * The shore near a point, for waves bouncing off it: the point mirrored
+   * across the bank and how much that bank reflects (null far from any).
+   */
+  wall: ((x: number, z: number) => { mx: number; mz: number; kr: number } | null) | null = null;
+  /** Today's real river: level offset (units) and wind, when the data arrived (liveConditions.ts). */
+  private real: { offset: number; wind: { strength: number; x: number; z: number } | null } | null = null;
   private segments: Array<{ ax: number; az: number; bx: number; bz: number; dx: number; dz: number }> = [];
   private cells = new Map<number, number[]>();
   private readonly cell = 24;
@@ -92,13 +99,13 @@ export class WaterConditions {
     const s = this.sudestada;
     s.intensity += Math.sign(this.sudestadaTarget - s.intensity) * Math.min(Math.abs(this.sudestadaTarget - s.intensity), dt / 25);
     s.active = s.intensity > 0.15;
-    // South-east wind: blows towards the north-west
-    const calmWind = 0.25 + 0.1 * Math.sin(this.time * 0.05);
-    this.wind.strength = calmWind + (1 - calmWind) * s.intensity;
+    // Today's wind if we have it, else a gentle breeze; a sudestada blows towards the north-west
+    const base = this.real?.wind ?? { strength: 0.25 + 0.1 * Math.sin(this.time * 0.05), x: 0.6, z: 0.8 };
+    this.wind.strength = base.strength + (1 - base.strength) * s.intensity;
     const nwx = -Math.SQRT1_2;
     const nwz = Math.SQRT1_2;
-    this.wind.x = 0.6 + (nwx - 0.6) * s.intensity;
-    this.wind.z = 0.8 + (nwz - 0.8) * s.intensity;
+    this.wind.x = base.x + (nwx - base.x) * s.intensity;
+    this.wind.z = base.z + (nwz - base.z) * s.intensity;
   }
 
   startSudestada(): void {
@@ -109,9 +116,20 @@ export class WaterConditions {
     this.sudestadaTarget = 0;
   }
 
-  /** Water level relative to the base: tide plus the sudestada's surge. */
+  /** Water level relative to the base: tide plus the sudestada's surge (plus today's real level). */
   level(): number {
-    return TIDE_AMPLITUDE * Math.sin(this.tidePhase) + 0.1 * this.sudestada.intensity;
+    return (this.real?.offset ?? 0) + TIDE_AMPLITUDE * Math.sin(this.tidePhase) + 0.1 * this.sudestada.intensity;
+  }
+
+  /**
+   * Starts from today's real river: the level as an offset (units) and
+   * whether it is rising; the tide goes on from there. Wind blowing
+   * towards (x, z), strength 0..1.
+   */
+  useReal(offset: number, rising: boolean, wind: { strength: number; x: number; z: number } | null): void {
+    // At sin = 0 the tide adds nothing now and keeps the real trend
+    this.tidePhase = rising ? 0 : Math.PI;
+    this.real = { offset, wind };
   }
 
   /** "creciente" (rising, flood) or "bajante" (falling, ebb). */
@@ -147,7 +165,14 @@ export class WaterConditions {
     h += (0.004 + 0.035 * w * w) * Math.sin(along * 1.6 - t * 2.1);
     h += (0.003 + 0.02 * w * w) * Math.sin(along * 2.7 + across * 0.9 - t * 3.0);
     h += 0.002 * Math.sin(across * 3.3 + t * 1.3);
-    for (const wake of this.wakes) h += wakeHeight(wake, x, z, t);
+    if (this.wakes.length) {
+      // Each wake, plus its reflection off a wall nearby (image method)
+      const wall = this.wall?.(x, z) ?? null;
+      for (const wake of this.wakes) {
+        h += wakeHeight(wake, x, z, t);
+        if (wall) h += wall.kr * wakeHeight(wake, wall.mx, wall.mz, t);
+      }
+    }
     return h;
   }
 

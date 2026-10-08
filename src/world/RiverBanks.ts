@@ -23,7 +23,19 @@ export interface RiverBankOptions {
   isBulkhead: (x: number, z: number) => boolean;
   /** Shore spots kept clear of floating plants and reeds (docks, berths). */
   keepClear: (x: number, z: number) => boolean;
+  /** World side (units), for the reflectivity map. */
+  worldSize: number;
 }
+
+/**
+ * How much of a wave each kind of shore sends back (docs/investigacion/04,
+ * reviewed): a vertical wooden "tablestacado" ~0.8-0.95, a muddy, reedy
+ * natural bank very little (estimated ~0.05-0.3: the wave breaks and runs up).
+ */
+export const KR_BULKHEAD = 0.9;
+export const KR_NATURAL = 0.15;
+/** Texels of the reflectivity map per side. */
+export const REFLECTIVITY_RES = 2048;
 
 /**
  * The edge of every island, as in the Delta: no beaches, a low vertical
@@ -34,6 +46,9 @@ export interface RiverBankOptions {
 export class RiverBanks {
   private reeds: StreamedBatch;
   private camalotes: StreamedBatch;
+  /** Reflection coefficient of the shore around each point (R8: Kr·255), row 0 at -z. */
+  readonly reflectivity: Uint8Array;
+  private readonly size: number;
 
   constructor(scene: Scene, rings: Vec2[][], options: RiverBankOptions) {
     const mud = new WallBuilder();
@@ -42,6 +57,8 @@ export class RiverBanks {
     const reeds = (this.reeds = new StreamedBatch("juncos", scene, { specular: 0.02, shape: "cross", radius: 70 }));
     const camalotes = (this.camalotes = new StreamedBatch("camalotes", scene, { shape: "blob", specular: 0.08, radius: 110 }));
     const rng = seededRandom(31);
+    this.size = options.worldSize;
+    this.reflectivity = new Uint8Array(REFLECTIVITY_RES * REFLECTIVITY_RES);
 
     for (const ring of rings) {
       let walked = 0;
@@ -54,6 +71,7 @@ export class RiverBanks {
         if (len === 0) continue;
         const bulkhead = options.isBulkhead(mx, mz);
         (bulkhead ? wood : mud).add(a, b, walked, options.bankTop);
+        this.paintShore(a, b, bulkhead ? KR_BULKHEAD : KR_NATURAL);
 
         // Water is on the left of the ring direction
         const nx = -(b[1] - a[1]) / len;
@@ -77,6 +95,40 @@ export class RiverBanks {
     wood.build("tablestacado", scene, createBulkheadMaterial(scene, waterline), 2.4 * PROP_SCALE);
     reeds.build();
     camalotes.build();
+  }
+
+  /** Marks a stretch of shore (and a texel around it) with its reflection coefficient. */
+  private paintShore(a: Vec2, b: Vec2, kr: number): void {
+    const res = REFLECTIVITY_RES;
+    const texel = this.size / res;
+    const value = Math.round(kr * 255);
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const steps = Math.max(1, Math.ceil(len / (texel * 0.5)));
+    for (let k = 0; k <= steps; k++) {
+      const x = a[0] + ((b[0] - a[0]) * k) / steps;
+      const z = a[1] + ((b[1] - a[1]) * k) / steps;
+      const i0 = Math.floor((x / this.size + 0.5) * res);
+      const j0 = Math.floor((z / this.size + 0.5) * res);
+      for (let dj = -2; dj <= 2; dj++) {
+        for (let di = -2; di <= 2; di++) {
+          const i = i0 + di;
+          const j = j0 + dj;
+          if (i < 0 || j < 0 || i >= res || j >= res) continue;
+          const idx = j * res + i;
+          // Walls win where both meet
+          if (value > this.reflectivity[idx]) this.reflectivity[idx] = value;
+        }
+      }
+    }
+  }
+
+  /** Reflection coefficient of the nearest shore at (x, z) (0 far from any). */
+  krAt(x: number, z: number): number {
+    const res = REFLECTIVITY_RES;
+    const i = Math.floor((x / this.size + 0.5) * res);
+    const j = Math.floor((z / this.size + 0.5) * res);
+    if (i < 0 || j < 0 || i >= res || j >= res) return 0;
+    return this.reflectivity[j * res + i] / 255;
   }
 
   /** Brings in the reeds and camalotes around the camera. */
