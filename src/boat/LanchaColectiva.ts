@@ -219,25 +219,28 @@ export class LanchaColectiva {
     const effectiveSteering =
       gyroSteering !== null ? gyroSteering : this.steering;
 
+    // Tuning constants are per 60 fps frame; scale by real elapsed time so the
+    // boat handles the same on a 30 fps phone and a 120 Hz screen.
+    // Clamped so a stalled frame (tab switch) can't teleport the boat.
+    const frames = Math.min(deltaTime, 0.1) * 60;
+
     // Acceleration / deceleration
     if (this.throttle !== 0) {
-      this.speed += this.throttle * BOAT_ACCELERATION;
+      this.speed += this.throttle * BOAT_ACCELERATION * frames;
+    } else if (Math.abs(this.speed) > BOAT_DECELERATION * frames) {
+      this.speed -= Math.sign(this.speed) * BOAT_DECELERATION * frames;
     } else {
-      if (Math.abs(this.speed) > 0.001) {
-        this.speed -= Math.sign(this.speed) * BOAT_DECELERATION;
-      } else {
-        this.speed = 0;
-      }
+      this.speed = 0;
     }
     this.speed = clamp(this.speed, -BOAT_MAX_SPEED * 0.3, BOAT_MAX_SPEED);
 
     // Turning
     const turnFactor = Math.min(1, Math.abs(this.speed) / (BOAT_MAX_SPEED * 0.3));
-    this.rotation += effectiveSteering * BOAT_TURN_SPEED * turnFactor;
+    this.rotation += effectiveSteering * BOAT_TURN_SPEED * turnFactor * frames;
 
-    // Move
-    const dx = Math.sin(this.rotation) * this.speed;
-    const dz = Math.cos(this.rotation) * this.speed;
+    // Move (speed is in world units per 60 fps frame)
+    const dx = Math.sin(this.rotation) * this.speed * frames;
+    const dz = Math.cos(this.rotation) * this.speed * frames;
 
     const newX = this.position.x + dx;
     const newZ = this.position.z + dz;

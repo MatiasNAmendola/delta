@@ -17,12 +17,18 @@ import {
   rasterizeAreas,
   riverCoverage,
   triangulateAreas,
+  uncoveredRuns,
   type WaterGrid,
 } from "./waterGeometry";
 import { getPointOnPath, hexToColor3 } from "../utils/helpers";
 
-/** Rivers this much inside water areas are not drawn as strips. */
+/** Rivers this much inside water areas are drawn only where the areas miss them. */
 const STRIP_SKIP_COVERAGE = 0.7;
+/**
+ * Extra navigable width beside each drawn strip. Kept small so the boat
+ * (2 units wide, collision tested at its center) never sails over visible land.
+ */
+const STRIP_COLLISION_MARGIN = 0.5;
 
 export class WaterSystem {
   private scene: Scene;
@@ -33,6 +39,8 @@ export class WaterSystem {
   private waterGrid!: WaterGrid;
   /** Cells covered by water areas only (null when the world has none). */
   private areaGrid: WaterGrid | null = null;
+  /** River center lines drawn as water strips (see planStrips). */
+  private strips: River[] = [];
   /** Water lookup grid cells per side: ~2 world units per cell (400 for the original 800-unit Delta). */
   private mapResolution: number;
 
@@ -54,12 +62,22 @@ export class WaterSystem {
     const size = this.world.world.size;
     this.waterGrid = createGrid(size, res);
 
-    for (const river of this.world.rivers) {
+    // Real water shapes (OSM polygons) first: they decide which river strips are drawn
+    const areas = this.world.waterAreas ?? [];
+    if (areas.length > 0) {
+      this.areaGrid = createGrid(size, res);
+      rasterizeAreas(this.areaGrid, areas);
+      this.waterGrid.cells.set(this.areaGrid.cells);
+    }
+    this.strips = this.planStrips();
+
+    // Navigable water = exactly what is drawn: areas ∪ strips (no hidden water)
+    for (const river of this.strips) {
       const samples = river.points.length * 20;
       for (let i = 0; i <= samples; i++) {
         const t = i / samples;
         const [rx, rz] = getPointOnPath(river.points, t);
-        const halfW = river.width / 2 + 2;
+        const halfW = river.width / 2 + STRIP_COLLISION_MARGIN;
 
         const minX = Math.floor(((rx - halfW + size / 2) / size) * res);
         const maxX = Math.ceil(((rx + halfW + size / 2) / size) * res);
@@ -73,17 +91,25 @@ export class WaterSystem {
         }
       }
     }
+  }
 
-    // Real water shapes (OSM polygons): navigable water = rivers ∪ areas
-    const areas = this.world.waterAreas ?? [];
-    if (areas.length > 0) {
-      this.areaGrid = createGrid(size, res);
-      rasterizeAreas(this.areaGrid, areas);
-      const cells = this.waterGrid.cells;
-      this.areaGrid.cells.forEach((wet, i) => {
-        if (wet) cells[i] = 1;
+  /**
+   * River strips to draw: whole rivers, except those already mostly drawn by
+   * their real polygon — for those only the stretches the polygons miss, so
+   * the channel stays continuous without overlapping (flickering) water.
+   */
+  private planStrips(): River[] {
+    const strips: River[] = [];
+    for (const river of this.world.rivers) {
+      if (!this.areaGrid || riverCoverage(river, this.areaGrid) < STRIP_SKIP_COVERAGE) {
+        strips.push(river);
+        continue;
+      }
+      uncoveredRuns(river, this.areaGrid, 6).forEach((points, k) => {
+        strips.push({ ...river, id: `${river.id}-tramo-${k}`, points });
       });
     }
+    return strips;
   }
 
   public isWater(worldX: number, worldZ: number): boolean {
@@ -285,11 +311,8 @@ export class WaterSystem {
     if (this.world.waterAreas && this.world.waterAreas.length > 0) {
       this.waterMeshes.push(this.createWaterAreasMesh());
     }
-    for (const river of this.world.rivers) {
-      // A river already drawn by its real polygon would overlap (and flicker)
-      if (this.areaGrid && riverCoverage(river, this.areaGrid) >= STRIP_SKIP_COVERAGE) continue;
-      const mesh = this.createRiverStrip(river);
-      this.waterMeshes.push(mesh);
+    for (const river of this.strips) {
+      this.waterMeshes.push(this.createRiverStrip(river));
     }
   }
 
@@ -321,7 +344,12 @@ export class WaterSystem {
   }
 
   private createRiverStrip(river: River): Mesh {
-    const samples = river.points.length * 8;
+    // ~8 samples per control point, but no denser than one every 2 units
+    let length = 0;
+    for (let i = 1; i < river.points.length; i++) {
+      length += Math.hypot(river.points[i][0] - river.points[i - 1][0], river.points[i][1] - river.points[i - 1][1]);
+    }
+    const samples = Math.max(8, Math.min(river.points.length * 8, Math.ceil(length / 2)));
     const positions: number[] = [];
     const indices: number[] = [];
     const normals: number[] = [];
