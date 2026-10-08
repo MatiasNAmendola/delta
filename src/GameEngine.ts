@@ -573,7 +573,7 @@ ${this.spec.mission}`, 2800);
     );
     if (event === "bump") {
       this.boat.speed *= -0.3;
-      this.penalize(BUMP_PENALTY, `¡Chocaste una yola!\n−${BUMP_PENALTY} puntos`);
+      this.penalize(BUMP_PENALTY, `¡Chocaste un bote de remo!\n−${BUMP_PENALTY} puntos`);
     } else if (event === "wake") {
       this.penalize(WAKE_PENALTY, `Despacio cerca de los remeros\nTu ola los mojó: −${WAKE_PENALTY} puntos`);
     }
