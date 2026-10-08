@@ -138,6 +138,7 @@ export class GameEngine {
       start.z,
       this.world.rules.boatCapacity
     );
+    this.boat.placeAt(start.x, start.z, berth?.heading ?? 0, this.waterSystem);
 
     if (this.aerialView) this.scene.fogEnabled = false;
 
@@ -149,14 +150,6 @@ export class GameEngine {
 
     // Rowing club yolas on the rivers near the start, and beached by the docks
     this.yolas = new YolaTraffic(this.scene, this.world, this.waterSystem, start, this.environment.getBeachedYolas());
-
-    // Only the static world and the boat are reflected by the water
-    this.waterSystem.addToReflections(this.environment.getReflectedMeshes());
-    this.waterSystem.addToReflections(this.boat.getMeshes());
-    this.waterSystem.addToReflections(this.yolas.getMeshes());
-    this.boat.onModelLoaded = () => {
-      this.waterSystem.addToReflections(this.boat.getMeshes());
-    };
 
     this.updateLoadingBar(85, "Configurando controles...");
 

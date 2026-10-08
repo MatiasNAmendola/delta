@@ -133,11 +133,6 @@ export class YolaTraffic {
     this.update(0);
   }
 
-  /** Meshes for the water reflection (moving crews included: they are cheap). */
-  getMeshes(): Mesh[] {
-    return [this.hulls, this.torsos, this.heads, this.oars];
-  }
-
   update(dt: number): void {
     const t = this.tmp;
     for (const c of this.crews) {
