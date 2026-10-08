@@ -20,6 +20,14 @@
     "Arroyo Gelves": {
       "to": "Arroyo Gelvez",
       "source": "GeoNames y ViaTigre escriben «Gelvez»; también aparece así en avisos."
+    },
+    "Canal Honda": {
+      "to": "Canal Hondo",
+      "source": "IGN (capa ign:lineas_de_aguas_continentales, fuente oficial) y GeoNames escriben «Canal Hondo»; ViaTigre y OSM «Canal Honda». Gana la fuente oficial más otra."
+    },
+    "Arroyo Caracoles": {
+      "to": "Arroyo Caracolas",
+      "source": "IGN (oficial) y GeoNames escriben «Arroyo Caracolas»."
     }
   },
   "drop": {
