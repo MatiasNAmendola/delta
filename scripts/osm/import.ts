@@ -7,7 +7,7 @@
  * Flags: --in <overpass.json> --out <world.json> --scale <m per unit>
  *        --size <world units> --origin <lat,lon> --id <id> --name <name> --unnamed
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseWorld } from "../../src/world/WorldDoc";
@@ -28,6 +28,14 @@ const originFlag = flag("origin", "");
 const origin = originFlag ? { lat: Number(originFlag.split(",")[0]), lon: Number(originFlag.split(",")[1]) } : undefined;
 
 const overpass = JSON.parse(readFileSync(input, "utf8")) as { elements: OverpassElement[] };
+// Waterways missing from the downloaded extract, taken from OSM itself
+// (scripts/osm/supplements/*.overpass.json, each with its source)
+const supplementDir = resolve(root, "scripts/osm/supplements");
+const known = new Set(overpass.elements.map((e) => `${e.type}/${e.id}`));
+for (const file of readdirSync(supplementDir).filter((f) => f.endsWith(".overpass.json"))) {
+  const extra = JSON.parse(readFileSync(resolve(supplementDir, file), "utf8")) as { elements: OverpassElement[] };
+  for (const e of extra.elements) if (!known.has(`${e.type}/${e.id}`)) overpass.elements.push(e);
+}
 const base = parseWorld(JSON.parse(readFileSync(resolve(root, "src/world/data/delta.world.json"), "utf8")));
 
 // Typo fixes for OSM names (documented sources in the file)

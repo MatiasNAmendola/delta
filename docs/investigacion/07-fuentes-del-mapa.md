@@ -131,7 +131,7 @@ Peso = peso propuesto para votar **nombres** (Parte B); 0 = no vota (solo geomet
 
 ### A10. Municipio de Tigre (tigre.gob.ar: turismo, catastro, zonificación del Delta)
 
-- **Categoría:** Municipal · **Estado:** [no verificado] · **Peso en nombres:** 0.8
+- **Categoría:** Municipal · **Estado:** folleto «Viví Tigre» recibido (ver abajo); sitio web [no verificado] · **Peso en nombres:** 0.8
 - **URL:** https://www.tigre.gob.ar/
 - **Qué ofrece:** Mapas turísticos, zonificación 'Zona Delta residencial consolidado/de expansión', Primera Sección de Islas.
 - **Formato:** HTML/PDF [no verificado]
@@ -140,6 +140,11 @@ Peso = peso propuesto para votar **nombres** (Parte B); 0 = no vota (solo geomet
 - **Descarga / automatización:** Ninguna API encontrada. En el doc 06 el sitio no respondió desde servidores de EE. UU.
 - **Confiabilidad:** Alta si publicaran la nomenclatura; no encontré un mapa PDF.
 - **Evidencia:** https://www.frommers.com/destinations/tigre/planning-a-trip/; https://roomix.ai/blog/tigre-delta-guia-vivir
+- **Actualización 2026-10-08: folleto oficial «Viví Tigre»** (Municipio de Tigre, Secretaría de Turismo). El usuario lo compartió como imagen. Es la fuente municipal que faltaba:
+  - **Mapa de la Primera Sección** con los ríos y arroyos numerados. Confirma el recorrido del **Río Carapachay**: sale del Luján frente a Rincón de Milberg y sube al Paraná de las Palmas entre el Arroyo de los Nogales y el Cruz Colorada (doc 10).
+  - **Líneas de lanchas colectivas** con su boletería en la Estación Fluvial: Líneas Delta (boletería 1), Jilguero (2) e Interisleña (3 y 4). Los recorridos están dibujados en colores; el de Jilguero va por el Carapachay.
+  - **Puntos de interés:** museos, Puerto de Frutos, recreos, paseos y servicios.
+  - **Uso:** referencia para validar nombres y recorridos y para ubicar puntos de interés y rutas de colectivas en el juego, con la atribución «Fuente: Municipio de Tigre – Viví Tigre». No se copia la imagen al repositorio; los datos se transcriben a mano, con fecha y fuente.
 
 ### A11. Municipio de San Fernando (islas de Segunda y Tercera sección, Reserva de Biosfera)
 
