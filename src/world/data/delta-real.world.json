@@ -295,8 +295,8 @@
       ]
     },
     {
-      "id": "rio-union",
-      "name": "Río Unión",
+      "id": "rio-urion",
+      "name": "Río Urión",
       "width": 18.75,
       "points": [
         [171.51, 111.91],
@@ -12359,8 +12359,8 @@
       "rotationDeg": 176.87
     },
     {
-      "id": "rio-union-y-arroyo-baltico",
-      "name": "Río Unión y Arroyo Báltico",
+      "id": "rio-urion-y-arroyo-baltico",
+      "name": "Río Urión y Arroyo Báltico",
       "x": 183.84,
       "z": -590.65,
       "rotationDeg": 159.15

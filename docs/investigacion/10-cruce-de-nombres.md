@@ -14,13 +14,16 @@ El IGN (WFS) no respondió (504); el workflow lo reintenta en cada corrida.
 ## Corregido en el importador (`scripts/osm/name-fixes.json`)
 | En OSM | En el juego | Por qué |
 |---|---|---|
-| Río URíon | Río Unión | Errata; GeoNames: "Arroyo Unión" y Atlas Ambiental: "Río Unión" |
+| Río URíon | **Río Urión** | Solo la mayúscula estaba mal. Un aviso lo ubica "sobre río Urión a 300 m del arroyo Borazo" ([argenprop](https://www.argenprop.com/negocios-especiales/partido-de-tigre/dolares-hasta-75000)), y en el mapa el Arroyo Boraso desemboca ahí. Confianza: probable, falta fuente oficial. *Corrección del 2026-10-08: antes había quedado como "Río Unión" por error. La mención del Atlas Ambiental no se verificó, y el "Arroyo Unión" de GeoNames coincidía solo por normalización. Ninguna búsqueda encontró un "Río Unión" en Tigre.* |
 | Arroyo Panatanosito | Arroyo Pantanosito | Errata; GeoNames confirma el "Arroyo Pantanoso" vecino |
 | Arroyo Pay Carabi | Arroyo Paycarabí | La misma vía tiene las dos grafías en OSM |
 | Arroyo las Casas | Arroyo Las Casas | Mayúscula |
 | Ayo Pacu | Arroyo Pacu | "Ayo" es la abreviatura de Arroyo |
 | Arroyo Sin Nombre | (se quitó) | Era un marcador, no un nombre |
 | Cruce bajos del temor a punta moran | (se quitó) | Es una ruta de cruce, no un río |
+
+## Lección
+Un nombre no se cambia con una sola coincidencia en un nomenclátor ni con un dato visto solo en un resumen de búsqueda. Hace falta que el nombre encaje con el lugar (por ejemplo, los arroyos vecinos) y al menos dos fuentes, o una oficial.
 
 ## Grafías en duda (no se cambian sin una fuente oficial o un vecino)
 GeoNames tiene sus propias erratas (por ejemplo "Tarapuati", "Caviotas", "Norancito"), así que una diferencia con GeoNames sola no alcanza para cambiar un nombre.
