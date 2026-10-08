@@ -133,7 +133,8 @@ export class YolaTraffic {
     this.update(0);
   }
 
-  update(dt: number): void {
+  /** `level`: the river's current level offset (tide). */
+  update(dt: number, level = 0): void {
     const t = this.tmp;
     for (const c of this.crews) {
       c.traveled += c.speed * dt;
@@ -148,7 +149,7 @@ export class YolaTraffic {
         // Designed at the old prop size: the parent scale brings rowers and oars down too
         new Vector3(PROP_SCALE, PROP_SCALE, PROP_SCALE),
         Quaternion.FromEulerAngles(Math.sin(c.phase) * 0.02, heading, 0),
-        new Vector3(x, WATER_LEVEL + (0.05 + bob) * PROP_SCALE, z)
+        new Vector3(x, WATER_LEVEL + level + (0.05 + bob) * PROP_SCALE, z)
       );
       this.hulls.thinInstanceSetMatrixAt(c.hull, parent, false);
 

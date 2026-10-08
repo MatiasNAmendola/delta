@@ -5,13 +5,14 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { Constants } from "@babylonjs/core/Engines/constants";
-import { WATER_LEVEL, PROP_SCALE } from "../utils/constants";
+import { WATER_LEVEL } from "../utils/constants";
 import type { Vec2, WorldDoc } from "./WorldDoc";
 import { isSet, type WaterGrid } from "./waterGeometry";
 import { seededRandom } from "../utils/helpers";
 import { DeltaWaterMaterial } from "./DeltaWaterMaterial";
 import { mark } from "../utils/perf";
 import { ShoreIndex } from "./shoreline";
+import { WaterConditions } from "./waterConditions";
 import { layoutRings, SHORE_RANGE, SHORE_SDF_RANGE, SHORE_SDF_RES, type WorldLayout } from "./layout/worldLayout";
 
 export { SHORE_SDF_RANGE };
@@ -51,6 +52,10 @@ export class WaterSystem {
   private grid: WaterGrid;
   private shore: Shore;
   private shoreIndex: ShoreIndex;
+  private waterMesh: Mesh | null = null;
+  private drift = { x: 0, z: 0 };
+  /** Tide, current, wind, wakes and sudestada (ADR 0009). */
+  readonly conditions: WaterConditions;
 
   constructor(
     private scene: Scene,
@@ -62,6 +67,7 @@ export class WaterSystem {
     const grid = this.grid;
     this.shoreIndex = new ShoreIndex(this.shore.rings, layout.size, (x, z) => isSet(grid, x, z));
     mark("agua: índice");
+    this.conditions = new WaterConditions(world.rivers, (x, z) => Math.max(0, -this.shoreIndex.signedDistance(x, z, 4)));
     this.createRiverMeshes();
   }
 
@@ -177,7 +183,7 @@ export class WaterSystem {
       shoreRange: SHORE_RANGE,
     });
     this.tryCdnNormalMap();
-    this.createWaterMesh();
+    this.waterMesh = this.createWaterMesh();
     mark("agua: malla");
   }
 
@@ -192,7 +198,7 @@ export class WaterSystem {
       const x = points[i * 2];
       const z = points[i * 2 + 1];
       positions[i * 3] = x;
-      positions[i * 3 + 1] = WATER_LEVEL + 0.04;
+      positions[i * 3 + 1] = WATER_LEVEL;
       positions[i * 3 + 2] = z;
       normals[i * 3 + 1] = 1;
       uvs[i * 2] = x / 20;
@@ -211,18 +217,37 @@ export class WaterSystem {
     return mesh;
   }
 
-  public update(deltaTime: number): void {
+  /**
+   * Advances the river; `focus` (the boat) is where the current that
+   * carries the ripples on screen is measured.
+   */
+  public update(deltaTime: number, focus?: { x: number; z: number }): void {
     this.time += deltaTime;
+    const c = this.conditions;
+    c.update(deltaTime);
+    if (focus) {
+      const [vx, vz] = c.current(focus.x, focus.z);
+      this.drift.x += vx * deltaTime;
+      this.drift.z += vz * deltaTime;
+    }
+    this.water.setConditions(c.wind.x, c.wind.z, c.wind.strength, this.drift.x, this.drift.z);
     this.water.update(deltaTime);
+    // The whole surface rises and falls with the tide
+    const mesh = this.waterMesh;
+    const y = this.level();
+    if (mesh && Math.abs(mesh.position.y - y) > 1e-4) {
+      mesh.position.y = y;
+      mesh.freezeWorldMatrix();
+    }
   }
 
-  /** Get wave height at a position for boat bobbing */
-  public getWaveHeight(x: number, z: number, time: number): number {
-    return (
-      (Math.sin(x * 0.35 + time * 1.5) * 0.15 +
-        Math.sin(z * 0.28 + time * 1.2) * 0.1 +
-        Math.sin((x + z) * 0.18 + time * 0.8) * 0.08) *
-      PROP_SCALE
-    );
+  /** Current water level offset from WATER_LEVEL (tide and sudestada). */
+  public level(): number {
+    return this.conditions.level();
+  }
+
+  /** Height of the surface at a point, relative to WATER_LEVEL: tide, wind waves and wakes. */
+  public heightAt(x: number, z: number): number {
+    return this.conditions.height(x, z);
   }
 }

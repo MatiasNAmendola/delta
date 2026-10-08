@@ -13,8 +13,9 @@ import { PROP_SCALE, WATER_LEVEL, COLORS } from "../utils/constants";
 import { hexToColor3, clamp } from "../utils/helpers";
 import { WaterSystem } from "../world/WaterSystem";
 import { findFloatingPose, hullOutline, moveHull, type Hull } from "./hullCollision";
-import type { BoatSpec } from "./boatTypes";
-import { buildKayak, buildOpen, buildTravesia, type BoatModel } from "./boatModels";
+import type { BoatSpec, BoatTypeId } from "./boatTypes";
+import { Buoyancy, type BuoyancyParams } from "./buoyancy";
+import { buildClasica, buildSingle, buildKayak, buildMoto, buildPesca, buildRunabout, buildSemirrigido, buildTravesia, type BoatModel } from "./boatModels";
 
 /** How deep a GLB model's keel sits under the water, relative to the boat's length. */
 const MODEL_DRAFT = 0.035;
@@ -24,7 +25,6 @@ const MODEL_FILES: Record<string, string> = {
   colectiva: "lancha-optimized.glb",
   travesia: "bote-travesia.glb",
   kayak: "kayak.glb",
-  open: "lancha-open.glb",
 };
 
 /**
@@ -45,9 +45,9 @@ export class Boat {
   public modelLoaded = false;
 
   private meshes: Mesh[] = [];
-  private time = 0;
-  private bobPhase = 0;
   private strokePhase = 0;
+  private buoyancy: Buoyancy;
+  private floatParams: BuoyancyParams;
   private hull: Hull;
   private procedural: BoatModel | null = null;
   private modelContainer: TransformNode | null = null;
@@ -60,6 +60,8 @@ export class Boat {
     private readonly capacity: number
   ) {
     this.hull = hullOutline(spec.length, spec.width);
+    this.floatParams = { length: spec.length, width: spec.width, hull: spec.hull };
+    this.buoyancy = new Buoyancy(this.floatParams);
     this.position = new Vector3(startX, WATER_LEVEL, startZ);
     this.rootNode = new TransformNode(`bote_${spec.id}`, scene);
     this.rootNode.position = this.position.clone();
@@ -70,7 +72,17 @@ export class Boat {
   }
 
   private buildProcedural(): void {
-    const build = { kayak: buildKayak, travesia: buildTravesia, open: buildOpen }[this.spec.id as "kayak" | "travesia" | "open"];
+    const builders: Record<Exclude<BoatTypeId, "colectiva">, (scene: Scene, spec: BoatSpec) => BoatModel> = {
+      kayak: buildKayak,
+      travesia: buildTravesia,
+      single: buildSingle,
+      runabout: buildRunabout,
+      pesca: buildPesca,
+      clasica: buildClasica,
+      semirrigido: buildSemirrigido,
+      moto: buildMoto,
+    };
+    const build = builders[this.spec.id as Exclude<BoatTypeId, "colectiva">];
     this.procedural = build(this.scene, this.spec);
     this.procedural.root.parent = this.rootNode;
   }
@@ -81,6 +93,7 @@ export class Boat {
     const base = document.querySelector("base")?.href || window.location.href;
     const url = new URL("models/", base).href;
     try {
+      if (!file) return;
       if (this.spec.id !== "colectiva") {
         // Optional model: skip quietly when it isn't there
         const head = await fetch(url + file, { method: "HEAD" });
@@ -143,7 +156,6 @@ export class Boat {
 
   public update(deltaTime: number, waterSystem: WaterSystem, gyroSteering: number | null): void {
     const spec = this.spec;
-    this.time += deltaTime;
     const steering = gyroSteering !== null ? gyroSteering : this.steering;
 
     // Tuning constants are per 60 fps frame; scale by real elapsed time.
@@ -176,8 +188,11 @@ export class Boat {
     const turn = steering * spec.turnSpeed * turnFactor * frames;
 
     const heading = this.rotation + turn;
-    const dx = Math.sin(heading) * this.speed * frames;
-    const dz = Math.cos(heading) * this.speed * frames;
+    // The river carries the boat: barely a heavy lancha, fully a kayak
+    const [cx, cz] = waterSystem.conditions.current(this.position.x, this.position.z);
+    const carry = spec.currentDrift * Math.min(deltaTime, 0.1);
+    const dx = Math.sin(heading) * this.speed * frames + cx * carry;
+    const dz = Math.cos(heading) * this.speed * frames + cz * carry;
     const result = moveHull(
       { x: this.position.x, z: this.position.z, rotation: this.rotation },
       turn,
@@ -194,21 +209,31 @@ export class Boat {
       this.speed *= result.slid ? 0.85 : -0.3;
     }
 
-    // Bobbing scales with the boat: a kayak rides every ripple
-    this.bobPhase += deltaTime * 2;
-    const small = 1 + (2 - spec.length) * 0.6;
-    this.position.y = WATER_LEVEL + waterSystem.getWaveHeight(this.position.x, this.position.z, this.time) * small;
-
     const ratio = Math.abs(this.speed) / spec.maxSpeed;
     this.strokePhase += deltaTime * (spec.humanPowered ? 2 + 3 * Math.abs(this.throttle) : 0);
     this.procedural?.animate(this.strokePhase, spec.humanPowered ? Math.abs(this.throttle) : ratio);
 
+    // Afloat: the water under bow, stern and both sides sets heave, pitch
+    // and roll; springs give the hull its weight (see buoyancy.ts)
+    const float = this.buoyancy.update(deltaTime, this.floatTarget(waterSystem, Math.sign(this.speed) * ratio, steering * turnFactor));
+    this.position.y = WATER_LEVEL + float.y;
     this.rootNode.position.copyFrom(this.position);
     this.rootNode.rotation.y = this.rotation;
-    this.rootNode.rotation.z = -steering * turnFactor * 0.08 * small + Math.sin(this.bobPhase * 0.7) * 0.02 * small;
-    // Planing boats lift the bow at speed
-    const lift = spec.id === "open" ? ratio * 0.12 : ratio * 0.05;
-    this.rootNode.rotation.x = -lift + Math.sin(this.bobPhase) * 0.015 * small;
+    // Babylon: +x rotation dips the bow, +z rotation lifts starboard
+    this.rootNode.rotation.x = -float.pitch;
+    this.rootNode.rotation.z = -float.roll;
+  }
+
+  private floatTarget(waterSystem: WaterSystem, speedRatio: number, turn: number) {
+    return Buoyancy.targets(
+      this.floatParams,
+      (x, z) => waterSystem.heightAt(x, z),
+      this.position.x,
+      this.position.z,
+      this.rotation,
+      speedRatio,
+      turn
+    );
   }
 
   /** Places the boat at a spawn point, turned so the whole hull fits on the water. */
@@ -218,6 +243,7 @@ export class Boat {
     this.position.z = pose.z;
     this.rotation = pose.rotation;
     this.speed = 0;
+    this.buoyancy.reset(this.floatTarget(waterSystem, 0, 0));
     this.rootNode.position.copyFrom(this.position);
     this.rootNode.rotation.y = this.rotation;
   }

@@ -128,6 +128,7 @@ export class Trash {
   private time = 0;
   private tmp = new Matrix();
   private totalWeight = KINDS.reduce((a, k) => a + k.weight, 0);
+  private level = 0;
   collected = 0;
 
   constructor(
@@ -144,9 +145,13 @@ export class Trash {
     });
   }
 
-  /** Keeps the river around the boat stocked, drifts and bobs the items. */
-  update(dt: number, boatX: number, boatZ: number): void {
+  /**
+   * Keeps the river around the boat stocked, drifts and bobs the items.
+   * `level` is the river's level offset (tide); `current` carries the trash.
+   */
+  update(dt: number, boatX: number, boatZ: number, level = 0, current?: (x: number, z: number) => [number, number]): void {
     this.time += dt;
+    this.level = level;
     // Forget items far behind, top up out of sight
     this.items = this.items.filter((it) => it.collecting > 0 || Math.hypot(it.x - boatX, it.z - boatZ) < SPAWN_MAX * 1.4);
     for (let tries = 0; this.items.length < TARGET_COUNT && tries < 40; tries++) this.spawn(boatX, boatZ);
@@ -161,8 +166,9 @@ export class Trash {
         const t = it.collecting / POP_TIME;
         scale = 1 + Math.sin(t * Math.PI) * 0.6 - t;
       } else {
-        const nx = it.x + it.drift[0] * dt;
-        const nz = it.z + it.drift[1] * dt;
+        const [cx, cz] = current ? current(it.x, it.z) : [0, 0];
+        const nx = it.x + (it.drift[0] + cx * 0.8) * dt;
+        const nz = it.z + (it.drift[1] + cz * 0.8) * dt;
         if (this.isWater(nx, nz)) {
           it.x = nx;
           it.z = nz;
@@ -176,7 +182,7 @@ export class Trash {
       Matrix.ComposeToRef(
         new Vector3(scale, scale, scale),
         Quaternion.FromEulerAngles(Math.sin(this.time + it.phase) * 0.15, it.yaw + this.time * 0.05, Math.cos(this.time * 0.8 + it.phase) * 0.12),
-        new Vector3(it.x, WATER_LEVEL + 0.03 + bob + lift, it.z),
+        new Vector3(it.x, WATER_LEVEL + level + 0.03 + bob + lift, it.z),
         this.tmp
       );
       this.tmp.toArray(perKind[it.kind], perKind[it.kind].length);
@@ -196,7 +202,7 @@ export class Trash {
   tryCollect(px: number, py: number, camera: Camera, boatX: number, boatZ: number): Collected | null {
     const ray = this.scene.createPickingRay(px, py, Matrix.Identity(), camera);
     if (ray.direction.y >= -1e-4) return null;
-    const t = (WATER_LEVEL + 0.03 - ray.origin.y) / ray.direction.y;
+    const t = (WATER_LEVEL + this.level + 0.03 - ray.origin.y) / ray.direction.y;
     const hx = ray.origin.x + ray.direction.x * t;
     const hz = ray.origin.z + ray.direction.z * t;
     // Forgiving on phones: the tolerance grows with distance from the camera
@@ -222,7 +228,7 @@ export class Trash {
   outOfReachAt(px: number, py: number, camera: Camera, boatX: number, boatZ: number): boolean {
     const ray = this.scene.createPickingRay(px, py, Matrix.Identity(), camera);
     if (ray.direction.y >= -1e-4) return false;
-    const t = (WATER_LEVEL + 0.03 - ray.origin.y) / ray.direction.y;
+    const t = (WATER_LEVEL + this.level + 0.03 - ray.origin.y) / ray.direction.y;
     const hx = ray.origin.x + ray.direction.x * t;
     const hz = ray.origin.z + ray.direction.z * t;
     const tolerance = Math.max(0.35, t * 0.035);

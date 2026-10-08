@@ -1,6 +1,16 @@
 import { gsap } from "gsap";
 import type { WorldDoc } from "../world/WorldDoc";
-import { BOAT_ORDER, BOAT_TYPES, type BoatTypeId } from "../boat/boatTypes";
+import { BOAT_TYPES, FAMILIES, type BoatFamily, type BoatTypeId } from "../boat/boatTypes";
+
+/** Start screen tabs: one per boat, or one per family of boats. */
+const TABS: Array<{ tab: string; label: string }> = [
+  { tab: "colectiva", label: BOAT_TYPES.colectiva.name },
+  { tab: "remo", label: FAMILIES.remo.label },
+  { tab: "kayak", label: BOAT_TYPES.kayak.name },
+  { tab: "particular", label: FAMILIES.particular.label },
+];
+
+const tabOf = (id: BoatTypeId) => BOAT_TYPES[id].family ?? id;
 
 /**
  * Title screen over the live 3D river (the camera circles the lancha
@@ -21,6 +31,8 @@ export class StartScreen {
     private onSelect: (id: BoatTypeId) => void
   ) {
     injectStyles();
+    const family = BOAT_TYPES[selected].family;
+    if (family) this.lastInFamily[family] = selected;
     this.root = document.createElement("div");
     this.root.id = "startScreen";
     this.root.className = "ss-screen";
@@ -35,7 +47,7 @@ export class StartScreen {
         <p class="ss-lede">Elegí tu embarcación. Cada una navega distinto y tiene sus reglas.</p>
         <div class="ss-boats" role="tablist" aria-label="Embarcación">
           <span class="ss-boats-pill" aria-hidden="true"></span>
-          ${BOAT_ORDER.map((id) => `<button type="button" role="tab" class="ss-boat" data-boat="${id}" aria-selected="${id === selected}">${BOAT_TYPES[id].name}</button>`).join("")}
+          ${TABS.map(({ tab, label }) => `<button type="button" role="tab" class="ss-boat" data-tab="${tab}" aria-selected="${tab === tabOf(selected)}">${label}</button>`).join("")}
         </div>
         <div class="ss-boat-detail" aria-live="polite"></div>
         <div class="ss-actions">
@@ -77,8 +89,17 @@ export class StartScreen {
     });
     this.root.querySelector("#howBtn")!.addEventListener("click", () => this.toggleHow());
     this.root.querySelectorAll<HTMLButtonElement>(".ss-boat").forEach((b) =>
-      b.addEventListener("click", () => this.choose(b.dataset.boat as BoatTypeId))
+      b.addEventListener("click", () => {
+        const tab = b.dataset.tab!;
+        if (tab === tabOf(this.selected)) return;
+        this.choose(tab in FAMILIES ? this.lastInFamily[tab as BoatFamily] : (tab as BoatTypeId));
+      })
     );
+    // Variant chips of the private launches (re-rendered with the detail)
+    this.root.querySelector(".ss-boat-detail")!.addEventListener("click", (e) => {
+      const chip = (e.target as HTMLElement).closest<HTMLElement>(".ss-variant");
+      if (chip) this.choose(chip.dataset.boat as BoatTypeId);
+    });
     this.renderDetail();
     // Place the highlight once fonts and layout settle
     requestAnimationFrame(() => this.movePill(false));
@@ -87,10 +108,15 @@ export class StartScreen {
     this.animateIn();
   }
 
+  /** The boat shown when a family's tab is picked: the last one chosen in it. */
+  private lastInFamily: Record<BoatFamily, BoatTypeId> = { remo: "travesia", particular: "runabout" };
+
   private choose(id: BoatTypeId): void {
     if (id === this.selected) return;
     this.selected = id;
-    this.root.querySelectorAll<HTMLElement>(".ss-boat").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.boat === id)));
+    const family = BOAT_TYPES[id].family;
+    if (family) this.lastInFamily[family] = id;
+    this.root.querySelectorAll<HTMLElement>(".ss-boat").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tabOf(id))));
     this.movePill(true);
     const sub = this.root.querySelector<HTMLElement>(".ss-sub")!;
     gsap.to(sub, {
@@ -121,7 +147,7 @@ export class StartScreen {
   /** Slides the amber highlight under the selected tab. */
   private movePill(animate: boolean): void {
     const pill = this.root.querySelector<HTMLElement>(".ss-boats-pill");
-    const tab = this.root.querySelector<HTMLElement>(`.ss-boat[data-boat="${this.selected}"]`);
+    const tab = this.root.querySelector<HTMLElement>(`.ss-boat[data-tab="${tabOf(this.selected)}"]`);
     if (!pill || !tab) return;
     gsap.to(pill, {
       x: tab.offsetLeft,
@@ -137,7 +163,11 @@ export class StartScreen {
     const b = BOAT_TYPES[this.selected];
     const bar = (label: string, v: number) =>
       `<span class="ss-bar"><span>${label}</span><span class="ss-bar-track">${Array.from({ length: 5 }, (_, i) => `<i class="${i < v ? "on" : ""}"></i>`).join("")}</span></span>`;
+    const variants = b.family
+      ? `<div class="ss-variants" role="radiogroup" aria-label="${FAMILIES[b.family].label}">${FAMILIES[b.family].boats.map((id) => `<button type="button" role="radio" class="ss-variant" data-boat="${id}" aria-checked="${id === b.id}">${BOAT_TYPES[id].short}</button>`).join("")}</div>`
+      : "";
     this.root.querySelector<HTMLElement>(".ss-boat-detail")!.innerHTML = `
+      ${variants}
       <p class="ss-boat-mission"><b>${b.mission}.</b> ${b.tagline}.</p>
       <div class="ss-bars">${bar("Velocidad", b.stats.velocidad)}${bar("Maniobra", b.stats.maniobra)}${bar("Olas", b.stats.olas)}</div>`;
   }
@@ -317,6 +347,10 @@ export function injectStyles(): void {
     .ss-screen .ss-bar-track { display: inline-flex; gap: 3px; }
     .ss-screen .ss-bar i { display: block; width: 14px; height: 4px; border-radius: 2px; background: rgba(244, 239, 227, 0.18); transform-origin: left; }
     .ss-screen .ss-bar i.on { background: var(--accent); }
+    .ss-screen .ss-variants { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .ss-screen .ss-variant { font: inherit; font-size: 12px; letter-spacing: 0.04em; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(244, 239, 227, 0.25); background: transparent; color: var(--muted); cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s; }
+    .ss-screen .ss-variant:hover { color: var(--ink); border-color: rgba(244, 239, 227, 0.5); }
+    .ss-screen .ss-variant[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: #1a1408; font-weight: 600; }
     .ss-screen .ss-actions { display: flex; align-items: center; gap: 14px; margin-top: 30px; flex-wrap: wrap; }
     .ss-screen .ss-play {
       display: inline-flex; align-items: center; gap: 14px;
@@ -372,30 +406,7 @@ export function injectStyles(): void {
       .ss-screen .ss-title { font-size: clamp(52px, 17vh, 88px); margin-top: 6px; }
       .ss-screen .ss-sub { font-size: 20px; }
       .ss-screen .ss-lede { margin-top: 8px; font-size: 13px; }
-      .ss-screen .ss-boats {
-      position: relative; display: flex; flex-wrap: nowrap; gap: 2px; margin-top: 18px; padding: 4px;
-      border-radius: 999px; width: fit-content; max-width: 100%;
-      background: rgba(244, 239, 227, 0.07); border: 1px solid rgba(244, 239, 227, 0.14);
-      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    }
-    .ss-screen .ss-boats-pill { position: absolute; left: 0; top: 0; border-radius: 999px; background: var(--ink); pointer-events: none; }
-    .ss-screen .ss-boat {
-      position: relative; z-index: 1; border: 0; background: none; cursor: pointer; white-space: nowrap;
-      padding: 9px 13px; border-radius: 999px; font: 500 13.5px/1 "Inter Variable", Inter, system-ui, sans-serif;
-      color: var(--muted); transition: color 0.3s;
-    }
-    .ss-screen .ss-boat:hover { color: var(--ink); }
-    .ss-screen .ss-boat[aria-selected="true"] { color: #1b140a; }
-    .ss-screen .ss-boat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .ss-screen .ss-boat-detail { margin-top: 12px; min-height: 64px; }
-    .ss-screen .ss-boat-mission { font-size: 14px; line-height: 1.5; color: var(--muted); max-width: 46ch; }
-    .ss-screen .ss-boat-mission b { color: var(--ink); font-weight: 600; }
-    .ss-screen .ss-bars { display: flex; gap: 18px; margin-top: 8px; flex-wrap: wrap; }
-    .ss-screen .ss-bar { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-    .ss-screen .ss-bar-track { display: inline-flex; gap: 3px; }
-    .ss-screen .ss-bar i { display: block; width: 14px; height: 4px; border-radius: 2px; background: rgba(244, 239, 227, 0.18); transform-origin: left; }
-    .ss-screen .ss-bar i.on { background: var(--accent); }
-    .ss-screen .ss-actions { margin-top: 14px; }
+      .ss-screen .ss-actions { margin-top: 14px; }
       .ss-screen .ss-play { padding: 7px 7px 7px 20px; font-size: 15px; }
       .ss-screen .ss-play-icon { width: 34px; height: 34px; }
       .ss-screen .ss-ghost { padding: 11px 16px; font-size: 13px; }

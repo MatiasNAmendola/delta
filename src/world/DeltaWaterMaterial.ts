@@ -2,7 +2,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { ShaderMaterial } from "@babylonjs/core/Materials/shaderMaterial";
 import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
 
 /**
  * Water of the Paraná Delta: opaque, muddy "café con leche" water whose look
@@ -43,6 +43,10 @@ uniform vec3 uHorizon;
 uniform vec3 uBank;
 uniform vec3 uFoam;
 uniform vec3 uFogColor;
+/** Wind direction (xz) and strength 0..1 in z. */
+uniform vec3 uWind;
+/** How far the river's current has carried the surface (world units). */
+uniform vec2 uDrift;
 uniform sampler2D normalMap;
 uniform sampler2D shoreMap;
 
@@ -55,14 +59,17 @@ void main(void) {
   // Distance to the nearest bank, in world units
   float shore = texture2D(shoreMap, p / uWorldSize + 0.5).r * uShoreRange;
 
-  // Three ripple layers drifting with the current at different scales
-  vec2 flow = vec2(0.6, 0.8);
+  // Three ripple layers: carried by the current, pushed by the wind
+  vec2 flow = uWind.xy;
+  vec2 q = p - uDrift;
   // Ripple scales are relative to the boat (2 units long at 8 m per unit)
-  vec2 s1 = slopeAt(p * 0.2 + flow * uTime * 0.03);
-  vec2 s2 = slopeAt(p * 0.55 - flow.yx * uTime * 0.05);
-  vec2 s3 = slopeAt(p * 1.4 + vec2(-flow.x, flow.y) * uTime * 0.08);
+  vec2 s1 = slopeAt(q * 0.2 + flow * uTime * (0.02 + 0.05 * uWind.z));
+  vec2 s2 = slopeAt(q * 0.55 - flow.yx * uTime * 0.05);
+  vec2 s3 = slopeAt(q * 1.4 + vec2(-flow.x, flow.y) * uTime * 0.08);
   vec2 slope = s1 * 0.5 + s2 * 0.35 + s3 * 0.3;
-  vec3 N = normalize(vec3(slope.x * 0.7, 1.0, slope.y * 0.7));
+  // Choppier with the wind (a sudestada whips the river up)
+  float rough = 0.45 + 1.1 * uWind.z;
+  vec3 N = normalize(vec3(slope.x * rough, 1.0, slope.y * rough));
 
   vec3 toCam = uCameraPos - vWorld;
   float dist = length(toCam);
@@ -122,7 +129,7 @@ export class DeltaWaterMaterial {
         uniforms: [
           "world", "viewProjection", "uTime", "uWorldSize", "uShoreRange", "uFogDensity",
           "uCameraPos", "uSunDir", "uSunColor", "uDeep", "uShallow", "uZenith", "uHorizon",
-          "uBank", "uFoam", "uFogColor",
+          "uBank", "uFoam", "uFogColor", "uWind", "uDrift",
         ],
         samplers: ["normalMap", "shoreMap"],
       }
@@ -143,11 +150,18 @@ export class DeltaWaterMaterial {
     // Toward the sun of the scene's DirectionalLight (-0.5, -1, 0.5)
     m.setVector3("uSunDir", new Vector3(0.5, 1, -0.5).normalize());
     m.backFaceCulling = false;
+    this.setConditions(0.6, 0.8, 0.25, 0, 0);
     this.update(0);
   }
 
   setNormalMap(texture: BaseTexture): void {
     this.material.setTexture("normalMap", texture);
+  }
+
+  /** Wind (direction and 0..1 strength) and how far the current has carried the surface. */
+  setConditions(windX: number, windZ: number, strength: number, driftX: number, driftZ: number): void {
+    this.material.setVector3("uWind", new Vector3(windX, windZ, strength));
+    this.material.setVector2("uDrift", new Vector2(driftX, driftZ));
   }
 
   update(dt: number): void {

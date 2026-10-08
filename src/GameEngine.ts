@@ -14,7 +14,7 @@ import { Environment } from "./world/Environment";
 import { WakeEffect } from "./world/WakeEffect";
 import { YolaTraffic } from "./world/Yolas";
 import { Boat } from "./boat/Boat";
-import { BOAT_TYPES, isBoatType, type BoatTypeId, type BoatSpec } from "./boat/boatTypes";
+import { BOAT_TYPES, parseBoatType, type BoatTypeId, type BoatSpec } from "./boat/boatTypes";
 import { createMode, type GameMode } from "./game/modes";
 import { probeChannel, RuleBook, type RuleEvent } from "./game/navigationRules";
 import { Traffic } from "./world/Traffic";
@@ -30,6 +30,9 @@ import {
   type ResolutionPolicy,
   type ResolutionState,
 } from "./utils/AdaptiveResolution";
+
+/** Fog color under a sudestada's low grey sky. */
+const STORM_FOG = new Color3(0.52, 0.56, 0.58);
 
 export class GameEngine {
   private engine: Engine;
@@ -62,6 +65,12 @@ export class GameEngine {
   private menuOrbit = 0.6;
   private gameOver = false;
   private gameTime = 0;
+  /** Game time when a sudestada blows in (Infinity: not this trip). */
+  private sudestadaAt = Infinity;
+  /** Jump the camera to the boat on the next frame (after a teleport). */
+  private snapCamera = false;
+  private tideNoticeAt = Infinity;
+  private baseFog: { color: Color3; density: number } | null = null;
   private score = 0;
   private resolutionPolicy: ResolutionPolicy;
   private resolution: ResolutionState;
@@ -158,7 +167,7 @@ export class GameEngine {
 
     // `?boat=kayak` (or the last one chosen) preselects a boat
     const saved = params.get("boat") ?? safeStorage("delta.boat");
-    this.selectBoat(isBoatType(saved) ? saved : "colectiva");
+    this.selectBoat(parseBoatType(saved) ?? "colectiva");
 
     if (this.aerialView) this.scene.fogEnabled = false;
 
@@ -279,10 +288,21 @@ export class GameEngine {
       start: this.spawn,
       notify: (message, ms) => this.ui.showNotification(message, ms),
       addScore: (points) => (this.score = Math.max(0, this.score + points)),
+      placeBoat: (x, z, heading) => {
+        this.boat.placeAt(x, z, heading, this.waterSystem);
+        this.snapCamera = true;
+      },
+      current: (x, z) => this.waterSystem.conditions.current(x, z),
+      level: () => this.waterSystem.level(),
     });
     this.mode.start();
     this.ui.showNotification(`${this.spec.name}
 ${this.spec.mission}`, 2800);
+    // Some trips get a sudestada; ?clima=sudestada forces one, ?clima=calma none
+    const clima = new URLSearchParams(window.location.search).get("clima");
+    this.waterSystem.conditions.endSudestada();
+    this.sudestadaAt = clima === "sudestada" ? 4 : clima === "calma" ? Infinity : Math.random() < 0.25 ? 50 + Math.random() * 70 : Infinity;
+    this.tideNoticeAt = 3.2;
   }
 
   private gameLoop(): void {
@@ -313,9 +333,6 @@ ${this.spec.mission}`, 2800);
         controlState.gyroSteering
       );
 
-      // Update water
-      this.waterSystem.update(dt);
-
       // Update wake
       this.wakeEffect.update(
         dt,
@@ -325,10 +342,8 @@ ${this.spec.mission}`, 2800);
         this.boat.speed
       );
 
-      // Rowers, other lanchas and floating trash keep moving
-      this.yolas.update(dt);
-      this.traffic.update(dt);
-      this.trash.update(dt, this.boat.position.x, this.boat.position.z);
+      // The river, rowers, other lanchas and floating trash keep moving
+      this.updateRiver(dt);
       this.checkRowers();
       this.checkTraffic();
       this.applyRules(dt);
@@ -337,7 +352,8 @@ ${this.spec.mission}`, 2800);
       this.mode!.update(dt, controlState.action);
 
       // Update camera
-      this.updateCamera(dt, controlState.cameraAngleOffset, controlState.cameraPitchOffset);
+      this.updateCamera(dt, controlState.cameraAngleOffset, controlState.cameraPitchOffset, this.snapCamera);
+      this.snapCamera = false;
 
       // Update UI
       this.ui.updateScore(this.score);
@@ -352,10 +368,7 @@ ${this.spec.mission}`, 2800);
       }
     } else {
       // Still update water, rowers and traffic even on menus
-      this.waterSystem.update(dt);
-      this.yolas.update(dt);
-      this.traffic.update(dt);
-      this.trash.update(dt, this.boat.position.x, this.boat.position.z);
+      this.updateRiver(dt);
       this.boat.update(dt, this.waterSystem, null);
       // Behind the title screen the camera circles the lancha slowly
       if (!this.gameStarted) {
@@ -368,6 +381,42 @@ ${this.spec.mission}`, 2800);
     this.environment.update(dt, this.camera.position, this.boat.position);
 
     this.scene.render();
+  }
+
+  /** Tide, current, wind and wakes; everything afloat follows the level. */
+  private updateRiver(dt: number): void {
+    const { x, z } = this.boat.position;
+    const water = this.waterSystem;
+    const conditions = water.conditions;
+    if (this.gameStarted && !this.gameOver) {
+      if (this.gameTime >= this.tideNoticeAt) {
+        this.tideNoticeAt = Infinity;
+        this.ui.showNotification(
+          conditions.tideTrend() === "creciente"
+            ? "Marea creciente: la corriente sube el río"
+            : "Marea bajante: la corriente baja hacia el Río de la Plata",
+          3000
+        );
+      }
+      if (this.gameTime >= this.sudestadaAt) {
+        this.sudestadaAt = Infinity;
+        conditions.startSudestada();
+        this.ui.showNotification("¡Se larga la sudestada!\nEl río crece, la corriente se da vuelta y se pica", 4200);
+      }
+    }
+    // A sudestada greys out the sky
+    const scene = this.scene;
+    this.baseFog ??= { color: scene.fogColor.clone(), density: scene.fogDensity };
+    const storm = conditions.sudestada.intensity;
+    Color3.LerpToRef(this.baseFog.color, STORM_FOG, storm, scene.fogColor);
+    scene.fogDensity = this.baseFog.density * (1 + storm * 0.9);
+    water.update(dt, this.boat.position);
+    const level = water.level();
+    this.yolas.update(dt, level);
+    this.traffic.update(dt, level);
+    // Passing lanchas rock the boat with their wake
+    water.conditions.wakes = this.traffic.wakes(x, z, 20);
+    this.trash.update(dt, x, z, level, (px, pz) => water.conditions.current(px, pz));
   }
 
   /**

@@ -8,6 +8,7 @@ import { seededRandom } from "../utils/helpers";
 import type { WorldDoc, Vec2 } from "./WorldDoc";
 import type { WaterSystem } from "./WaterSystem";
 import { offsetPolyline, PingPongRoute } from "./rowingRoute";
+import type { Wake } from "./waterConditions";
 
 interface Lancha {
   node: TransformNode;
@@ -71,7 +72,8 @@ export class Traffic {
     }
   }
 
-  update(dt: number): void {
+  /** `level`: the river's current level offset (tide). */
+  update(dt: number, level = 0): void {
     for (const b of this.boats) {
       b.traveled += b.speed * dt;
       b.cooldown = Math.max(0, b.cooldown - dt);
@@ -79,9 +81,16 @@ export class Traffic {
       b.x = p.x;
       b.z = p.z;
       b.heading = p.heading;
-      b.node.position.set(p.x, WATER_LEVEL, p.z);
+      b.node.position.set(p.x, WATER_LEVEL + level, p.z);
       b.node.rotation.y = p.heading;
     }
+  }
+
+  /** The wakes of the lanchas within `radius` of (x, z), for the water surface. */
+  wakes(x: number, z: number, radius: number): Wake[] {
+    return this.boats
+      .filter((b) => Math.hypot(b.x - x, b.z - z) < radius)
+      .map((b) => ({ x: b.x, z: b.z, heading: b.heading, strength: Math.min(1, b.speed / SPEED), length: BOAT_LENGTH }));
   }
 
   /** Lanchas close enough for their wake to reach (x, z). */
