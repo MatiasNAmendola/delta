@@ -22,6 +22,18 @@ El IGN (WFS) no respondió (504); el workflow lo reintenta en cada corrida.
 | Arroyo Sin Nombre | (se quitó) | Era un marcador, no un nombre |
 | Cruce bajos del temor a punta moran | (se quitó) | Es una ruta de cruce, no un río |
 
+## Fuentes consultadas: caso Urión (2026-10-08)
+| Búsqueda | Resultado | Fuente |
+|---|---|---|
+| "Río Urión" Tigre Delta | Una isla en venta "sobre río Urion a 300 metros del arroyo Borazo", a unos 20 min en lancha del puerto de Tigre | [argenprop, partido de Tigre](https://www.argenprop.com/negocios-especiales/partido-de-tigre/dolares-hasta-75000) |
+| "Urión" arroyo Delta Tigre | Mismo aviso, listado como "Venta en Urion, Delta del Tigre"; no hay otras menciones | Ídem |
+| "Arroyo Unión" / "Río Unión" Tigre | **Ninguna mención** de un curso con ese nombre en Tigre | [Página/12 Turismo](https://www.pagina12.com.ar/diario/suplementos/turismo/9-353-2004-03-07.html?mobile=1), [zonaprop](https://www.zonaprop.com.ar/venta-delta-q-islas.html) y [mercadolibre](https://inmuebles.mercadolibre.com.ar/bsas-gba-norte/tigre/isla-delta) (ninguno lo nombra) |
+| OpenStreetMap (volcado HOT, `scripts/osm/delta-tigre.overpass.json`) | `name=Río URíon` | OSM, ODbL |
+| GeoNames (workflow `Check river names`) | "Arroyo Unión" coincidía solo por normalización; no se verificó que sea el mismo curso | download.geonames.org, CC BY 4.0 |
+| Mapa del juego | El Arroyo Boraso desemboca en este río; coincide con el aviso | `src/world/data/delta-real.world.json` |
+
+**Pendiente:** confirmar "Urión" en una fuente oficial (IGN, Provincia, SHN o Municipio de Tigre) o con un vecino. Si se confirma, corregirlo también en OpenStreetMap.
+
 ## Lección
 Un nombre no se cambia con una sola coincidencia en un nomenclátor ni con un dato visto solo en un resumen de búsqueda. Hace falta que el nombre encaje con el lugar (por ejemplo, los arroyos vecinos) y al menos dos fuentes, o una oficial.
 
