@@ -1,20 +1,23 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
-import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { TerrainMaterial } from "@babylonjs/materials/terrain/terrainMaterial";
 import { WATER_LEVEL, COLORS } from "../utils/constants";
 import { degToRad, type Dock, type ScatterRule, type WorldDoc } from "./WorldDoc";
 import { hexToColor3, seededRandom, clamp } from "../utils/helpers";
-import { WaterSystem } from "./WaterSystem";
+import { WaterSystem, type Shore } from "./WaterSystem";
 import { InstancedBoxBatch, propTransform } from "./InstancedBatch";
 import { WaterDistanceField } from "./WaterDistanceField";
 import { placeDockModels } from "./DockModel";
-import type { BeachedSpot } from "./Yolas";
+import { paintPixels } from "./texturePaint";
+import { RiverBanks } from "./RiverBanks";
+import { triangulate } from "./shoreline";
+import type { MooredSpot } from "./Yolas";
 
 export class Environment {
   private scene: Scene;
@@ -23,10 +26,10 @@ export class Environment {
   /** Distance to the nearest water, shared by texturing, relief and vegetation. */
   private waterDistance: WaterDistanceField;
   private berths = new Map<string, Berth>();
-  /** Side of one terrain mesh quad, in world units. */
-  private terrainQuad = 12.5;
+  /** Houses next to the water: their shore gets a wooden bulkhead. */
+  private waterfrontHouses: Array<{ x: number; z: number }> = [];
   private dockSites: Array<{ x: number; z: number; rotation: number; seed: number }> = [];
-  private beached: BeachedSpot[] = [];
+  private moored: MooredSpot[] = [];
 
   constructor(scene: Scene, waterSystem: WaterSystem, world: WorldDoc) {
     this.scene = scene;
@@ -34,7 +37,8 @@ export class Environment {
     // ~3 world units per cell (256 for the original 800-unit Delta); also the splatmap size
     const res = world.world.size <= 800 ? 256 : 1024;
     this.waterDistance = new WaterDistanceField(world.world.size, res, (x, z) => waterSystem.isWater(x, z));
-    this.createGround();
+    const shore = waterSystem.getShore();
+    this.createGround(shore);
     this.createSkybox();
     this.props = createPropBatches(scene);
     // Docks first: vegetation and houses keep clear of where they end up
@@ -48,6 +52,18 @@ export class Environment {
       batch.build();
     }
     void this.buildDocks();
+
+    // Island edges: mud banks, and bulkheads where people live and boats stop
+    new RiverBanks(scene, shore.rings, {
+      bankTop: BANK_TOP,
+      isBulkhead: (x, z) =>
+        this.dockSites.some((d) => Math.hypot(d.x - x, d.z - z) < 14) ||
+        this.waterfrontHouses.some((h) => Math.hypot(h.x - x, h.z - z) < 9) ||
+        this.fbm(x * 0.012, z * 0.012, 2, 77) > 0.68,
+      keepClear: (x, z) =>
+        this.dockSites.some((d) => Math.hypot(d.x - x, d.z - z) < 10) ||
+        [...this.berths.values()].some((b) => Math.hypot(b.x - x, b.z - z) < 6),
+    });
   }
 
   /** Simple value noise for coherent terrain patterns */
@@ -95,21 +111,35 @@ export class Environment {
     return value;
   }
 
-  private createGround(): void {
-    // More subdivisions for vertex displacement (hills/terrain)
-    // ~12 world units per terrain quad (64 for the original 800-unit Delta)
-    const subdivisions = Math.min(256, Math.max(64, Math.round(this.world.world.size / 12.5)));
-    const ground = MeshBuilder.CreateGround(
-      "ground",
-      { width: this.world.world.size, height: this.world.world.size, subdivisions, updatable: true },
-      this.scene
-    );
-    ground.position.y = WATER_LEVEL + GROUND_OFFSET;
-    this.terrainQuad = this.world.world.size / subdivisions;
-    ground.receiveShadows = true;
-
-    // Displace vertices to create terrain elevation
-    this.displaceTerrainVertices(ground);
+  /**
+   * The islands: flat ground a little above the river, cut exactly along
+   * the shoreline (the Delta has no hills, and its banks drop straight into
+   * the water, see RiverBanks). Triangulated from the shoreline regions.
+   */
+  private createGround(shore: Shore): void {
+    const size = this.world.world.size;
+    const { vertices, indices } = triangulate(shore.land);
+    const count = vertices.length / 2;
+    const positions = new Float32Array(count * 3);
+    const normals = new Float32Array(count * 3);
+    const uvs = new Float32Array(count * 2);
+    for (let i = 0; i < count; i++) {
+      const x = vertices[i * 2];
+      const z = vertices[i * 2 + 1];
+      positions.set([x, WATER_LEVEL + BANK_TOP, z], i * 3);
+      normals.set([0, 1, 0], i * 3);
+      // Same mapping as the splatmap: u along +x, v along +z over the whole world
+      uvs.set([x / size + 0.5, z / size + 0.5], i * 2);
+    }
+    const ground = new Mesh("ground", this.scene);
+    const data = new VertexData();
+    data.positions = positions;
+    data.normals = normals;
+    data.uvs = uvs;
+    data.indices = indices;
+    data.applyToMesh(ground);
+    ground.isPickable = false;
+    ground.freezeWorldMatrix();
 
     try {
       const terrainMat = new TerrainMaterial("terrainMat", this.scene);
@@ -117,26 +147,31 @@ export class Environment {
       // Splatmap: R=grass, G=dirt, B=sand
       terrainMat.mixTexture = this.generateSplatmap();
 
-      // Grass (R channel) - coherent noise texture
+      // Textures repeat every ~10 m so the lawn has detail up close
+      const tiles = size / 10;
+
+      // Lawn (R channel) - coherent noise texture
       const grassTex = this.createProceduralGrass();
-      grassTex.uScale = grassTex.vScale = 80;
+      grassTex.uScale = grassTex.vScale = tiles;
       terrainMat.diffuseTexture1 = grassTex;
 
       // Dirt (G channel) - earthy pattern
       const dirtTex = this.createProceduralDirt();
-      dirtTex.uScale = dirtTex.vScale = 80;
+      dirtTex.uScale = dirtTex.vScale = tiles;
       terrainMat.diffuseTexture2 = dirtTex;
 
-      // Sand (B channel) - grainy pattern
-      const sandTex = this.createProceduralSand();
-      sandTex.uScale = sandTex.vScale = 80;
-      terrainMat.diffuseTexture3 = sandTex;
+      // Lush, darker grass (B channel): unmown patches and shade
+      const lushTex = this.createProceduralLushGrass();
+      lushTex.uScale = lushTex.vScale = tiles;
+      terrainMat.diffuseTexture3 = lushTex;
 
       // Try loading higher-quality CDN textures (replaces procedural on success)
-      this.tryLoadCDNTextures(terrainMat);
+      this.tryLoadCDNTextures(terrainMat, size / 10);
 
       terrainMat.specularColor = new Color3(0.05, 0.05, 0.05);
       terrainMat.specularPower = 4;
+      // Earcut doesn't guarantee one winding: draw both faces
+      terrainMat.backFaceCulling = false;
 
       ground.material = terrainMat;
     } catch (e) {
@@ -146,53 +181,20 @@ export class Environment {
       (fallback.diffuseTexture as Texture).uScale = 80;
       (fallback.diffuseTexture as Texture).vScale = 80;
       fallback.specularColor = new Color3(0.05, 0.05, 0.05);
+      fallback.backFaceCulling = false;
       ground.material = fallback;
     }
   }
 
-  /** Displace terrain vertices: below the water under rivers, low banks, rolling hills inland. */
-  private displaceTerrainVertices(ground: Mesh): void {
-    const positions = ground.getVerticesData(VertexBuffer.PositionKind);
-    if (!positions) return;
-
-    for (let i = 0; i < positions.length; i += 3) {
-      // Ground is centered at the origin, so local = world
-      positions[i + 1] = this.terrainHeight(positions[i], positions[i + 2]);
-    }
-
-    ground.updateVerticesData(VertexBuffer.PositionKind, positions);
-    ground.createNormals(true);
+  /** World y of the ground, to stand trees and houses on it (the islands are flat). */
+  private groundY(_x: number, _z: number): number {
+    return WATER_LEVEL + BANK_TOP;
   }
 
   /**
-   * Terrain height relative to the ground mesh (world y = this + GROUND_OFFSET).
-   *
-   * Within one terrain quad of any water the ground stays just under the
-   * water surface: otherwise a triangle spanning a channel narrower than a
-   * quad would rise between its two banks and hide the water. Past that it
-   * climbs to a low muddy bank, then to rolling hills inland.
+   * Splatmap: lawn almost everywhere (R), lush unmown grass in broad patches
+   * (B), worn earth in spots and along the very edge of the bank (G).
    */
-  private terrainHeight(x: number, z: number): number {
-    const d = this.waterDistance.at(x, z);
-    if (d === 0) return -0.5;
-    const q = this.terrainQuad;
-    if (d < q) return BANK_UNDER_WATER;
-
-    const bank = this.fbm(x * 0.02, z * 0.02, 3, 42) * 0.8;
-    const hills =
-      this.fbm(x * 0.008, z * 0.008, 4, 42) * 4.0 +
-      this.fbm(x * 0.025, z * 0.025, 2, 99) * 1.0;
-    const land = Math.max(0.35, bank + (Math.max(0.2, hills) - bank) * smoothstep(1.5 * q, 3 * q, d));
-    return BANK_UNDER_WATER + (land - BANK_UNDER_WATER) * smoothstep(q, 2 * q, d);
-  }
-
-  /** World y of the ground at (x, z), to stand trees and houses on it. */
-  private groundY(x: number, z: number): number {
-    return WATER_LEVEL + GROUND_OFFSET + this.terrainHeight(x, z);
-  }
-
-  /** Splatmap from the water distance field.
-   *  R = grass (far from water), G = dirt (medium), B = sand (near water) */
   private generateSplatmap(): DynamicTexture {
     const field = this.waterDistance;
     const size = field.res;
@@ -204,24 +206,15 @@ export class Environment {
       const x = -field.size / 2 + (px + 0.5) * field.cell;
       const z = -field.size / 2 + (j + 0.5) * field.cell;
 
-      // Coherent noise makes the mud/grass edges irregular, not banded
-      const noise = (this.fbm(x * 0.15, z * 0.15, 2, 456) - 0.5) * 2.5;
-      const dist = clamp(field.atCell(px, j) + noise, 0, 30);
-
-      // Delta banks: a thin strip of wet sand and mud, then grass almost to the water
-      if (dist <= 1) {
-        out[0] = 0; out[1] = 0.25; out[2] = 0.75;
-      } else if (dist <= 2.5) {
-        // Sand-to-mud transition
-        const t = (dist - 1) / 1.5;
-        out[0] = 0; out[1] = 0.25 + t * 0.6; out[2] = (1 - t) * 0.75;
-      } else if (dist <= 6) {
-        // Mud-to-grass transition
-        const t = (dist - 2.5) / 3.5;
-        out[0] = t * 0.9; out[1] = (1 - t) * 0.85 + t * 0.1; out[2] = 0;
-      } else {
-        out[0] = 0.9; out[1] = 0.1; out[2] = 0;
-      }
+      // Trodden earth in irregular patches (paths, under trees)...
+      const patches = smoothstep(0.58, 0.72, this.fbm(x * 0.03, z * 0.03, 3, 456));
+      // ...and where the bank edge crumbles
+      const edge = 1 - smoothstep(0.5, 2.5, field.atCell(px, j) + (this.fbm(x * 0.2, z * 0.2, 2, 457) - 0.5) * 2);
+      const dirt = clamp(Math.max(patches * 0.8, edge * 0.7), 0, 0.85);
+      const lush = smoothstep(0.48, 0.68, this.fbm(x * 0.012 + 40, z * 0.012, 3, 458)) * (1 - dirt) * 0.85;
+      out[0] = (1 - dirt) * (1 - lush);
+      out[1] = dirt;
+      out[2] = lush;
     });
 
     return tex;
@@ -257,23 +250,23 @@ export class Environment {
     return tex;
   }
 
-  /** Procedural tiling sand texture with coherent noise */
-  private createProceduralSand(): DynamicTexture {
+  /** Procedural tiling lush grass: darker and denser than the mown lawn */
+  private createProceduralLushGrass(): DynamicTexture {
     const size = 128;
-    const tex = new DynamicTexture("sandProc", size, this.scene, true);
+    const tex = new DynamicTexture("lushGrassProc", size, this.scene, true);
     paintPixels(tex, size, (x, y, out) => {
-      const n1 = this.fbm(x * 0.12, y * 0.12, 3, 999);
-      const n2 = this.fbm(x * 0.3, y * 0.3, 2, 1000);
-      const n = (n1 - 0.5) * 0.15 + (n2 - 0.5) * 0.05;
-      out[0] = 0.8 + n * 0.6;
-      out[1] = 0.7 + n * 0.55;
-      out[2] = 0.4 + n * 0.4;
+      const n1 = this.fbm(x * 0.12, y * 0.12, 4, 990);
+      const n2 = this.fbm(x * 0.35, y * 0.35, 2, 991);
+      const n = (n1 - 0.5) * 0.35 + (n2 - 0.5) * 0.2;
+      out[0] = 0.2 + n * 0.25;
+      out[1] = 0.46 + n * 0.55;
+      out[2] = 0.13 + n * 0.12;
     });
     return tex;
   }
 
   /** Try loading higher-quality textures from BabylonJS CDN */
-  private tryLoadCDNTextures(terrainMat: TerrainMaterial): void {
+  private tryLoadCDNTextures(terrainMat: TerrainMaterial, tiles: number): void {
     const cdnBase = "https://assets.babylonjs.com/textures/";
 
     // Grass texture + normal map from CDN
@@ -285,7 +278,7 @@ export class Environment {
         true,
         Texture.TRILINEAR_SAMPLINGMODE,
         () => {
-          grassCDN.uScale = grassCDN.vScale = 80;
+          grassCDN.uScale = grassCDN.vScale = tiles;
           terrainMat.diffuseTexture1 = grassCDN;
 
           // Also try loading grass normal map
@@ -297,7 +290,7 @@ export class Environment {
               true,
               Texture.TRILINEAR_SAMPLINGMODE,
               () => {
-                grassNormal.uScale = grassNormal.vScale = 80;
+                grassNormal.uScale = grassNormal.vScale = tiles;
                 terrainMat.bumpTexture1 = grassNormal;
               }
             );
@@ -322,7 +315,7 @@ export class Environment {
         true,
         Texture.TRILINEAR_SAMPLINGMODE,
         () => {
-          groundCDN.uScale = groundCDN.vScale = 80;
+          groundCDN.uScale = groundCDN.vScale = tiles;
           terrainMat.diffuseTexture2 = groundCDN;
         },
         () => {
@@ -442,11 +435,10 @@ export class Environment {
           this.addTree(x, z, seed);
           // Delta banks are a wall of vegetation: grow a small grove at the water
           if (nearWater) this.addGrove(x, z, seed, waterSystem);
-          // ...with reeds right at the edge
-          if (this.waterDistance.at(x, z) <= 3 && seed % 2 === 0) this.addReeds(x, z, seed);
           break;
         case "house":
           this.addHouse(x, z, seed, nearWater);
+          if (nearWater) this.waterfrontHouses.push({ x, z });
           break;
       }
     }
@@ -467,70 +459,56 @@ export class Environment {
   }
 
   /**
-   * 2-4 rowing yolas pulled up side by side on the mud beside a dock, bows
-   * pointing inland, like at the rowing clubs along the Tigre and Luján.
+   * 2-4 rowing yolas moored bow to stern along the bank beside a dock,
+   * floating just off the bank (the Delta has no beaches to pull them up on).
    */
-  private beachYolas(site: DockSite, toWater: [number, number], rng: () => number, waterSystem: WaterSystem): void {
+  private moorYolas(site: DockSite, toWater: [number, number], rng: () => number, waterSystem: WaterSystem): void {
     const along: [number, number] = [-toWater[1], toWater[0]];
     const side = rng() < 0.5 ? 1 : -1;
     const count = 2 + Math.floor(rng() * 3);
     for (let k = 0; k < count; k++) {
-      // Clear of the deck and of the side stairs
-      const off = side * (DOCK_HALF_ALONG + 2.2 + k * 0.9);
+      // Clear of the deck and of the side stairs, one hull length apart
+      const off = side * (DOCK_HALF_ALONG + 3 + k * 3.1);
       let x = site.x + along[0] * off;
       let z = site.z + along[1] * off;
-      // Slide across the shore line to this spot's own water's edge
+      // Find this spot's own water's edge across the shore line
       const wetHere = waterSystem.isWater(x, z);
       let found = false;
       for (let t = 0; t < 12; t += 0.25) {
         const sx = x + (wetHere ? -toWater[0] : toWater[0]) * t;
         const sz = z + (wetHere ? -toWater[1] : toWater[1]) * t;
         if (waterSystem.isWater(sx, sz) !== wetHere) {
-          x = sx;
-          z = sz;
+          // Last water point before the bank
+          x = wetHere ? sx + toWater[0] * 0.25 : sx;
+          z = wetHere ? sz + toWater[1] * 0.25 : sz;
           found = true;
           break;
         }
       }
       if (!found) continue;
-      // Stern in the shallows, bow on the mud
-      this.beached.push({
-        x: x - toWater[0] * 0.5,
-        z: z - toWater[1] * 0.5,
-        heading: Math.atan2(-toWater[0], -toWater[1]) + (rng() - 0.5) * 0.15,
+      this.moored.push({
+        x: x + toWater[0] * 0.55,
+        z: z + toWater[1] * 0.55,
+        heading: Math.atan2(along[0] * side, along[1] * side) + (rng() - 0.5) * 0.08,
       });
     }
   }
 
-  /** Clump of reeds (juncos) at the water's edge. */
-  private addReeds(x: number, z: number, seed: number): void {
-    const rng = seededRandom(seed * 13 + 5);
-    const stalks = 5 + Math.floor(rng() * 5);
-    for (let k = 0; k < stalks; k++) {
-      const h = 0.8 + rng() * 0.8;
-      const a = rng() * Math.PI * 2;
-      const r = rng() * 0.9;
-      const tone = REED_COLORS[Math.floor(rng() * REED_COLORS.length)];
-      const parent = propTransform(x + Math.cos(a) * r, WATER_LEVEL - 0.1, z + Math.sin(a) * r, rng() * Math.PI);
-      this.props.reeds.add(parent, [0.05, h, 0.05], [0, h / 2, 0], tone, [(rng() - 0.5) * 0.3, 0, (rng() - 0.5) * 0.3]);
-    }
-  }
-
-  /** Rowing yolas pulled up on the mud beside the docks. */
-  public getBeachedYolas(): BeachedSpot[] {
-    return this.beached;
+  /** Rowing yolas moored along the bank beside the docks. */
+  public getMooredYolas(): MooredSpot[] {
+    return this.moored;
   }
 
   /** Keeps vegetation and houses off the bus-boat stops. */
   private nearDock(x: number, z: number): boolean {
     return (
       this.dockSites.some((site) => Math.abs(site.x - x) < 5 && Math.abs(site.z - z) < 5) ||
-      this.beached.some((spot) => Math.abs(spot.x - x) < 2 && Math.abs(spot.z - z) < 2)
+      this.moored.some((spot) => Math.abs(spot.x - x) < 2 && Math.abs(spot.z - z) < 2)
     );
   }
 
   /**
-   * Places a bus-boat stop on the bank (its berth, and yolas pulled up
+   * Places a bus-boat stop on the bank (its berth, and yolas moored
    * beside it). The muelle itself is drawn later by buildDocks; local +x is
    * the open side facing the water, where the boat comes alongside.
    */
@@ -539,7 +517,7 @@ export class Environment {
     const site = placeOnBank(dock, waterSystem, DOCK_HALF_X);
     this.berths.set(dock.id, site.berth);
     this.dockSites.push({ x: site.x, z: site.z, rotation: site.rotation, seed: hashString(dock.id) });
-    if (site.toWater && rng() < 0.6) this.beachYolas(site, site.toWater, rng, waterSystem);
+    if (site.toWater && rng() < 0.6) this.moorYolas(site, site.toWater, rng, waterSystem);
   }
 
   /** The Blender muelle at every dock; box docks if the model can't load. */
@@ -651,7 +629,6 @@ const COLOR = {
   white: new Color3(0.9, 0.9, 0.86),
   railBlue: new Color3(0.35, 0.55, 0.75),
 };
-const REED_COLORS = [new Color3(0.55, 0.6, 0.3), new Color3(0.68, 0.64, 0.4), new Color3(0.4, 0.5, 0.25)];
 /** Corrugated roofs of Delta quinchos: galvanized grey, green and oxide red. */
 const ROOF_SHEET_COLORS = [new Color3(0.62, 0.64, 0.66), new Color3(0.27, 0.4, 0.3), new Color3(0.55, 0.22, 0.18)];
 
@@ -659,10 +636,8 @@ const ROOF_SHEET_COLORS = [new Color3(0.62, 0.64, 0.66), new Color3(0.27, 0.4, 0
 const DOCK_HALF_X = 1.5;
 /** Half its length along the shore (4.2 m), stairs not included. */
 const DOCK_HALF_ALONG = 2.1;
-/** The ground mesh sits this far below the water level. */
-const GROUND_OFFSET = -0.3;
-/** Height (relative to the ground mesh) of land next to water: just under the surface. */
-const BANK_UNDER_WATER = 0.15;
+/** Island ground height above the river: the low bank of the Delta islands. */
+const BANK_TOP = 0.6;
 /** How far from the World Doc point a dock may move to reach the bank. */
 const MAX_BANK_SEARCH = 40;
 
@@ -770,34 +745,6 @@ function hashString(text: string): number {
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
   return (h >>> 0) % 2147483646 + 1;
 }
-/**
- * Fills a square DynamicTexture in one upload. `shade` writes RGB in 0..1
- * into `out` for pixel (x, y); writing an ImageData is orders of magnitude
- * faster than one fillRect per pixel.
- */
-function paintPixels(
-  tex: DynamicTexture,
-  size: number,
-  shade: (x: number, y: number, out: [number, number, number]) => void
-): void {
-  const ctx = tex.getContext();
-  const img = ctx.getImageData(0, 0, size, size);
-  const data = img.data;
-  const rgb: [number, number, number] = [0, 0, 0];
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      shade(x, y, rgb);
-      const k = (y * size + x) * 4;
-      data[k] = clamp(rgb[0], 0, 1) * 255;
-      data[k + 1] = clamp(rgb[1], 0, 1) * 255;
-      data[k + 2] = clamp(rgb[2], 0, 1) * 255;
-      data[k + 3] = 255;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  tex.update(true);
-}
-
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
   return t * t * (3 - 2 * t);

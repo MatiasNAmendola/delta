@@ -9,6 +9,8 @@ import "@babylonjs/core/Meshes/thinInstanceMesh";
 export interface BatchMaterialOptions {
   specular?: Color3;
   emissive?: Color3;
+  /** "blob" = low-poly rounded clump (an icosahedron) instead of a box. */
+  shape?: "box" | "blob";
 }
 
 /**
@@ -27,7 +29,10 @@ export class InstancedBoxBatch {
   private tmpPos = new Vector3();
 
   constructor(name: string, scene: Scene, options: BatchMaterialOptions = {}) {
-    this.mesh = MeshBuilder.CreateBox(name, { size: 1 }, scene);
+    this.mesh =
+      options.shape === "blob"
+        ? MeshBuilder.CreateIcoSphere(name, { radius: 0.5, subdivisions: 1, flat: true }, scene)
+        : MeshBuilder.CreateBox(name, { size: 1 }, scene);
     const mat = new StandardMaterial(`${name}Mat`, scene);
     // Base color is white: the per-instance color buffer tints it
     mat.diffuseColor = Color3.White();

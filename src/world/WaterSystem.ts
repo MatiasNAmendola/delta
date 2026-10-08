@@ -9,19 +9,26 @@ import { Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { WATER_LEVEL, COLORS } from "../utils/constants";
-import type { River, WorldDoc } from "./WorldDoc";
+import type { River, Vec2, WorldDoc } from "./WorldDoc";
 import {
   createGrid,
   isSet,
   rasterizeAreas,
   riverCoverage,
-  triangulateAreas,
   uncoveredRuns,
   type WaterGrid,
 } from "./waterGeometry";
 import { getPointOnPath, hexToColor3, seededRandom } from "../utils/helpers";
 import { DeltaWaterMaterial } from "./DeltaWaterMaterial";
 import { WaterDistanceField } from "./WaterDistanceField";
+import { buildRegions, shorelineRings, triangulate, type Polygon } from "./shoreline";
+
+export interface Shore {
+  /** Closed shoreline rings, water on the left of their direction. */
+  rings: Vec2[][];
+  water: Polygon[];
+  land: Polygon[];
+}
 
 /** Rivers this much inside water areas are drawn only where the areas miss them. */
 const STRIP_SKIP_COVERAGE = 0.7;
@@ -42,8 +49,9 @@ export class WaterSystem {
   private waterGrid!: WaterGrid;
   /** Cells covered by water areas only (null when the world has none). */
   private areaGrid: WaterGrid | null = null;
-  /** River center lines drawn as water strips (see planStrips). */
+  /** River center lines rasterized as water where the OSM polygons miss them (see planStrips). */
   private strips: River[] = [];
+  private shore!: Shore;
   /** Water lookup grid cells per side: ~2 world units per cell (400 for the original 800-unit Delta). */
   private mapResolution: number;
 
@@ -89,6 +97,23 @@ export class WaterSystem {
         }
       }
     }
+
+    // One outline for everything: the water surface, the islands and the
+    // river banks are built from these rings, and navigation is re-derived
+    // from them so what you see is exactly what you can sail on
+    const rings = shorelineRings({ res, size, wet: (i, j) => this.waterGrid.cells[i * res + j] === 1 });
+    const regions = buildRegions(rings, size);
+    this.shore = { rings, water: regions.water, land: regions.land };
+    this.waterGrid = createGrid(size, res);
+    rasterizeAreas(
+      this.waterGrid,
+      regions.water.map((poly, i) => ({ id: `agua-${i}`, outer: poly.outer, holes: poly.holes }))
+    );
+  }
+
+  /** Shoreline rings (water on their left) and the water/land regions they bound. */
+  public getShore(): Shore {
+    return this.shore;
   }
 
   /**
@@ -231,23 +256,12 @@ export class WaterSystem {
     });
     this.tryCdnNormalMap();
 
-    // Water areas and river strips share the Delta water material
-    if (this.world.waterAreas && this.world.waterAreas.length > 0) {
-      this.waterMeshes.push(this.createWaterAreasMesh());
-    }
-    // All strips share the material: merge them into a single draw call
-    const strips = this.strips.map((river) => this.createRiverStrip(river));
-    const merged = strips.length > 1 ? Mesh.MergeMeshes(strips, true, true) : strips[0];
-    if (merged) {
-      merged.name = "riverStrips";
-      merged.material = this.water.material;
-      this.waterMeshes.push(merged);
-    }
+    this.waterMeshes.push(this.createWaterMesh());
   }
 
-  /** All water areas as one triangulated mesh: a single draw call. */
-  private createWaterAreasMesh(): Mesh {
-    const { vertices, indices } = triangulateAreas(this.world.waterAreas ?? []);
+  /** The whole water surface, from the shoreline outline: a single draw call. */
+  private createWaterMesh(): Mesh {
+    const { vertices, indices } = triangulate(this.shore.water);
     const count = vertices.length / 2;
     const positions = new Float32Array(count * 3);
     const normals = new Float32Array(count * 3);
@@ -259,7 +273,7 @@ export class WaterSystem {
       normals.set([0, 1, 0], i * 3);
       uvs.set([x / 20, z / 20], i * 2);
     }
-    const mesh = new Mesh("waterAreas", this.scene);
+    const mesh = new Mesh("water", this.scene);
     const vertexData = new VertexData();
     vertexData.positions = positions;
     vertexData.indices = indices;
@@ -269,62 +283,6 @@ export class WaterSystem {
     mesh.material = this.water.material;
     mesh.isPickable = false;
     mesh.freezeWorldMatrix();
-    return mesh;
-  }
-
-  private createRiverStrip(river: River): Mesh {
-    // ~8 samples per control point, but no denser than one every 2 units
-    let length = 0;
-    for (let i = 1; i < river.points.length; i++) {
-      length += Math.hypot(river.points[i][0] - river.points[i - 1][0], river.points[i][1] - river.points[i - 1][1]);
-    }
-    const samples = Math.max(8, Math.min(river.points.length * 8, Math.ceil(length / 2)));
-    const positions: number[] = [];
-    const indices: number[] = [];
-    const normals: number[] = [];
-    const uvs: number[] = [];
-
-    for (let i = 0; i <= samples; i++) {
-      const t = i / samples;
-      const [x, z] = getPointOnPath(river.points, t);
-
-      const t2 = Math.min(1, t + 0.01);
-      const [x2, z2] = getPointOnPath(river.points, t2);
-      const dx = x2 - x;
-      const dz = z2 - z;
-      const len = Math.sqrt(dx * dx + dz * dz) || 1;
-      const nx = -dz / len;
-      const nz = dx / len;
-
-      const halfW = river.width / 2;
-
-      // Left vertex
-      positions.push(x + nx * halfW, WATER_LEVEL + 0.05, z + nz * halfW);
-      normals.push(0, 1, 0);
-      uvs.push(0, t * 4);
-
-      // Right vertex
-      positions.push(x - nx * halfW, WATER_LEVEL + 0.05, z - nz * halfW);
-      normals.push(0, 1, 0);
-      uvs.push(1, t * 4);
-
-      if (i < samples) {
-        const vi = i * 2;
-        indices.push(vi, vi + 1, vi + 2);
-        indices.push(vi + 1, vi + 3, vi + 2);
-      }
-    }
-
-    const mesh = new Mesh("river_" + river.name, this.scene);
-    const vertexData = new VertexData();
-    vertexData.positions = positions;
-    vertexData.indices = indices;
-    vertexData.normals = normals;
-    vertexData.uvs = uvs;
-    vertexData.applyToMesh(mesh);
-
-    mesh.material = this.water.material;
-
     return mesh;
   }
 
