@@ -93,24 +93,31 @@ void main(void) {
     texture2D(shoreMap, uvS + vec2(0.0, e)).r - texture2D(shoreMap, uvS - vec2(0.0, e)).r
   );
   vec2 toBank = -normalize(grad + vec2(1e-5));
-  vec2 rh = normalize(R.xz + vec2(1e-5));
+  // The ripples only make the mirror image tremble: use a gently rippled surface for it
+  vec3 Nm = normalize(vec3(N.x * 0.18, 1.0, N.z * 0.18));
+  vec3 Rm = reflect(-V, Nm);
+  vec2 rh = normalize(Rm.xz + vec2(1e-5));
   float facing = dot(rh, toBank);
   float dBank = shore / max(facing, 0.12);
-  float rise = R.y / max(length(R.xz), 1e-3) * dBank;
+  float rise = Rm.y / max(length(Rm.xz), 1e-3) * dBank;
   // Canopy height along the bank: casuarinas and poplars, gaps, lower willows (world units, 8 m)
   vec2 along = p + rh * dBank;
   float canopy = 1.2 + 2.2 * smoothstep(0.25, 0.8, fract(sin(dot(floor(along * 0.35), vec2(12.9898, 78.233))) * 43758.5453) * 0.6 + 0.4 * sin(along.x * 0.7 + along.y * 0.5));
   float mirror = (1.0 - smoothstep(canopy * 0.85, canopy, rise)) * step(0.0, facing) * (1.0 - smoothstep(10.0, 15.0, shore));
   // Dark green foliage, darker trunks low down, a lighter sky gap between tufts
   float tuft = 0.55 + 0.45 * sin(along.x * 3.1 + rise * 2.3) * sin(along.y * 2.7 - rise * 1.7);
-  vec3 trees = mix(uBank * 0.6, uBank * 1.35, tuft * smoothstep(0.0, canopy, rise));
-  sky = mix(sky, trees, mirror * 0.92);
+  // Lit foliage as the trees look on the bank, darker low down (trunks, shade)
+  vec3 trees = mix(vec3(0.11, 0.14, 0.07), vec3(0.3, 0.4, 0.17), tuft * smoothstep(0.0, canopy, rise) * 0.8 + 0.2);
+  // The mirror's strength follows the calm surface, not every ripple
+  float fresnelM = 0.03 + 0.97 * pow(1.0 - max(dot(Nm, V), 0.0), 5.0);
 
   // Sediment-laden body color: lighter and yellower in the shallows by the bank
   vec3 body = mix(uShallow, uDeep, smoothstep(0.2, 3.0, shore));
   body *= 0.93 + 0.14 * slope.x;
 
   vec3 color = mix(body, sky, clamp(fresnel * 0.85, 0.0, 1.0));
+  // Against the dark, opaque brown water the mirror image shows even looking down
+  color = mix(color, trees, mirror * clamp(0.3 + fresnelM, 0.0, 0.88));
 
   // Sun: tight glints that sparkle on the ripples plus a soft sheen. Far
   // away the ripples are smaller than a pixel, so glints would only alias
@@ -122,7 +129,7 @@ void main(void) {
   // Water lapping the bank: a thin, moving line of foam
   float lap = 0.5 + 0.5 * sin(uTime * 1.4 + p.x * 1.2 + p.y * 0.9);
   float foam = 1.0 - smoothstep(0.0, 0.2 + lap * 0.15, shore + slope.y * 0.15);
-  color = mix(color, uFoam, foam * 0.6);
+  color = mix(color, uFoam, foam * 0.35);
 
   // Same EXP2 fog as the rest of the scene
   float fog = clamp(exp(-pow(dist * uFogDensity, 2.0)), 0.0, 1.0);

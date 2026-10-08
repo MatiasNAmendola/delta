@@ -55,3 +55,19 @@
 4. **Muelles con escalones al agua y baranda pintada**, **claro de pasto alrededor de las casas** y **escalera de mano** en los palafitos.
 5. **Troncos caídos y más juncos** en la orilla.
 6. **Horizonte de la ciudad** (Tigre y Nordelta) del lado del continente, como fondo lejano.
+
+## Implementado (2026-10-08)
+1. **Reflejo de árboles y casas:** en el shader del agua, sin un segundo render. Se estima dónde toca la orilla el rayo reflejado (con la distancia a la costa y su gradiente) y si a esa distancia todavía está debajo de las copas (casuarinas de 10–28 m). Para la imagen reflejada se usa una superficie apenas ondulada: tiembla pero no se rompe. Contra el agua marrón opaca se ve incluso mirando hacia abajo. Además, cerca de las orillas de los arroyos angostos el agua es más lisa.
+2. **Embarcaciones amarradas:**
+   - una lancha en el 50–85 % de los muelles particulares: casco de fibra, con consola y parabrisas o con cabina, que sube y baja con la marea;
+   - **marinas** llenas de lanchas en filas, con pontones, dentro de los espejos de agua reales de OSM con nombre de marina, club náutico o guardería ("Marina Santa Monica", "Club Náutico Cinave").
+3. **Casuarinas a escala real:** tronco de 9,5–12,5 m de diseño, unos 22–29 m con la copa.
+   - **Estación según la fecha real del hemisferio sur** (`src/world/season.ts`, o `?estacion=`): primavera con verdes nuevos, verano, otoño con álamos, sauces y frondas amarillos y naranjas, invierno con álamos y frondas pelados.
+   - **Santa ritas** fucsias, rosas o naranjas junto a la mitad de las casas en primavera y verano.
+4. **Muelles:**
+   - barandas pintadas de rojo, blanco, verde o azul en la mitad de los muelles;
+   - escalones que bajan al agua al final del muelle simple y de la glorieta;
+   - escalera de mano en los palafitos;
+   - **parque de pasto sin árboles** alrededor de cada casa y hasta el río.
+5. **Orilla:** el doble de juncos y **troncos caídos** de 6–13 m que salen de la barranca hacia el agua, medio hundidos.
+6. **Horizonte:** Tigre, Nordelta, San Fernando, Escobar, Campana, Zárate y las torres de Buenos Aires en su posición geográfica real (`src/world/Skyline.ts`). Se dibujan con el tamaño angular que tienen desde donde estás y con bruma según la distancia; los árboles cercanos los tapan.

@@ -3,6 +3,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { addDistanceFade } from "../distanceFade";
+import { leafTint, type Season } from "../season";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import "@babylonjs/core/Meshes/thinInstanceMesh";
@@ -37,6 +38,8 @@ interface Part {
   mesh: Mesh;
   /** Indices into the tree list drawn by this part this frame. */
   pick: number[];
+  /** Leaves (seasonal tint, dropped when bare) or trunk and branches. */
+  foliage: boolean;
 }
 
 /**
@@ -48,13 +51,15 @@ export class Forest {
   private spots: TreeSpot[] = [];
   private matrices = new Float32Array(0);
   private tints = new Float32Array(0);
+  private leafTints = new Float32Array(0);
+  private bare = new Uint8Array(0);
   private variantOf: Uint8Array = new Uint8Array(0);
   /** parts[species][variant][lod] = [trunk, foliage] */
   private parts = new Map<string, Part[]>();
   private lastRefresh = new Vector3(Infinity, 0, Infinity);
   private sightBlocked = false;
 
-  constructor(private scene: Scene) {}
+  constructor(private scene: Scene, private season: Season = "verano") {}
 
   add(spot: TreeSpot): void {
     this.spots.push(spot);
@@ -69,6 +74,8 @@ export class Forest {
     const n = this.spots.length;
     this.matrices = new Float32Array(n * 16);
     this.tints = new Float32Array(n * 4);
+    this.leafTints = new Float32Array(n * 4);
+    this.bare = new Uint8Array(n);
     this.variantOf = new Uint8Array(n);
     const m = new Matrix();
     const scaleV = new Vector3();
@@ -83,6 +90,11 @@ export class Forest {
       const r = h - Math.floor(h);
       const v = 0.86 + r * 0.26;
       this.tints.set([v * (0.95 + r * 0.1), v, v * (1.05 - r * 0.15), 1], i * 4);
+      // Leaves follow the season (season.ts); bare trees keep only their branches
+      const s2 = (h * 7.13) - Math.floor(h * 7.13);
+      const leaf = leafTint(t.species, this.season, s2);
+      if (leaf) this.leafTints.set([v * (0.95 + r * 0.1) * leaf[0], v * leaf[1], v * (1.05 - r * 0.15) * leaf[2], 1], i * 4);
+      else this.bare[i] = 1;
       this.variantOf[i] = Math.floor(r * 997) % VARIANTS;
     });
 
@@ -120,8 +132,8 @@ export class Forest {
         for (const lod of [0, 1] as const) {
           const tree = generateTree(sp, 101 + v * 37 + name.length * 7, lod);
           list.push(
-            { mesh: this.mesh(`${name}_${v}_${lod}_tronco`, tree.trunk, barkMats[lod]), pick: [] },
-            { mesh: this.mesh(`${name}_${v}_${lod}_follaje`, tree.foliage, leafMats[lod]), pick: [] }
+            { mesh: this.mesh(`${name}_${v}_${lod}_tronco`, tree.trunk, barkMats[lod]), pick: [], foliage: false },
+            { mesh: this.mesh(`${name}_${v}_${lod}_follaje`, tree.foliage, leafMats[lod]), pick: [], foliage: true }
           );
         }
       }
@@ -193,7 +205,7 @@ export class Forest {
         if (lod === 0 ? d2 > nearOut2 : d2 < nearIn2) continue;
         const base = (this.variantOf[i] * 2 + lod) * 2;
         list[base].pick.push(i);
-        list[base + 1].pick.push(i);
+        if (!this.bare[i]) list[base + 1].pick.push(i);
       }
     }
 
@@ -204,9 +216,10 @@ export class Forest {
         if (n === 0) continue;
         const mats = new Float32Array(n * 16);
         const cols = new Float32Array(n * 4);
+        const tints = part.foliage ? this.leafTints : this.tints;
         part.pick.forEach((i, k) => {
           mats.set(this.matrices.subarray(i * 16, i * 16 + 16), k * 16);
-          cols.set(this.tints.subarray(i * 4, i * 4 + 4), k * 4);
+          cols.set(tints.subarray(i * 4, i * 4 + 4), k * 4);
         });
         part.mesh.thinInstanceSetBuffer("matrix", mats, 16, false);
         part.mesh.thinInstanceSetBuffer("color", cols, 4, false);
