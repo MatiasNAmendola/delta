@@ -1,0 +1,23 @@
+{
+  "source_sha256": "b1be61c4bd7e5dddeb8e0a3dd44a7f1724560b95bd961fe1ed8f6f597262d522",
+  "source_unchanged": true,
+  "settings_identical": true,
+  "changed_vertex_count": 3129,
+  "changed_bounds_mm": [
+    [
+      -16.105051040649414,
+      -24.75647735595703,
+      5.014023780822754
+    ],
+    [
+      16.116405487060547,
+      42.03378677368164,
+      12.997364044189453
+    ]
+  ],
+  "all_geometry_above_13mm_unchanged": true,
+  "watertight_by_indices": true,
+  "volume_mm3": 30436.498481967323,
+  "previous_volume_mm3": 30461.961112963512,
+  "output": "lancha-rounded-fenders-p1s.3mf"
+}

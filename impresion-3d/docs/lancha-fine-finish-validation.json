@@ -1,0 +1,66 @@
+{
+  "status": "PASS",
+  "findings": [],
+  "source_sha256": "afc8356486de78190ee393213c2fb5b85b66157817f00a947cd61ab1b2eab61b",
+  "source_unchanged": true,
+  "geometry_and_other_contents_byte_identical": true,
+  "changed_keys": [
+    "outer_wall_acceleration",
+    "outer_wall_speed",
+    "support_interface_spacing",
+    "support_interface_top_layers"
+  ],
+  "changes": {
+    "outer_wall_acceleration": {
+      "before": [
+        "5000",
+        "5000"
+      ],
+      "after": [
+        "2000",
+        "2000"
+      ]
+    },
+    "outer_wall_speed": {
+      "before": [
+        "200",
+        "350"
+      ],
+      "after": [
+        "70",
+        "70"
+      ]
+    },
+    "support_interface_spacing": {
+      "before": "0.5",
+      "after": "0.25"
+    },
+    "support_interface_top_layers": {
+      "before": "2",
+      "after": "3"
+    }
+  },
+  "effective_gcode_settings": {
+    "outer_wall_speed": "70",
+    "outer_wall_acceleration": "2000",
+    "support_interface_top_layers": "3",
+    "support_interface_spacing": "0.25",
+    "support_top_z_distance": "0.2"
+  },
+  "output": "lancha-rounded-fenders-fine-finish-p1s.3mf",
+  "sliced": "lancha-rounded-fenders-fine-finish-p1s-sliced.3mf",
+  "sliced_sha256": "796774a39bc41912a29a770643e98dc48e20de2beb0ea6b0a345d3d6b908388f",
+  "gcode_header": [
+    "; BambuStudio 02.08.02.61",
+    "; model printing time: 1h 15m 3s; total estimated time: 1h 21m 36s",
+    "; total layer number: 173",
+    "; total filament length [mm] : 5343.17",
+    "; total filament volume [cm^3] : 12851.82",
+    "; total filament weight [g] : 16.19",
+    "; filament_density: 1.26",
+    "; filament_diameter: 1.75",
+    "; max_z_height: 20.84",
+    "; filament: 1",
+    "; support_material_on_wipe_tower: 0"
+  ]
+}

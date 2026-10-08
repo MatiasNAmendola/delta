@@ -1,0 +1,97 @@
+{
+  "actual_object_names": [
+    "lancha-integrated-fenders-p1s.stl"
+  ],
+  "build_items": [
+    {
+      "objectid": "2",
+      "printable": "1",
+      "transform": "1 0 0 0 1 0 0 0 1 128 128 11.903163",
+      "{http://schemas.microsoft.com/3dmanufacturing/production/2015/06}UUID": "00000002-b1ec-4553-aec9-835e5b724bb4"
+    }
+  ],
+  "cached_preview_names": [],
+  "emitted_settings": {
+    "bridge_no_support": "0",
+    "enable_support": "1",
+    "filament_settings_id": "\"Bambu PLA Basic @BBL P1S 0.4 nozzle\"",
+    "filament_type": "PLA",
+    "layer_height": "0.12",
+    "print_settings_id": "0.20mm Standard @BBL X1C",
+    "printer_model": "Bambu Lab P1S",
+    "printer_settings_id": "Bambu Lab P1S 0.4 nozzle",
+    "sparse_infill_density": "15%",
+    "support_bottom_z_distance": "0.2",
+    "support_critical_regions_only": "1",
+    "support_object_xy_distance": "0.35",
+    "support_on_build_plate_only": "0",
+    "support_remove_small_overhang": "1",
+    "support_style": "default",
+    "support_threshold_angle": "30",
+    "support_top_z_distance": "0.2",
+    "support_type": "tree(auto)"
+  },
+  "extruded_filament_mm_by_feature": {
+    "Bridge": 318.33578,
+    "Brim": 95.52025,
+    "Custom": 31.4,
+    "Floating vertical shell": 187.10694,
+    "Gap infill": 43.55658,
+    "Inner wall": 662.05187,
+    "Internal solid infill": 766.39833,
+    "Outer wall": 844.72363,
+    "Overhang wall": 48.4877,
+    "Sparse infill": 1560.55468,
+    "Support": 389.1167,
+    "Support interface": 0.43031,
+    "Top surface": 136.51324
+  },
+  "gcode_header": [
+    "; BambuStudio 02.08.02.61",
+    "; model printing time: 1h 0m 48s; total estimated time: 1h 7m 6s",
+    "; total layer number: 173",
+    "; total filament length [mm] : 5084.20",
+    "; total filament volume [cm^3] : 12228.93",
+    "; total filament weight [g] : 15.41",
+    "; filament_density: 1.26",
+    "; filament_diameter: 1.75",
+    "; max_z_height: 20.84",
+    "; filament: 1",
+    "; support_material_on_wipe_tower: 0"
+  ],
+  "interface_filament_mm_by_height": {
+    "14_to_19mm": 0.11646,
+    "below_6mm": 0.31385
+  },
+  "method": "Positive extrusion during XY moves/arcs; excludes E-only unretraction and negative wipe. Interface height bands are not unique contact attribution. No support-only time inferred.",
+  "saved_settings": {
+    "bridge_no_support": "0",
+    "enable_support": "1",
+    "filament_settings_id": [
+      "Bambu PLA Basic @BBL P1S 0.4 nozzle"
+    ],
+    "filament_type": [
+      "PLA"
+    ],
+    "layer_height": "0.12",
+    "print_settings_id": "0.20mm Standard @BBL X1C",
+    "printer_model": "Bambu Lab P1S",
+    "printer_settings_id": "Bambu Lab P1S 0.4 nozzle",
+    "sparse_infill_density": "15%",
+    "support_bottom_z_distance": "0.2",
+    "support_critical_regions_only": "1",
+    "support_object_xy_distance": "0.35",
+    "support_on_build_plate_only": "0",
+    "support_remove_small_overhang": "1",
+    "support_style": "default",
+    "support_threshold_angle": "30",
+    "support_top_z_distance": "0.2",
+    "support_type": "tree(auto)"
+  },
+  "source": "lancha-integrated-fenders-p1s.3mf",
+  "source_sha256": "63f637eeedd6d2635252199c241e549f148e8cb8338ded1838e18297508deea5",
+  "source_unchanged": true,
+  "stale_preview": true,
+  "support_estimated_g": 1.1806,
+  "support_percent_deposited_filament": 7.71
+}

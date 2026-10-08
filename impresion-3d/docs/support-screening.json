@@ -1,0 +1,354 @@
+{
+  "current_exact_planar_bed_contact_area_mm2": 0.0,
+  "historical_3mf_settings": [
+    {
+      "current_setup_confirmed": false,
+      "file": "lancha-optimized-reinforced-v2-p1s.3mf",
+      "settings": {
+        "enable_support": "1",
+        "filament_type": [
+          "PLA"
+        ],
+        "layer_height": "0.12",
+        "printer_model": "Bambu Lab P1S",
+        "printer_variant": "0.4",
+        "support_threshold_angle": "30",
+        "support_type": "tree(auto)"
+      }
+    },
+    {
+      "current_setup_confirmed": false,
+      "file": "lancha-optimized.3mf",
+      "settings": {
+        "enable_support": "1",
+        "filament_type": [
+          "PLA",
+          "PLA",
+          "PLA"
+        ],
+        "layer_height": "0.12",
+        "printer_model": "Bambu Lab P1S",
+        "printer_variant": "0.4",
+        "support_threshold_angle": "35",
+        "support_type": "tree(auto)"
+      }
+    }
+  ],
+  "hypothetical_flat_bases": [
+    {
+      "hypothetical_cut_z_mm": 0.01,
+      "remaining_screened_area_mm2_approx": 2454.6780550005033,
+      "section_bounds_xy_mm": [
+        -0.14558762166766098,
+        -32.868373238012325,
+        0.3029874104253337,
+        -24.651137569177052
+      ],
+      "section_contact_area_mm2": 2.4413063845095246
+    },
+    {
+      "hypothetical_cut_z_mm": 0.2,
+      "remaining_screened_area_mm2_approx": 2440.749904895795,
+      "section_bounds_xy_mm": [
+        -0.3071448600740662,
+        -37.16626054763635,
+        0.41065232076617836,
+        -10.620747525261088
+      ],
+      "section_contact_area_mm2": 17.18006625793981
+    },
+    {
+      "hypothetical_cut_z_mm": 0.5,
+      "remaining_screened_area_mm2_approx": 2406.3976249607767,
+      "section_bounds_xy_mm": [
+        -0.5067251801586198,
+        -39.262707504003195,
+        0.6598691236720896,
+        13.829478166530649
+      ],
+      "section_contact_area_mm2": 41.682055424743524
+    },
+    {
+      "hypothetical_cut_z_mm": 1.0,
+      "remaining_screened_area_mm2_approx": 2233.967685461817,
+      "section_bounds_xy_mm": [
+        -4.187707495680948,
+        -41.01536304490993,
+        4.258422436370742,
+        45.19639201596682
+      ],
+      "section_contact_area_mm2": 169.95541334002093
+    },
+    {
+      "hypothetical_cut_z_mm": 2.0,
+      "remaining_screened_area_mm2_approx": 1693.6569716029094,
+      "section_bounds_xy_mm": [
+        -6.42031779373717,
+        -42.507440431303955,
+        6.625375869994678,
+        45.540342465945955
+      ],
+      "section_contact_area_mm2": 658.2456165819873
+    },
+    {
+      "hypothetical_cut_z_mm": 3.0,
+      "remaining_screened_area_mm2_approx": 1074.5854415450472,
+      "section_bounds_xy_mm": [
+        -10.028542742948945,
+        -43.36990232626015,
+        10.163531608944597,
+        45.308460134588564
+      ],
+      "section_contact_area_mm2": 1255.767774607377
+    },
+    {
+      "hypothetical_cut_z_mm": 4.0,
+      "remaining_screened_area_mm2_approx": 843.9574480730283,
+      "section_bounds_xy_mm": [
+        -11.416863798451931,
+        -43.83863935196124,
+        11.501385548854195,
+        45.303214865175036
+      ],
+      "section_contact_area_mm2": 1588.600320246169
+    },
+    {
+      "hypothetical_cut_z_mm": 4.5,
+      "remaining_screened_area_mm2_approx": 843.1060258727947,
+      "section_bounds_xy_mm": [
+        -11.7713309608057,
+        -44.02760981099223,
+        11.864135254877628,
+        45.28147771074255
+      ],
+      "section_contact_area_mm2": 1656.388599600766
+    }
+  ],
+  "hypothetical_longitudinal_halves": {
+    "cut_face_area_mm2": 1619.4520906808762,
+    "left_half_screened_area_mm2_approx": 504.538788599603,
+    "right_half_screened_area_mm2_approx": 499.8486816146797,
+    "split_plane": "x=0; each cut face rests on bed"
+  },
+  "largest_upright_downward_patches": [
+    {
+      "area_mm2": 1574.287629816942,
+      "bounds_mm": [
+        [
+          -11.517496109008789,
+          -40.75934600830078,
+          0.36047598719596863
+        ],
+        [
+          11.541622161865234,
+          45.289424896240234,
+          4.478987216949463
+        ]
+      ]
+    },
+    {
+      "area_mm2": 171.62075672591322,
+      "bounds_mm": [
+        [
+          -10.95849323272705,
+          -39.110130310058594,
+          17.7919864654541
+        ],
+        [
+          11.233675956726074,
+          -28.877826690673828,
+          19.363203048706055
+        ]
+      ]
+    },
+    {
+      "area_mm2": 75.78542881301847,
+      "bounds_mm": [
+        [
+          -12.060287475585938,
+          -29.110130310058594,
+          17.74268341064453
+        ],
+        [
+          12.170953750610352,
+          36.36421203613281,
+          19.613323211669922
+        ]
+      ]
+    },
+    {
+      "area_mm2": 69.22701051252685,
+      "bounds_mm": [
+        [
+          -11.922676086425781,
+          18.842681884765625,
+          5.588798999786377
+        ],
+        [
+          11.78217601776123,
+          46.39639663696289,
+          6.143704891204834
+        ]
+      ]
+    },
+    {
+      "area_mm2": 45.478588007098224,
+      "bounds_mm": [
+        [
+          -13.656935691833496,
+          -42.82002258300781,
+          8.163223266601562
+        ],
+        [
+          -2.6766059398651123,
+          44.968685150146484,
+          11.447955131530762
+        ]
+      ]
+    },
+    {
+      "area_mm2": 44.9070918738245,
+      "bounds_mm": [
+        [
+          2.4270050525665283,
+          -42.97896957397461,
+          8.124195098876953
+        ],
+        [
+          13.798855781555176,
+          44.25341033935547,
+          11.296100616455078
+        ]
+      ]
+    },
+    {
+      "area_mm2": 40.65877681897174,
+      "bounds_mm": [
+        [
+          -13.184232711791992,
+          -29.462425231933594,
+          16.223983764648438
+        ],
+        [
+          -10.184232711791992,
+          24.037574768066406,
+          17.538278579711914
+        ]
+      ]
+    },
+    {
+      "area_mm2": 35.470541596765436,
+      "bounds_mm": [
+        [
+          -0.3052600026130676,
+          -16.591835021972656,
+          0.1234700009226799
+        ],
+        [
+          0.3996810019016266,
+          41.56544876098633,
+          1.8719209432601929
+        ]
+      ]
+    },
+    {
+      "area_mm2": 34.34219062826996,
+      "bounds_mm": [
+        [
+          -9.766324043273926,
+          -25.360130310058594,
+          17.774099349975586
+        ],
+        [
+          13.733675956726074,
+          37.889869689941406,
+          19.101707458496094
+        ]
+      ]
+    },
+    {
+      "area_mm2": 34.00215494210994,
+      "bounds_mm": [
+        [
+          4.407317161560059,
+          -41.7896842956543,
+          9.94644546508789
+        ],
+        [
+          14.15223503112793,
+          44.650787353515625,
+          12.766388893127441
+        ]
+      ]
+    },
+    {
+      "area_mm2": 33.745728513516866,
+      "bounds_mm": [
+        [
+          -13.774728775024414,
+          -41.86915969848633,
+          9.958507537841797
+        ],
+        [
+          -4.703575134277344,
+          44.619564056396484,
+          12.803288459777832
+        ]
+      ]
+    },
+    {
+      "area_mm2": 31.149404091405287,
+      "bounds_mm": [
+        [
+          10.314836502075195,
+          -29.473779678344727,
+          16.224159240722656
+        ],
+        [
+          13.314836502075195,
+          24.276220321655273,
+          17.55550193786621
+        ]
+      ]
+    }
+  ],
+  "limitations": [
+    "Not sliced; no support volume or print-success claim",
+    "Area score does not measure stability, bridges, cooling or support accessibility",
+    "Hypothetical cut screening uses triangle centroids; no mesh cut performed"
+  ],
+  "method": "45-degree downward-face area; ignores first 0.2 mm above each hypothetical bed",
+  "orientations": [
+    {
+      "orientation": "upright",
+      "print_height_mm": 23.806325912475586,
+      "screened_downward_area_mm2": 2454.8849331767046
+    },
+    {
+      "orientation": "roof_down",
+      "print_height_mm": 23.806325912475586,
+      "screened_downward_area_mm2": 2718.614667471861
+    },
+    {
+      "orientation": "left_side_down",
+      "print_height_mm": 32.22145652770996,
+      "screened_downward_area_mm2": 2260.8851108177532
+    },
+    {
+      "orientation": "right_side_down",
+      "print_height_mm": 32.22145652770996,
+      "screened_downward_area_mm2": 2261.0099325838596
+    },
+    {
+      "orientation": "bow_down",
+      "print_height_mm": 93.0,
+      "screened_downward_area_mm2": 617.9804371395359
+    },
+    {
+      "orientation": "stern_down",
+      "print_height_mm": 93.0,
+      "screened_downward_area_mm2": 649.1137582599908
+    }
+  ],
+  "source_sha256": "5f43ce2bf937912b09e3064b674bb8a65609054649aa80988de8423c51f355be"
+}

@@ -1,0 +1,47 @@
+{
+  "source_sha256": "02383c78dcaedf63d0dbd3412194839ee0e8a5d54c7cc63e64bde9a63d4e28f5",
+  "source_unchanged": true,
+  "windscreen_sections": [
+    {
+      "x_mm": -3,
+      "z_mm": 14,
+      "before": "MULTILINESTRING ((-3 -32.897621944849696, -3 -32.10313730359645), (-3 -31.76659350971796, -3 -24))",
+      "after": "LINESTRING (-3 -32.897621944849696, -3 -24)",
+      "gap_closed": true
+    },
+    {
+      "x_mm": -3,
+      "z_mm": 16,
+      "before": "MULTILINESTRING ((-3 -32.121311763760225, -3 -31.342159251184096), (-3 -30.78100659393558, -3 -24))",
+      "after": "LINESTRING (-3 -32.121311763760225, -3 -24)",
+      "gap_closed": true
+    },
+    {
+      "x_mm": -3,
+      "z_mm": 18,
+      "before": "MULTILINESTRING ((-3 -31.3335273428006, -3 -30.54914202826737), (-3 -29.795419483873232, -3 -24))",
+      "after": "LINESTRING (-3 -31.3335273428006, -3 -24)",
+      "gap_closed": true
+    }
+  ],
+  "settings_byte_identical": true,
+  "output": "lancha-closed-windscreen-p1s.3mf",
+  "stl": "lancha-closed-windscreen-p1s.stl",
+  "watertight": true,
+  "winding_consistent": true,
+  "components": 1,
+  "bounds_mm": [
+    [
+      -16.105051040649414,
+      -46.49858093261719,
+      0.0
+    ],
+    [
+      16.116405487060547,
+      46.50141906738281,
+      20.877643585205078
+    ]
+  ],
+  "added_backing_and_web_volume_mm3": 59.059435885788844,
+  "proposal": "Recessed sloped windscreen backing joins pillars; optional lower fender webs only with --fenders. Original source unchanged."
+}

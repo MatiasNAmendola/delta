@@ -1,0 +1,30 @@
+{
+  "bounds_mm": [
+    [
+      -16.105051040649414,
+      -46.49858093261719,
+      0.0
+    ],
+    [
+      16.116405487060547,
+      46.50141906738281,
+      23.806325912475586
+    ]
+  ],
+  "faces": 54668,
+  "findings": [],
+  "missing_roof_volume_mm3": 0.0001419250263647124,
+  "non_manifold_edges": 0,
+  "output_sha256": "80b6c5f1b214c91df6d52b9e48c5d5d66f057b0775a9e030f906aaa85ff6e74a",
+  "positive_solids": 2,
+  "remaining_mast_volume_mm3": 0.0,
+  "roof_volume_tolerance_mm3": 0.001,
+  "solid_volumes_mm3": [
+    19201.037652196555,
+    3.055511389515473
+  ],
+  "source_sha256": "e04367b89f6ac8428eb74045ac80222d512faa5ded543bcd24f0daeece218651",
+  "status": "PASS",
+  "watertight": true,
+  "winding_consistent": true
+}
