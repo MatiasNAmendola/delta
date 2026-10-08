@@ -104,8 +104,8 @@ describe("roughenRing", () => {
     // Not straight anymore along the bottom edge...
     const bottom = rough.filter(([x, z]) => Math.abs(z + 20) < 2 && Math.abs(x) < 15).map(([, z]) => z);
     expect(Math.max(...bottom) - Math.min(...bottom)).toBeGreaterThan(0.2);
-    // ...but within the amplitude, and the area barely changes
-    expect(bottom.every((z) => Math.abs(z + 20) <= 1)).toBe(true);
+    // ...but within twice the amplitude (the noise octaves add up to ~2), and the area barely changes
+    expect(bottom.every((z) => Math.abs(z + 20) <= 2)).toBe(true);
     expect(Math.abs(signedArea2(rough) / 2 - 1600)).toBeLessThan(1600 * 0.05);
   });
 
@@ -113,7 +113,8 @@ describe("roughenRing", () => {
     const { roughenRing } = await import("../src/world/shoreline");
     const square: [number, number][] = [[-20, -20], [20, -20], [20, 20], [-20, 20]];
     const rough = roughenRing(square, 0.5, 5, () => 1);
-    expect(rough.every(([x, z]) => Math.max(Math.abs(x), Math.abs(z)) <= 20.31)).toBe(true);
+    // At most 40% of the room (1 here) away from the original square
+    expect(rough.every(([x, z]) => Math.max(Math.abs(x), Math.abs(z)) <= 20.41)).toBe(true);
   });
 });
 

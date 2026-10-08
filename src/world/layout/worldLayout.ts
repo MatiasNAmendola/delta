@@ -18,7 +18,7 @@ import { WaterDistanceField } from "../WaterDistanceField";
 import { fbm, smoothstep } from "./noise";
 
 /** Bump when the layout algorithm changes: stale baked files are then ignored. */
-export const LAYOUT_VERSION = 2;
+export const LAYOUT_VERSION = 5;
 /** Shoreline points are quantized to 1/256 unit (3 cm): small, exact deltas in the baked file. */
 export const POINT_QUANTUM = 256;
 
@@ -27,8 +27,8 @@ const STRIP_SKIP_COVERAGE = 0.7;
 /** Extra navigable width beside each river strip. */
 const STRIP_COLLISION_MARGIN = 0.5;
 /** Spacing of shoreline points and how far (world units, 8 m each) banks wander in and out. */
-const SHORE_STEP = 0.8;
-const SHORE_ROUGHNESS = 0.7;
+const SHORE_STEP = 0.5;
+const SHORE_ROUGHNESS = 1.15;
 /** Signed shore distance range (world units) of the shore SDF texture. */
 export const SHORE_SDF_RANGE = 2;
 export const SHORE_SDF_RES = 2048;
