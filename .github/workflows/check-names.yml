@@ -22,7 +22,9 @@ jobs:
       - name: Cross-check names
         run: python3 scripts/names/check_names.py
       - name: IGN geometry of rivers missing from the maps
-        run: python3 scripts/names/fetch_ign.py "Río Carapachay"
+        run: |
+          python3 scripts/names/fetch_ign.py "Río Carapachay"
+          python3 scripts/names/osm_lookup.py Carapachay || true
       - uses: actions/upload-artifact@v4
         with:
           name: names-report
