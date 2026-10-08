@@ -12,3 +12,8 @@ public/worlds/
 
 # 3D-print meshes (~62 MB; see impresion-3d/README.md for backup)
 impresion-3d/modelos/
+
+# Local secrets (API keys, tokens)
+.env
+.env.*
+!.env.example
