@@ -7,6 +7,8 @@
  * to each other.
  */
 import type { HullType } from "./buoyancy";
+import type { WakeRibbonOptions } from "../world/WakeRibbon";
+import { METERS_PER_UNIT } from "../utils/constants";
 
 export type BoatTypeId = "colectiva" | "travesia" | "single" | "kayak" | PrivateBoatId;
 
@@ -54,6 +56,10 @@ export interface BoatSpec {
   hull: HullType;
   /** 0..1: how much the river's current carries it (a kayak drifts, a heavy lancha barely). */
   currentDrift: number;
+  /** Real top speed (m/s): sets the wake's wavelengths and Froude number (wakePhysics.ts). */
+  realSpeed: number;
+  /** What pushes it: the turbulent wake behind (white wash, jet, or paddle swirls). */
+  propulsion: "helice" | "turbina" | "remo" | "pala";
   /** How big a wake it throws (1 = lancha colectiva). */
   wake: number;
   camera: { distance: number; height: number };
@@ -79,6 +85,8 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     humanPowered: false,
     hull: "displacement",
     currentDrift: 0.15,
+    realSpeed: 5.1,
+    propulsion: "helice",
     wake: 1,
     camera: { distance: 8, height: 2.3 },
     rules: ["keepRight", "speedZones", "wakeCourtesy"],
@@ -102,6 +110,8 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     humanPowered: true,
     hull: "displacement",
     currentDrift: 0.75,
+    realSpeed: 3.5,
+    propulsion: "remo",
     wake: 0.15,
     camera: { distance: 4.5, height: 1.3 },
     rules: ["keepRight", "takeWakeBowFirst", "hugTheBank"],
@@ -126,6 +136,8 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     humanPowered: true,
     hull: "displacement",
     currentDrift: 0.8,
+    realSpeed: 5.0,
+    propulsion: "remo",
     wake: 0.04,
     camera: { distance: 3.2, height: 1 },
     rules: ["takeWakeBowFirst"],
@@ -147,6 +159,8 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     humanPowered: true,
     hull: "displacement",
     currentDrift: 1,
+    realSpeed: 2.2,
+    propulsion: "pala",
     wake: 0.05,
     camera: { distance: 3, height: 1 },
     rules: ["takeWakeBowFirst", "hugTheBank"],
@@ -170,6 +184,8 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     humanPowered: false,
     hull: "planing",
     currentDrift: 0.3,
+    realSpeed: 15,
+    propulsion: "helice",
     wake: 0.75,
     camera: { distance: 3.4, height: 1.1 },
     rules: ["keepRight", "speedZones", "wakeCourtesy"],
@@ -193,6 +209,8 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     humanPowered: false,
     hull: "displacement",
     currentDrift: 0.55,
+    realSpeed: 8,
+    propulsion: "helice",
     wake: 0.25,
     camera: { distance: 3, height: 1 },
     rules: ["keepRight", "speedZones", "wakeCourtesy"],
@@ -216,6 +234,8 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     humanPowered: false,
     hull: "planing",
     currentDrift: 0.22,
+    realSpeed: 13,
+    propulsion: "helice",
     wake: 0.9,
     camera: { distance: 4, height: 1.25 },
     rules: ["keepRight", "speedZones", "wakeCourtesy"],
@@ -239,6 +259,8 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     humanPowered: false,
     hull: "planing",
     currentDrift: 0.3,
+    realSpeed: 16,
+    propulsion: "helice",
     wake: 0.6,
     camera: { distance: 3.2, height: 1.05 },
     rules: ["keepRight", "speedZones", "wakeCourtesy"],
@@ -262,7 +284,9 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     humanPowered: false,
     hull: "planing",
     currentDrift: 0.4,
-    wake: 0.35,
+    realSpeed: 22,
+    propulsion: "turbina",
+    wake: 0.6,
     camera: { distance: 2.4, height: 0.85 },
     rules: ["keepRight", "speedZones", "wakeCourtesy"],
     stats: { velocidad: 5, maniobra: 5, olas: 2 },
@@ -288,4 +312,18 @@ export function isBoatType(value: unknown): value is BoatTypeId {
 export function parseBoatType(value: unknown): BoatTypeId | null {
   if (value === "open") return "runabout";
   return isBoatType(value) ? value : null;
+}
+
+/** The physical wake of a boat (WakeRibbon): sizes in metres, real speed. */
+export function wakeOptions(spec: BoatSpec): WakeRibbonOptions {
+  return {
+    length: spec.length * METERS_PER_UNIT,
+    beam: spec.width * METERS_PER_UNIT,
+    hull: spec.hull,
+    topSpeed: spec.realSpeed,
+    // Wave height at top speed: 35 cm for the lancha colectiva, scaled by its
+    // wake rating; even a kayak raises a few centimetres
+    height: Math.max(0.04, 0.35 * spec.wake),
+    propulsion: spec.propulsion,
+  };
 }

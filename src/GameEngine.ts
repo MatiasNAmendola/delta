@@ -12,6 +12,7 @@ import { loadLayout } from "./world/layout/loadLayout";
 import { WaterSystem } from "./world/WaterSystem";
 import { Environment } from "./world/Environment";
 import { WakeEffect } from "./world/WakeEffect";
+import { wakeOptions } from "./boat/boatTypes";
 import { YolaTraffic } from "./world/Yolas";
 import { Boat } from "./boat/Boat";
 import { BOAT_TYPES, parseBoatType, type BoatTypeId, type BoatSpec } from "./boat/boatTypes";
@@ -279,6 +280,7 @@ export class GameEngine {
       length: this.spec.length,
       maxSpeed: this.spec.maxSpeed,
       strength: this.spec.wake,
+      ribbon: wakeOptions(this.spec),
     });
   }
 
@@ -351,7 +353,8 @@ ${this.spec.mission}`, 2800);
         this.boat.position.x,
         this.boat.position.z,
         this.boat.rotation,
-        this.boat.speed
+        this.boat.speed,
+        this.waterSystem.level()
       );
 
       // The river, rowers, other lanchas and floating trash keep moving

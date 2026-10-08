@@ -77,10 +77,14 @@ describe("wakes", () => {
   it("are felt behind a passing boat, inside the V, not ahead of it", () => {
     const wake = { x: 0, z: 0, heading: 0, strength: 1, length: 2 }; // heading +z
     let behind = 0;
-    for (let t = 0; t < 2; t += 0.05) behind = Math.max(behind, Math.abs(wakeHeight(wake, 2.2, -5, t)));
+    // Along a line across the track, 5 units behind: waves inside the Kelvin V
+    for (let x = -2; x <= 2; x += 0.05) behind = Math.max(behind, Math.abs(wakeHeight(wake, x, -5)));
     let ahead = 0;
-    for (let t = 0; t < 2; t += 0.05) ahead = Math.max(ahead, Math.abs(wakeHeight(wake, 0, 5, t)));
+    for (let x = -2; x <= 2; x += 0.05) ahead = Math.max(ahead, Math.abs(wakeHeight(wake, x, 5)));
+    let outside = 0;
+    for (let x = 4; x <= 6; x += 0.05) outside = Math.max(outside, Math.abs(wakeHeight(wake, x, -5)));
     expect(behind).toBeGreaterThan(0.005);
+    expect(outside).toBeLessThan(behind * 0.1);
     expect(ahead).toBe(0);
   });
 });

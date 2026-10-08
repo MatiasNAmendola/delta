@@ -15,6 +15,7 @@ Cada ADR registra una decisión: el contexto, qué decidimos, qué otras opcione
 | [0009](0009-corrientes-y-sudestada.md) | Corrientes, marea, olas y sudestada; flotabilidad | Implementada |
 | [0010](0010-embarcaciones-y-regatas.md) | Lanchas particulares y regatas de remo | Implementada |
 | [0011](0011-casas-muelles-y-streaming.md) | Casas, muelles particulares y dibujar solo lo cercano | Implementada |
+| [0012](0012-fisica-de-la-estela.md) | Física de la estela (Kelvin, Froude, estela turbulenta) | Implementada |
 
 ## Cómo medimos
 

@@ -1,0 +1,70 @@
+# 0012 · Física de la estela
+
+**Estado:** Implementada · **Fecha:** 2026-10-08
+
+## Contexto
+La estela anterior era decorativa y físicamente incorrecta:
+- anillos que se expandían en círculo, que es lo que hace una piedra en el agua, no un barco;
+- dos franjas de espuma en V con un ángulo fijo;
+- bolas de partículas blancas.
+
+En la realidad un barco deja dos cosas distintas:
+- **olas**, el patrón de Kelvin;
+- la **estela turbulenta**, el "hilo" blanco de la hélice y el casco.
+
+Además, el patrón cambia mucho entre una lancha colectiva, una lancha que planea, una moto de agua y un kayak.
+
+## Lo que dice la física
+- **Kelvin (1887).** Un barco a velocidad constante en aguas profundas deja un patrón fijo respecto de él, dentro de una cuña de **19,47°** (arcsen 1/3) a cada lado.
+  - Hay dos familias de olas: las **transversales**, perpendiculares al rumbo, y las **divergentes**, que salen en diagonal de los costados. Las dos se juntan en los bordes (**olas de cúspide**, las más altas).
+  - Una ola que viaja con ángulo θ respecto del rumbo tiene número de onda k = k₀/cos²θ, con k₀ = g/U². Su longitud de onda es λ = 2πU²/g·cos²θ: así acompaña al barco. Las transversales son las más largas (2πU²/g).
+- **Rabaud y Moisy (2013), Darmon, Benzaquen y Raphaël (2014).** Un casco de largo L no puede generar olas mucho más largas que él.
+  - Por encima de Froude Fr = U/√(gL) ≈ 0,5, las transversales y las de cúspide se apagan.
+  - Las olas más fuertes quedan en un ángulo que se cierra como **1/Fr**, aunque el borde exterior siga en 19,47°.
+  - Por eso una lancha rápida o una moto de agua dejan una V angosta, y la colectiva la V abierta.
+- **Lanchas de planeo.** La ola más grande se forma en la transición al planeo (el "escalón", Fr ≈ 0,5). Ya planeando la ola baja, y las transversales bajan con la velocidad (Tavakoli y otros, 2022, sobre ensayos en canal). Otras fuentes de la industria lo describen de manera anecdótica.
+- **Estela turbulenta.**
+  - Es espuma y burbujas de la hélice y el casco, del ancho de la manga al principio, y se ensancha lento, como t^0,4 (Kapustin y otros).
+  - Dura minutos y deja una franja más lisa (los surfactantes que suben las burbujas amortiguan las olas cortas). Por eso las estelas se ven desde satélites.
+  - Un kayak o un bote a remo no la tienen: dejan un remolino en cada palada.
+
+## Decisión
+- **`src/world/wakePhysics.ts`** (puro, con tests): elevación de Kelvin por fase estacionaria.
+  - Calcula las dos ramas por punto, con el factor de cúspide (Airy, acotado), decaimiento 1/√r y un **filtro de casco**. El filtro corta las olas mucho más largas que el casco (pasa-altos, la explicación de Rabaud y Moisy) y las mucho más cortas que la manga (pasa-bajos).
+  - Tiene además el crecimiento de la ola con el Froude según el tipo de casco y el ancho de la estela turbulenta.
+  - Los tests verifican cinco cosas:
+    - 19,47° para barcos lentos;
+    - el ángulo de las olas más fuertes se cierra a la mitad cuando Fr se duplica;
+    - λ transversal = 2πU²/g;
+    - agua calma delante de la proa y fuera de la cuña;
+    - la ola máxima de planeo en el escalón.
+- **`src/world/WakeRibbon.ts`**: una cinta que sigue la trayectoria real de la proa, ancha como la cuña de Kelvin. Su shader evalúa la misma ecuación en cada píxel. A eso se suman:
+  - la espuma de la hélice (que se ensancha y pasa a mancha lisa);
+  - los "bigotes" de la ola de proa;
+  - crestas que rompen en estelas grandes;
+  - remolinos de pala (kayak, alternados) y de remos (a ambos lados).
+  - Las olas que el píxel no puede mostrar se atenúan, para evitar el centelleo.
+- **Velocidad real.** Cada embarcación tiene su velocidad real máxima (`realSpeed`: colectiva 5,1 m/s, kayak 2,2, lancha de paseo 15, moto 22) y su propulsión. En el juego los barcos van mucho más rápido que en la realidad, así que la longitud de onda, el Froude y la "edad" de la espuma se calculan con la velocidad real, no con la del juego.
+- **Tráfico y balanceo.** Las lanchas del tráfico dibujan la misma estela, y te mueven con la misma función (`waterConditions.wakeHeight`).
+- **Lo que se sacó:** los anillos, las franjas en V, el disco de proa y la espuma plana de partículas. Las partículas que quedan son chicas: el agitado de la hélice y el rocío de las lanchas de planeo.
+
+## Resultado (Froude a la velocidad máxima)
+| Embarcación | Fr | Estela |
+|---|---|---|
+| Kayak | 0,3 | V de Kelvin de 2–4 cm y remolinos de pala |
+| Lancha colectiva | 0,4 | V de Kelvin completa, cúspides marcadas, espuma de hélice |
+| Lancha de paseo, en el escalón | 0,8 | La ola más grande, V todavía abierta |
+| Lancha de paseo, planeando | 2 | V angosta (~7°) y franja blanca |
+| Moto de agua | 4 | V muy angosta (~3,5°) y la franja ancha del chorro |
+
+## Fuentes
+- [Rabaud y Moisy, "Ship wakes: Kelvin or Mach angle?", PRL 110, 214503 (2013), arXiv:1304.2653](https://arxiv.org/pdf/1304.2653)
+- [Darmon, Benzaquen y Raphaël, "Kelvin wake pattern at large Froude numbers", J. Fluid Mech. 738, R3 (2014)](https://www.cambridge.org/core/journals/journal-of-fluid-mechanics/article/kelvin-wake-pattern-at-large-froude-numbers/6F9009238F6CA9E1221B0636B987361A)
+- [Physics World: "Physicists rethink celebrated Kelvin wake pattern for ships"](https://physicsworld.com/a/physicists-rethink-celebrated-kelvin-wake-pattern-for-ships/)
+- [WikiWaves: Ship Kelvin Wake (λ(θ) = 2πU²cos²θ/g)](https://wikiwaves.org/Ship_Kelvin_Wake)
+- [Kelvin-Froude wake patterns of a traveling pressure disturbance (arXiv:1902.01884)](https://arxiv.org/pdf/1902.01884)
+- [The Kelvin wake pattern (scipython)](https://scipython.com/blog/the-kelvin-wake-pattern/)
+- [Wake waves of a planing boat: an experimental model (Aalto)](https://aaltodoc.aalto.fi/items/e14c17c5-8823-418e-8adc-a3182387cef8)
+- [Wake shapes behind planing hull forms (Savitsky, TRB)](https://trid.trb.org/View/402408)
+- [Kapustin y otros, ancho de la estela turbulenta ∝ t^0,4 (EGU 2010)](https://meetingorganizer.copernicus.org/EGU2010/EGU2010-387.pdf)
+- [Structure and persistence of ship wakes (arXiv:1807.00441)](https://arxiv.org/pdf/1807.00441)

@@ -7,6 +7,8 @@
  * boats (a kayak tops at ~4 units/s), not real m/s, so the current is felt.
  */
 import type { River } from "./WorldDoc";
+import { froude, kelvinElevation, type WakeSource } from "./wakePhysics";
+import { METERS_PER_UNIT } from "../utils/constants";
 
 /** Game seconds per tide cycle (real: 12.42 h). One cycle in about 8 minutes of play. */
 export const TIDE_PERIOD = 480;
@@ -170,22 +172,31 @@ export class WaterConditions {
   }
 }
 
+/** A lancha colectiva of the traffic: real top speed (m/s) and wave height there (m). */
+const TRAFFIC_SPEED = 5.1;
+const TRAFFIC_WAKE = 0.35;
+
 /**
- * A boat's wake as felt at (x, z): waves inside the V behind it (Kelvin
- * angle ~19.5°), fading with distance.
+ * A passing boat's wake as felt at (x, z), in world units: the same Kelvin
+ * physics the wake shader draws (wakePhysics.ts). Steady in the boat's
+ * frame; it rocks you as the boat goes by.
  */
-export function wakeHeight(w: Wake, x: number, z: number, t: number): number {
+export function wakeHeight(w: Wake, x: number, z: number, _t = 0): number {
   const fx = Math.sin(w.heading);
   const fz = Math.cos(w.heading);
   const rx = x - w.x;
   const rz = z - w.z;
-  const behind = -(rx * fx + rz * fz) - w.length * 0.3;
-  if (behind < 0 || behind > 14) return 0;
-  const side = Math.abs(rx * fz - rz * fx);
-  const edge = behind * 0.354 + w.length * 0.3; // tan(19.5°) ≈ 0.354
-  if (side > edge + 0.8) return 0;
-  // Strongest along the arms of the V, where the wave crests pile up
-  const arm = Math.exp(-(((side - edge) / 0.6) ** 2));
-  const d = Math.hypot(behind, side);
-  return 0.045 * w.strength * arm * Math.exp(-d / 6) * Math.sin(d * 3.2 - t * 5);
+  // From the bow (half a hull ahead of the center), in metres
+  const behind = (-(rx * fx + rz * fz) + w.length / 2) * METERS_PER_UNIT;
+  const side = (rx * fz - rz * fx) * METERS_PER_UNIT;
+  const L = w.length * METERS_PER_UNIT;
+  const source: WakeSource = {
+    U: TRAFFIC_SPEED * w.strength,
+    L,
+    beam: L * 0.31,
+    height: TRAFFIC_WAKE,
+    topFroude: froude(TRAFFIC_SPEED, L),
+    hull: "displacement",
+  };
+  return kelvinElevation(behind, side, source) / METERS_PER_UNIT;
 }

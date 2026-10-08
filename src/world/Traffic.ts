@@ -9,6 +9,8 @@ import type { WorldDoc, Vec2 } from "./WorldDoc";
 import type { WaterSystem } from "./WaterSystem";
 import { offsetPolyline, PingPongRoute } from "./rowingRoute";
 import type { Wake } from "./waterConditions";
+import { WakeRibbon } from "./WakeRibbon";
+import { BOAT_TYPES, wakeOptions } from "../boat/boatTypes";
 
 interface Lancha {
   node: TransformNode;
@@ -19,6 +21,7 @@ interface Lancha {
   z: number;
   heading: number;
   cooldown: number;
+  wake: WakeRibbon;
 }
 
 const COUNT = 5;
@@ -65,7 +68,8 @@ export class Traffic {
         node.scaling.setAll(s);
         for (const root of copy.rootNodes) (root as TransformNode).position.y -= min.y + BOAT_LENGTH * 0.035 / s;
         node.getChildMeshes().forEach((m) => (m.isPickable = false));
-        this.boats.push({ node, route, traveled: rng() * route.length, speed: SPEED * (0.8 + rng() * 0.4), x: 0, z: 0, heading: 0, cooldown: 0 });
+        const wake = new WakeRibbon(this.scene, wakeOptions(BOAT_TYPES.colectiva));
+        this.boats.push({ node, route, traveled: rng() * route.length, speed: SPEED * (0.8 + rng() * 0.4), x: 0, z: 0, heading: 0, cooldown: 0, wake });
       });
     } catch (error) {
       console.warn("Traffic disabled (no lancha model):", error);
@@ -83,6 +87,9 @@ export class Traffic {
       b.heading = p.heading;
       b.node.position.set(p.x, WATER_LEVEL + level, p.z);
       b.node.rotation.y = p.heading;
+      // Its Kelvin wake on the water, from the bow
+      const half = BOAT_LENGTH / 2;
+      b.wake.update(dt, p.x + Math.sin(p.heading) * half, p.z + Math.cos(p.heading) * half, b.speed / SPEED, level);
     }
   }
 
