@@ -10,7 +10,7 @@ export function injectHudTheme(): void {
   injected = true;
   const style = document.createElement("style");
   style.textContent = `
-    body #gameHUD { font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+    body #gameHUD { font-family: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
     body #gameHUD .hud-bar {
       padding: 12px 16px; gap: 10px; justify-content: flex-start;
       background: none;
@@ -24,7 +24,7 @@ export function injectHudTheme(): void {
     }
     body #gameHUD .hud-item .label { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(244, 239, 227, 0.62); }
     body #gameHUD .hud-item .value {
-      font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: 22px; line-height: 1;
+      font-family: "Fraunces Variable", Fraunces, Georgia, serif; font-weight: 600; font-size: 22px; line-height: 1;
       color: #f4efe3; font-variant-numeric: tabular-nums;
     }
     body #gameHUD #hud-location {
@@ -48,7 +48,7 @@ export function injectHudTheme(): void {
     }
     body #minimap { border-radius: 16px !important; border: 1px solid rgba(244, 239, 227, 0.18) !important; overflow: hidden; }
     body #desktopHint > div {
-      font-family: Inter, system-ui, sans-serif !important; font-size: 12px !important; letter-spacing: 0.02em;
+      font-family: "Inter Variable", Inter, system-ui, sans-serif !important; font-size: 12px !important; letter-spacing: 0.02em;
       color: rgba(244, 239, 227, 0.75) !important; background: rgba(12, 26, 22, 0.5) !important;
       border: 1px solid rgba(244, 239, 227, 0.12); border-radius: 12px !important;
       backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -60,11 +60,11 @@ export function injectHudTheme(): void {
     body #mobileControls .ctrl-btn:active, body #mobileControls .ctrl-btn.active { background: rgba(244, 239, 227, 0.28); }
     body #mobileControls .ctrl-btn.action-btn {
       background: #e9b44c; color: #1b140a; border-color: transparent;
-      font-family: Inter, system-ui, sans-serif; font-weight: 700; letter-spacing: 0.06em;
+      font-family: "Inter Variable", Inter, system-ui, sans-serif; font-weight: 700; letter-spacing: 0.06em;
     }
     body #mobileControls .ctrl-btn.action-btn:active, body #mobileControls .ctrl-btn.action-btn.active { background: #f2c66a; }
     body #mobileControls .gyro-toggle {
-      font-family: Inter, system-ui, sans-serif; border: 1px solid rgba(244, 239, 227, 0.22);
+      font-family: "Inter Variable", Inter, system-ui, sans-serif; border: 1px solid rgba(244, 239, 227, 0.22);
       background: rgba(12, 26, 22, 0.45); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     }
     @media (max-height: 520px) {

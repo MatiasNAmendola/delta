@@ -1,4 +1,9 @@
 import { GameEngine } from "./GameEngine";
+// Fonts are bundled with the game (work offline in the PWA): Fraunces for
+// display, Inter for UI text
+import "@fontsource-variable/fraunces/opsz.css";
+import "@fontsource-variable/fraunces/opsz-italic.css";
+import "@fontsource-variable/inter/index.css";
 import { loadWorldFromUrl } from "./world/loadWorld";
 
 // Import side-effects needed by BabylonJS

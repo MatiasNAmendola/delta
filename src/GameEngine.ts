@@ -11,17 +11,15 @@ import { WaterSystem } from "./world/WaterSystem";
 import { Environment } from "./world/Environment";
 import { WakeEffect } from "./world/WakeEffect";
 import { YolaTraffic } from "./world/Yolas";
-import { LanchaColectiva } from "./boat/LanchaColectiva";
+import { Boat } from "./boat/Boat";
+import { BOAT_TYPES, isBoatType, type BoatTypeId, type BoatSpec } from "./boat/boatTypes";
+import { createMode, type GameMode } from "./game/modes";
+import { probeChannel, RuleBook, type RuleEvent } from "./game/navigationRules";
+import { Traffic } from "./world/Traffic";
 import { MobileControls } from "./controls/MobileControls";
 import { GameUI } from "./ui/GameUI";
-import {
-  BOAT_MAX_SPEED,
-  PROP_SCALE,
-  CAMERA_HEIGHT,
-  CAMERA_DISTANCE,
-  CAMERA_LERP,
-} from "./utils/constants";
-import { findDock, type Dock, type WaterArea, type WorldDoc } from "./world/WorldDoc";
+import { PROP_SCALE, CAMERA_LERP } from "./utils/constants";
+import { findDock, type WaterArea, type WorldDoc } from "./world/WorldDoc";
 import { distance2D, lerp } from "./utils/helpers";
 import {
   defaultPolicy,
@@ -38,7 +36,12 @@ export class GameEngine {
   private environment!: Environment;
   private wakeEffect!: WakeEffect;
   private yolas!: YolaTraffic;
-  private boat!: LanchaColectiva;
+  private boat!: Boat;
+  private spec: BoatSpec = BOAT_TYPES.colectiva;
+  private mode: GameMode | null = null;
+  private rules: RuleBook | null = null;
+  private traffic!: Traffic;
+  private spawn!: { x: number; z: number; heading: number };
   private controls!: MobileControls;
   private ui!: GameUI;
 
@@ -48,10 +51,6 @@ export class GameEngine {
   private gameOver = false;
   private gameTime = 0;
   private score = 0;
-  private totalDelivered = 0;
-  private currentTargetDock = 0;
-  private dockPassengers: Map<string, number> = new Map();
-  private nearDock: string | null = null;
   private resolutionPolicy: ResolutionPolicy;
   private resolution: ResolutionState;
   private fpsWindowTime = 0;
@@ -87,7 +86,7 @@ export class GameEngine {
     // Camera
     this.camera = new FreeCamera(
       "camera",
-      new Vector3(0, CAMERA_HEIGHT, -CAMERA_DISTANCE),
+      new Vector3(0, 3, -8),
       this.scene
     );
     this.camera.setTarget(Vector3.Zero());
@@ -122,13 +121,13 @@ export class GameEngine {
     // Create environment
     this.environment = new Environment(this.scene, this.waterSystem, this.world);
 
-    await this.updateLoadingBar(70, "Preparando la lancha colectiva...");
+    await this.updateLoadingBar(70, "Preparando las embarcaciones...");
 
-    // Create boat at the world's spawn dock
     // Start alongside the spawn dock's muelle (docks are moved to the bank);
-    // the authored offset is the fallback when no berth was computed
+    // the authored offset is the fallback when no berth was computed.
     // `?spawn=<dock-id>`: start at another stop (handy to review docks)
-    const spawnParam = new URLSearchParams(window.location.search).get("spawn");
+    const params = new URLSearchParams(window.location.search);
+    const spawnParam = params.get("spawn");
     const startDock = findDock(
       this.world,
       spawnParam && this.world.docks.some((d) => d.id === spawnParam) ? spawnParam : this.world.spawn.dock
@@ -136,32 +135,26 @@ export class GameEngine {
     const [offsetX, offsetZ] = this.world.spawn.offset;
     const berth = this.environment.getBerths().get(startDock.id);
     const start = berth ?? { x: startDock.x + offsetX, z: startDock.z + offsetZ };
-    this.boat = new LanchaColectiva(
-      this.scene,
-      start.x,
-      start.z,
-      this.world.rules.boatCapacity
-    );
-    this.boat.placeAt(start.x, start.z, berth?.heading ?? 0, this.waterSystem);
+    this.spawn = { x: start.x, z: start.z, heading: berth?.heading ?? 0 };
+
+    // `?boat=kayak` (or the last one chosen) preselects a boat
+    const saved = params.get("boat") ?? safeStorage("delta.boat");
+    this.selectBoat(isBoatType(saved) ? saved : "colectiva");
 
     if (this.aerialView) this.scene.fogEnabled = false;
 
     // Start the camera behind the boat instead of flying in from the origin
     this.updateCamera(0, 0, 0, true);
 
-    // Wake effect
-    this.wakeEffect = new WakeEffect(this.scene);
-
     // Rowing club yolas on the rivers near the start, and moored by the docks
     this.yolas = new YolaTraffic(this.scene, this.world, this.waterSystem, start, this.environment.getMooredYolas());
+    // Other lanchas colectivas on the big rivers, keeping right
+    this.traffic = new Traffic(this.scene, this.world, this.waterSystem, start);
 
     await this.updateLoadingBar(85, "Configurando controles...");
 
     // Controls
     this.controls = new MobileControls(this.scene);
-
-    // Initialize dock passengers
-    this.randomizeDockPassengers();
 
     await this.updateLoadingBar(95, "Preparando interfaz...");
 
@@ -174,7 +167,7 @@ export class GameEngine {
     const loading = document.getElementById("loadingScreen");
     const showTitle = () => {
       loading?.remove();
-      this.ui.showStartScreen();
+      this.ui.showStartScreen(this.spec.id, (id) => this.selectBoat(id));
       this.ui.onPlayClick(() => this.startGame());
     };
     if (loading) {
@@ -216,18 +209,20 @@ export class GameEngine {
     await new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
   }
 
-  /** Where the boat has to be to serve a dock: alongside the muelle, on the water. */
-  private stopPoint(dock: Dock): { x: number; z: number } {
-    return this.environment.getBerths().get(dock.id) ?? dock;
-  }
-
-  private randomizeDockPassengers(): void {
-    for (const dock of this.world.docks) {
-      this.dockPassengers.set(
-        dock.id,
-        Math.floor(Math.random() * 6) + 1
-      );
-    }
+  /** Swaps the boat at the start (title screen): model, wake, physics. */
+  private selectBoat(id: BoatTypeId): void {
+    if (this.gameStarted) return;
+    this.spec = BOAT_TYPES[id];
+    safeStore("delta.boat", id);
+    this.boat?.dispose();
+    this.wakeEffect?.dispose();
+    this.boat = new Boat(this.scene, this.spec, this.spawn.x, this.spawn.z, this.world.rules.boatCapacity);
+    this.boat.placeAt(this.spawn.x, this.spawn.z, this.spawn.heading, this.waterSystem);
+    this.wakeEffect = new WakeEffect(this.scene, {
+      length: this.spec.length,
+      maxSpeed: this.spec.maxSpeed,
+      strength: this.spec.wake,
+    });
   }
 
   private startGame(): void {
@@ -235,33 +230,21 @@ export class GameEngine {
     this.gameOver = false;
     this.gameTime = 0;
     this.score = 0;
-    this.totalDelivered = 0;
     this.ui.hideStartScreen();
-    this.ui.showNotification("Buen viaje\nSeguí la próxima parada", 2600);
-
-    // Pick first target
-    this.pickNextTarget();
-  }
-
-  /**
-   * Next stop: one of the few closest docks to the boat (not the one it is at
-   * now, nor the current target), so every trip fits the clock even on the
-   * 22 km real map instead of sending the player across the whole Delta.
-   */
-  private pickNextTarget(): void {
-    const { x, z } = this.boat.position;
-    const candidates = this.world.docks
-      .map((dock, index) => {
-        const stop = this.stopPoint(dock);
-        return { index, dist: distance2D(x, z, stop.x, stop.z) };
-      })
-      .filter(({ index, dist }) =>
-        index !== this.currentTargetDock && dist > this.world.rules.pickupRadius * 2
-      )
-      .sort((a, b) => a.dist - b.dist)
-      .slice(0, NEXT_STOP_CHOICES);
-    if (candidates.length === 0) return;
-    this.currentTargetDock = candidates[Math.floor(Math.random() * candidates.length)].index;
+    this.rules = new RuleBook(this.spec);
+    this.mode = createMode(this.spec.id, {
+      scene: this.scene,
+      world: this.world,
+      boat: this.boat,
+      berths: this.environment.getBerths(),
+      isWater: (x, z) => this.waterSystem.isWater(x, z),
+      start: this.spawn,
+      notify: (message, ms) => this.ui.showNotification(message, ms),
+      addScore: (points) => (this.score = Math.max(0, this.score + points)),
+    });
+    this.mode.start();
+    this.ui.showNotification(`${this.spec.name}
+${this.spec.mission}`, 2800);
   }
 
   private gameLoop(): void {
@@ -302,43 +285,36 @@ export class GameEngine {
         this.boat.speed
       );
 
-      // Rowers: they keep rowing, and complain about reckless lanchas
+      // Rowers and other lanchas keep moving
       this.yolas.update(dt);
+      this.traffic.update(dt);
       this.checkRowers();
+      this.checkTraffic();
+      this.applyRules(dt);
 
-      // Check dock proximity
-      this.checkDocks(controlState.action);
+      // The boat's own game: passengers, buoys, corners or time trial
+      this.mode!.update(dt, controlState.action);
 
       // Update camera
       this.updateCamera(dt, controlState.cameraAngleOffset, controlState.cameraPitchOffset);
 
       // Update UI
       this.ui.updateScore(this.score);
-      this.ui.updatePassengers(this.boat.passengers);
+      const second = this.mode!.secondary();
+      this.ui.updateSecondary(second.label, second.value);
       this.ui.updateTimer(timeLeft);
-      this.ui.updateMinimap(
-        this.boat.position.x,
-        this.boat.position.z,
-        this.boat.rotation
-      );
-
-      // Update location name
+      this.ui.updateMinimap(this.boat.position.x, this.boat.position.z, this.boat.rotation);
       this.updateLocationName();
-
-      // Update next stop indicator
-      const targetDock = this.world.docks[this.currentTargetDock];
-      const targetStop = this.stopPoint(targetDock);
-      const dist = distance2D(
-        this.boat.position.x,
-        this.boat.position.z,
-        targetStop.x,
-        targetStop.z
-      );
-      this.ui.updateNextStop(targetDock.name, dist);
+      const target = this.mode!.target();
+      if (target) {
+        this.ui.updateNextStop(target.label, target.name, distance2D(this.boat.position.x, this.boat.position.z, target.x, target.z));
+      }
     } else {
-      // Still update water and rowers even on menus
+      // Still update water, rowers and traffic even on menus
       this.waterSystem.update(dt);
       this.yolas.update(dt);
+      this.traffic.update(dt);
+      this.boat.update(dt, this.waterSystem, null);
       // Behind the title screen the camera circles the lancha slowly
       if (!this.gameStarted) {
         this.menuOrbit += dt * 0.07;
@@ -352,99 +328,57 @@ export class GameEngine {
     this.scene.render();
   }
 
-  /** Delta etiquette: slow down near rowers, and never hit them. */
+  /** Delta etiquette: never hit the rowers; motor boats also slow down passing them. */
   private checkRowers(): void {
     const event = this.yolas.checkLancha(
       this.boat.position.x,
       this.boat.position.z,
-      this.boat.speed / BOAT_MAX_SPEED
+      this.rules?.has("wakeCourtesy") ? this.boat.speed / this.spec.maxSpeed : 0
     );
     if (event === "bump") {
       this.boat.speed *= -0.3;
-      this.score = Math.max(0, this.score - BUMP_PENALTY);
-      this.ui.showNotification(`¡Chocaste una yola!\n−${BUMP_PENALTY} puntos`, 2200);
+      this.penalize(BUMP_PENALTY, `¡Chocaste una yola!\n−${BUMP_PENALTY} puntos`);
     } else if (event === "wake") {
-      this.score = Math.max(0, this.score - WAKE_PENALTY);
-      this.ui.showNotification(`Despacio cerca de los remeros\nTu ola los mojó: −${WAKE_PENALTY} puntos`, 2500);
+      this.penalize(WAKE_PENALTY, `Despacio cerca de los remeros\nTu ola los mojó: −${WAKE_PENALTY} puntos`);
     }
   }
 
-  private checkDocks(actionPressed: boolean): void {
-    this.nearDock = null;
-
-    for (const dock of this.world.docks) {
-      const stop = this.stopPoint(dock);
-      const dist = distance2D(
-        this.boat.position.x,
-        this.boat.position.z,
-        stop.x,
-        stop.z
-      );
-
-      if (dist < this.world.rules.pickupRadius) {
-        this.nearDock = dock.name;
-
-        // Auto-slow near dock
-        if (Math.abs(this.boat.speed) > 0.1) {
-          // Show approach notification
-        }
-
-        if (actionPressed && Math.abs(this.boat.speed) < BOAT_MAX_SPEED * 0.4) {
-          this.handleDockAction(dock);
-        } else if (actionPressed) {
-          this.ui.showNotification("¡Reducí la velocidad para parar!", 1500);
-        }
-        break;
-      }
+  private checkTraffic(): void {
+    if (this.traffic.collides(this.boat.position.x, this.boat.position.z, this.spec.length)) {
+      this.boat.speed *= -0.3;
+      this.penalize(BUMP_PENALTY, `¡Cuidado con las lanchas!\n−${BUMP_PENALTY} puntos`);
     }
   }
 
-  private handleDockAction(dock: Dock): void {
-    const waitingPassengers = this.dockPassengers.get(dock.id) || 0;
+  /** Navigation rules of this boat: warnings and fines. */
+  private applyRules(dt: number): void {
+    if (!this.rules) return;
+    const { x, z } = this.boat.position;
+    let dockDistance = Infinity;
+    for (const b of this.environment.getBerths().values()) dockDistance = Math.min(dockDistance, distance2D(x, z, b.x, b.z));
+    const events = this.rules.update(dt, {
+      x,
+      z,
+      heading: this.boat.rotation,
+      speed: this.boat.speed,
+      probe: probeChannel((px, pz) => this.waterSystem.isWater(px, pz), x, z, this.boat.rotation),
+      distanceToDock: dockDistance,
+      wakes: this.traffic.wakesNear(x, z),
+    });
+    for (const e of events) this.showRule(e);
+  }
 
-    if (this.boat.passengers > 0) {
-      // Drop off passengers
-      const dropped = this.boat.dropPassengers();
-      const points = dropped * this.world.rules.scorePerPassenger;
+  private showRule(e: RuleEvent): void {
+    if (e.penalty > 0) this.penalize(e.penalty, `${e.message}\n−${e.penalty} puntos`);
+    else if (e.penalty < 0) {
+      this.score -= e.penalty;
+      this.ui.showNotification(`${e.message}\n+${-e.penalty} puntos`, 1800);
+    } else this.ui.showNotification(e.message, 2200);
+  }
 
-      // Bonus for target dock
-      const isTarget = this.world.docks[this.currentTargetDock].id === dock.id;
-      const bonus = isTarget ? this.world.rules.timeBonusPerPassenger * dropped : 0;
-
-      this.score += points + bonus;
-      this.totalDelivered += dropped;
-
-      this.ui.showNotification(
-        `${dock.name}\n${dropped} pasajeros bajaron · +${points + bonus} puntos${bonus > 0 ? " · bonus de parada" : ""}`,
-        2500
-      );
-
-      // Regenerate passengers at this dock
-      this.dockPassengers.set(
-        dock.id,
-        Math.floor(Math.random() * 5) + 1
-      );
-
-      this.pickNextTarget();
-    } else if (waitingPassengers > 0) {
-      // Pick up passengers
-      const picked = this.boat.addPassengers(waitingPassengers);
-      this.dockPassengers.set(dock.id, waitingPassengers - picked);
-
-      this.ui.showNotification(
-        `${dock.name}\nSubieron ${picked} pasajeros`,
-        2000
-      );
-
-      if (this.currentTargetDock === this.world.docks.indexOf(dock)) {
-        this.pickNextTarget();
-      }
-    } else {
-      this.ui.showNotification(
-        `${dock.name}\nNo hay pasajeros esperando`,
-        1500
-      );
-    }
+  private penalize(points: number, message: string): void {
+    this.score = Math.max(0, this.score - points);
+    this.ui.showNotification(message, 2400);
   }
 
   private cameraLookTarget = Vector3.Zero();
@@ -454,13 +388,14 @@ export class GameEngine {
     const cameraAngle = this.boat.rotation + Math.PI + angleOffset;
     // `?view=aerial`: high bird's-eye camera to review the map (e.g. after a map update)
     // Title screen: a wide, low establishing shot circling the boat
-    const dist = this.aerialView ? 300 : cinematic ? CAMERA_DISTANCE * 1.8 : CAMERA_DISTANCE;
+    const { distance: camDistance, height: camHeight } = this.spec.camera;
+    const dist = this.aerialView ? 300 : cinematic ? camDistance * 1.8 : camDistance;
     // Camera drag offsets were tuned for the old, 3.5x bigger props
     const baseHeight = this.aerialView
       ? 450
       : cinematic
-        ? CAMERA_HEIGHT * 1.6
-        : Math.max(0.6, CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset * PROP_SCALE);
+        ? camHeight * 1.6
+        : Math.max(0.3, camHeight + this.boat.speed * 3 + pitchOffset * PROP_SCALE * (camHeight / 2.3));
     // Snapping (lerp factor 1) jumps straight to the boat, e.g. at spawn.
     // CAMERA_LERP is per 60 fps frame; convert so smoothing feels the same at any FPS.
     const frames = Math.min(dt, 0.1) * 60;
@@ -478,7 +413,7 @@ export class GameEngine {
         const x = this.boat.position.x + Math.sin(cameraAngle) * d;
         const z = this.boat.position.z + Math.cos(cameraAngle) * d;
         if (!this.waterSystem.isWater(x, z)) {
-          free = Math.max(CAMERA_MIN_DISTANCE, d - 0.5);
+          free = Math.max(camDistance * 0.4, d - 0.5);
           break;
         }
       }
@@ -511,7 +446,7 @@ export class GameEngine {
     );
     this.cameraLookTarget.y = lerp(
       this.cameraLookTarget.y,
-      this.boat.position.y + 2,
+      this.boat.position.y + camHeight * 0.3,
       look
     );
     this.cameraLookTarget.z = lerp(
@@ -542,13 +477,8 @@ export class GameEngine {
       }
     }
 
-    // Also show dock if nearby
-    if (this.nearDock) {
-      const touch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-      this.ui.updateLocation(`${nearestRiver} · Muelle ${this.nearDock} · ${touch ? "tocá PARADA" : "ESPACIO para parar"}`);
-    } else {
-      this.ui.updateLocation(nearestRiver);
-    }
+    const hint = this.mode?.hint();
+    this.ui.updateLocation(hint ? `${nearestRiver} · ${hint}` : nearestRiver);
   }
 
   private readonly aerialView = new URLSearchParams(window.location.search).get("view") === "aerial";
@@ -564,18 +494,28 @@ export class GameEngine {
 
   private endGame(): void {
     this.gameOver = true;
-    this.ui.showEndScreen(this.score, this.totalDelivered);
+    this.ui.showEndScreen(this.score, this.mode!.summary(this.score), this.spec.name);
   }
 }
 
 const WAKE_PENALTY = 50;
 const BUMP_PENALTY = 100;
 
-/** Closest the chase camera gets to the boat when the bank is right behind it. */
-const CAMERA_MIN_DISTANCE = 3;
+function safeStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
 
-/** How many of the nearest docks the next stop is drawn from. */
-const NEXT_STOP_CHOICES = 3;
+function safeStore(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* private mode: just don't remember */
+  }
+}
 
 function ringBounds(ring: [number, number][]): [number, number, number, number] {
   let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
