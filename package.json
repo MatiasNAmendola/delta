@@ -1,6 +1,7 @@
 {
   "name": "delta-tigre-lancha",
   "version": "1.0.0",
+  "license": "Apache-2.0",
   "description": "Videojuego de lancha colectiva navegando por el Delta de Tigre - Estilo Minecraft/Roblox",
   "type": "module",
   "scripts": {
