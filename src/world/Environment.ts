@@ -3,7 +3,6 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
-import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
@@ -20,11 +19,9 @@ export class Environment {
   private scene: Scene;
   private world: WorldDoc;
   private props: PropBatches;
-  /** Static meshes worth showing in the water reflection/refraction passes. */
-  private reflectedMeshes: AbstractMesh[] = [];
   /** Distance to the nearest water, shared by texturing, relief and vegetation. */
   private waterDistance: WaterDistanceField;
-  private berths = new Map<string, { x: number; z: number }>();
+  private berths = new Map<string, Berth>();
   /** Side of one terrain mesh quad, in world units. */
   private terrainQuad = 12.5;
   private dockSites: Array<{ x: number; z: number }> = [];
@@ -47,7 +44,7 @@ export class Environment {
       this.scatter(rule, waterSystem);
     }
     for (const batch of Object.values(this.props)) {
-      this.reflectedMeshes.push(batch.build());
+      batch.build();
     }
   }
 
@@ -108,7 +105,6 @@ export class Environment {
     ground.position.y = WATER_LEVEL + GROUND_OFFSET;
     this.terrainQuad = this.world.world.size / subdivisions;
     ground.receiveShadows = true;
-    this.reflectedMeshes.push(ground);
 
     // Displace vertices to create terrain elevation
     this.displaceTerrainVertices(ground);
@@ -353,7 +349,6 @@ export class Environment {
     sky.infiniteDistance = true;
     sky.isPickable = false;
     skyMat.freeze();
-    this.reflectedMeshes.push(sky);
 
     // Set clear color
     this.scene.clearColor = new Color4(0.53, 0.81, 0.92, 1);
@@ -622,13 +617,8 @@ export class Environment {
    * Where the boat must stop for each dock: on the water just off the
    * muelle's open side (docks are moved from the channel to the bank).
    */
-  public getBerths(): ReadonlyMap<string, { x: number; z: number }> {
+  public getBerths(): ReadonlyMap<string, Berth> {
     return this.berths;
-  }
-
-  /** Static meshes worth showing in the water reflection/refraction passes. */
-  public getReflectedMeshes(): AbstractMesh[] {
-    return this.reflectedMeshes;
   }
 }
 
@@ -653,12 +643,20 @@ const BANK_UNDER_WATER = 0.15;
 /** How far from the World Doc point a dock may move to reach the bank. */
 const MAX_BANK_SEARCH = 40;
 
+/** Where the lancha stops for a dock, moored alongside it. */
+export interface Berth {
+  x: number;
+  z: number;
+  /** Boat heading (atan2(dx, dz) convention) parallel to the shore. */
+  heading: number;
+}
+
 interface DockSite {
   x: number;
   z: number;
   /** Y rotation that makes local +x (the open, boarding side) face the water. */
   rotation: number;
-  berth: { x: number; z: number };
+  berth: Berth;
   /** Unit vector from the bank towards the water (null when no bank was found). */
   toWater: [number, number] | null;
 }
@@ -717,7 +715,11 @@ function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockS
       x: dock.x,
       z: dock.z,
       rotation,
-      berth: { x: dock.x + Math.cos(rotation) * (halfX + 1.5), z: dock.z - Math.sin(rotation) * (halfX + 1.5) },
+      berth: {
+        x: dock.x + Math.cos(rotation) * (halfX + 1.5),
+        z: dock.z - Math.sin(rotation) * (halfX + 1.5),
+        heading: -rotation,
+      },
       toWater: null,
     };
   }
@@ -734,7 +736,9 @@ function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockS
   let width = 0;
   while (width < MAX_BANK_SEARCH && wet(edge[0] + dir[0] * (width + 0.5), edge[1] + dir[1] * (width + 0.5))) width += 0.5;
   const reach = Math.min(inset + halfX + 1.5, Math.max(0.5, width / 2));
-  return { x, z, rotation, berth: { x: edge[0] + dir[0] * reach, z: edge[1] + dir[1] * reach }, toWater: dir };
+  // Moored parallel to the shore: heading along the bank, atan2(dx, dz) convention
+  const heading = Math.atan2(-dir[1], dir[0]);
+  return { x, z, rotation, berth: { x: edge[0] + dir[0] * reach, z: edge[1] + dir[1] * reach, heading }, toWater: dir };
 }
 
 /** Stable small hash so each dock gets the same look on every load. */

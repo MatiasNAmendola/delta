@@ -1,6 +1,5 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
-import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
@@ -22,6 +21,7 @@ import {
 } from "../utils/constants";
 import { hexToColor3, clamp } from "../utils/helpers";
 import { WaterSystem } from "../world/WaterSystem";
+import { bestFitRotation, moveHull } from "./hullCollision";
 
 export class LanchaColectiva {
   public rootNode: TransformNode;
@@ -39,8 +39,6 @@ export class LanchaColectiva {
   private time = 0;
   private bobPhase = 0;
   private modelContainer: TransformNode | null = null;
-  /** Called once the GLB model replaced the fallback boat. */
-  public onModelLoaded: (() => void) | null = null;
 
   constructor(
     scene: Scene,
@@ -108,17 +106,11 @@ export class LanchaColectiva {
       this.meshes = [];
 
       this.modelLoaded = true;
-      this.onModelLoaded?.();
       console.log("Lancha GLB model loaded successfully");
     } catch (error) {
       console.warn("Could not load GLB model, using fallback:", error);
       // Keep the fallback blocky boat
     }
-  }
-
-  /** Meshes currently making up the boat (fallback blocks or GLB model). */
-  public getMeshes(): AbstractMesh[] {
-    return this.rootNode.getChildMeshes(false);
   }
 
   private createMat(name: string, color: string): StandardMaterial {
@@ -236,27 +228,26 @@ export class LanchaColectiva {
 
     // Turning
     const turnFactor = Math.min(1, Math.abs(this.speed) / (BOAT_MAX_SPEED * 0.3));
-    this.rotation += effectiveSteering * BOAT_TURN_SPEED * turnFactor * frames;
+    const turn = effectiveSteering * BOAT_TURN_SPEED * turnFactor * frames;
 
-    // Move (speed is in world units per 60 fps frame)
-    const dx = Math.sin(this.rotation) * this.speed * frames;
-    const dz = Math.cos(this.rotation) * this.speed * frames;
-
-    const newX = this.position.x + dx;
-    const newZ = this.position.z + dz;
-
-    if (waterSystem.isWater(newX, newZ)) {
-      this.position.x = newX;
-      this.position.z = newZ;
-    } else {
-      this.speed *= -0.3;
-      if (waterSystem.isWater(newX, this.position.z)) {
-        this.position.x = newX;
-        this.speed *= 0.5;
-      } else if (waterSystem.isWater(this.position.x, newZ)) {
-        this.position.z = newZ;
-        this.speed *= 0.5;
-      }
+    // Move (speed is in world units per 60 fps frame); the whole hull must stay afloat
+    const heading = this.rotation + turn;
+    const dx = Math.sin(heading) * this.speed * frames;
+    const dz = Math.cos(heading) * this.speed * frames;
+    const isWater = (x: number, z: number) => waterSystem.isWater(x, z);
+    const result = moveHull(
+      { x: this.position.x, z: this.position.z, rotation: this.rotation },
+      turn,
+      dx,
+      dz,
+      isWater
+    );
+    this.position.x = result.pose.x;
+    this.position.z = result.pose.z;
+    this.rotation = result.pose.rotation;
+    if (result.hit) {
+      // Scraping along the bank slows the boat; a head-on hit bounces it back
+      this.speed *= result.slid ? 0.85 : -0.3;
     }
 
     // Wave bobbing
@@ -278,6 +269,16 @@ export class LanchaColectiva {
       Math.sin(this.bobPhase * 0.7) * 0.02;
     this.rootNode.rotation.x =
       -this.speed * 0.15 + Math.sin(this.bobPhase) * 0.015;
+  }
+
+  /** Places the boat at a spawn point, turned so the whole hull fits on the water. */
+  public placeAt(x: number, z: number, preferredRotation: number, waterSystem: WaterSystem): void {
+    this.position.x = x;
+    this.position.z = z;
+    this.rotation = bestFitRotation(x, z, preferredRotation, (px, pz) => waterSystem.isWater(px, pz));
+    this.speed = 0;
+    this.rootNode.position.copyFrom(this.position);
+    this.rootNode.rotation.y = this.rotation;
   }
 
   public canPickup(): boolean {
