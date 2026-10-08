@@ -166,11 +166,39 @@ export interface Polygon {
  * the water inside it as holes).
  */
 export function buildRegions(rings: Vec2[][], size: number): { water: Polygon[]; land: Polygon[] } {
-  const info = rings.map((ring) => ({ ring, area: signedArea2(ring) / 2, box: bounds(ring) }));
-  const waterOuters = info.filter((r) => r.area > 0);
-  const islands = info.filter((r) => r.area < 0);
   const h = size / 2;
   const world: Vec2[] = [[-h, -h], [h, -h], [h, h], [-h, h]];
+  const resolve = (r: RingRef) => {
+    const ring = r.ring === WORLD_RING ? world : rings[r.ring];
+    return r.reversed ? [...ring].reverse() : ring;
+  };
+  const { water, land } = indexRegions(rings);
+  const toPolygon = (p: IndexedPolygon): Polygon => ({ outer: resolve(p.outer), holes: p.holes.map(resolve) });
+  return { water: water.map(toPolygon), land: land.map(toPolygon) };
+}
+
+/** A shoreline ring used by a polygon, possibly walked backwards; WORLD_RING is the map's square border. */
+export interface RingRef {
+  ring: number;
+  reversed: boolean;
+}
+export const WORLD_RING = -1;
+
+export interface IndexedPolygon {
+  outer: RingRef;
+  holes: RingRef[];
+}
+
+/**
+ * Same grouping as buildRegions, as references to the rings instead of
+ * copies of their points: water polygons (a lake or river outline with its
+ * islands as holes) and land polygons (the world square or an island, with
+ * the water inside it as holes). Lets the baked layout store the points once.
+ */
+export function indexRegions(rings: Vec2[][]): { water: IndexedPolygon[]; land: IndexedPolygon[] } {
+  const info = rings.map((ring, id) => ({ id, ring, area: signedArea2(ring) / 2, box: bounds(ring) }));
+  const waterOuters = info.filter((r) => r.area > 0);
+  const islands = info.filter((r) => r.area < 0);
 
   // Each ring belongs inside the smallest ring of the opposite kind that contains it
   const smallestContaining = (r: (typeof info)[number], candidates: typeof info) => {
@@ -185,17 +213,20 @@ export function buildRegions(rings: Vec2[][], size: number): { water: Polygon[];
     return best;
   };
 
-  const water: Polygon[] = waterOuters.map((r) => ({ outer: r.ring, holes: [] }));
-  const land: Polygon[] = [{ outer: world, holes: [] }, ...islands.map((r) => ({ outer: [...r.ring].reverse(), holes: [] }))];
+  const water: IndexedPolygon[] = waterOuters.map((r) => ({ outer: { ring: r.id, reversed: false }, holes: [] }));
+  const land: IndexedPolygon[] = [
+    { outer: { ring: WORLD_RING, reversed: false }, holes: [] },
+    ...islands.map((r) => ({ outer: { ring: r.id, reversed: true }, holes: [] as RingRef[] })),
+  ];
 
   for (const island of islands) {
     const host = smallestContaining(island, waterOuters);
-    if (host) water[waterOuters.indexOf(host)].holes.push(island.ring);
+    if (host) water[waterOuters.indexOf(host)].holes.push({ ring: island.id, reversed: false });
   }
   for (const lake of waterOuters) {
     const host = smallestContaining(lake, islands);
     const target = host ? land[1 + islands.indexOf(host)] : land[0];
-    target.holes.push([...lake.ring].reverse());
+    target.holes.push({ ring: lake.id, reversed: true });
   }
   return { water, land };
 }

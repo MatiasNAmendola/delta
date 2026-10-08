@@ -10,16 +10,19 @@ import { TerrainMaterial } from "@babylonjs/materials/terrain/terrainMaterial";
 import { WATER_LEVEL, COLORS, PROP_SCALE } from "../utils/constants";
 import { degToRad, type Dock, type ScatterRule, type Vec2, type WorldDoc } from "./WorldDoc";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { hexToColor3, seededRandom, clamp } from "../utils/helpers";
-import { SHORE_SDF_RANGE, WaterSystem, type Shore } from "./WaterSystem";
+import { hexToColor3, seededRandom } from "../utils/helpers";
+import { SHORE_SDF_RANGE, WaterSystem } from "./WaterSystem";
 import { InstancedBoxBatch, propTransform } from "./InstancedBatch";
 import { WaterDistanceField } from "./WaterDistanceField";
+import { mark } from "../utils/perf";
+import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
+import type { WorldLayout } from "./layout/worldLayout";
+import { fbm } from "./layout/noise";
 import { placeDockModels } from "./DockModel";
 import { paintPixels } from "./texturePaint";
 import { RiverBanks } from "./RiverBanks";
 import { Forest, type SpeciesName } from "./vegetation/Forest";
 import { Grass } from "./vegetation/Grass";
-import { triangulate } from "./shoreline";
 import type { MooredSpot } from "./Yolas";
 
 export class Environment {
@@ -37,7 +40,12 @@ export class Environment {
   private dockSites: Array<{ x: number; z: number; rotation: number; seed: number }> = [];
   private moored: MooredSpot[] = [];
 
-  constructor(scene: Scene, waterSystem: WaterSystem, world: WorldDoc) {
+  constructor(
+    scene: Scene,
+    waterSystem: WaterSystem,
+    world: WorldDoc,
+    private layout: WorldLayout
+  ) {
     this.scene = scene;
     this.world = world;
     this.forest = new Forest(scene);
@@ -45,7 +53,8 @@ export class Environment {
     const res = world.world.size <= 800 ? 256 : 1024;
     this.waterDistance = new WaterDistanceField(world.world.size, res, (x, z) => waterSystem.isWaterCoarse(x, z));
     const shore = waterSystem.getShore();
-    this.createGround(shore);
+    mark("islas: distancias");
+    this.createGround();
     this.createSkybox();
     this.props = createPropBatches(scene);
     // Docks first: vegetation and houses keep clear of where they end up
@@ -57,8 +66,10 @@ export class Environment {
     for (const rule of rules) {
       this.scatter(rule, waterSystem);
     }
+    mark("casas y muelles");
     this.plantBanks(shore.rings, waterSystem);
     this.forest.build();
+    mark("árboles");
     for (const batch of Object.values(this.props)) {
       batch.build();
     }
@@ -75,6 +86,7 @@ export class Environment {
       SHORE_SDF_RANGE,
       world.world.size
     );
+    mark("pasto");
     void this.buildDocks();
 
     // Island edges: mud banks, and bulkheads where people live and boats stop
@@ -88,51 +100,11 @@ export class Environment {
         this.dockSites.some((d) => Math.hypot(d.x - x, d.z - z) < 10 * PROP_SCALE) ||
         [...this.berths.values()].some((b) => Math.hypot(b.x - x, b.z - z) < 6 * PROP_SCALE),
     });
+    mark("barrancas");
   }
 
-  /** Simple value noise for coherent terrain patterns */
-  private noise2D(x: number, z: number, seed: number): number {
-    // Hash-based pseudo-random
-    const hash = (ix: number, iz: number) => {
-      let h = ix * 374761393 + iz * 668265263 + seed * 1274126177;
-      h = (h ^ (h >> 13)) * 1274126177;
-      h = h ^ (h >> 16);
-      return (h & 0x7fffffff) / 0x7fffffff;
-    };
-
-    const ix = Math.floor(x);
-    const iz = Math.floor(z);
-    const fx = x - ix;
-    const fz = z - iz;
-
-    // Smoothstep interpolation
-    const sx = fx * fx * (3 - 2 * fx);
-    const sz = fz * fz * (3 - 2 * fz);
-
-    const v00 = hash(ix, iz);
-    const v10 = hash(ix + 1, iz);
-    const v01 = hash(ix, iz + 1);
-    const v11 = hash(ix + 1, iz + 1);
-
-    return (
-      v00 * (1 - sx) * (1 - sz) +
-      v10 * sx * (1 - sz) +
-      v01 * (1 - sx) * sz +
-      v11 * sx * sz
-    );
-  }
-
-  /** Multi-octave fractal noise */
   private fbm(x: number, z: number, octaves: number, seed: number): number {
-    let value = 0;
-    let amplitude = 0.5;
-    let frequency = 1;
-    for (let i = 0; i < octaves; i++) {
-      value += this.noise2D(x * frequency, z * frequency, seed + i * 31) * amplitude;
-      amplitude *= 0.5;
-      frequency *= 2;
-    }
-    return value;
+    return fbm(x, z, octaves, seed);
   }
 
   /**
@@ -140,9 +112,9 @@ export class Environment {
    * the shoreline (the Delta has no hills, and its banks drop straight into
    * the water, see RiverBanks). Triangulated from the shoreline regions.
    */
-  private createGround(shore: Shore): void {
+  private createGround(): void {
     const size = this.world.world.size;
-    const { vertices, indices } = triangulate(shore.land);
+    const { points: vertices, landIndices: indices } = this.layout;
     const count = vertices.length / 2;
     const positions = new Float32Array(count * 3);
     const normals = new Float32Array(count * 3);
@@ -150,10 +122,13 @@ export class Environment {
     for (let i = 0; i < count; i++) {
       const x = vertices[i * 2];
       const z = vertices[i * 2 + 1];
-      positions.set([x, WATER_LEVEL + BANK_TOP, z], i * 3);
-      normals.set([0, 1, 0], i * 3);
+      positions[i * 3] = x;
+      positions[i * 3 + 1] = WATER_LEVEL + BANK_TOP;
+      positions[i * 3 + 2] = z;
+      normals[i * 3 + 1] = 1;
       // Same mapping as the splatmap: u along +x, v along +z over the whole world
-      uvs.set([x / size + 0.5, z / size + 0.5], i * 2);
+      uvs[i * 2] = x / size + 0.5;
+      uvs[i * 2 + 1] = z / size + 0.5;
     }
     const ground = new Mesh("ground", this.scene);
     const data = new VertexData();
@@ -170,6 +145,7 @@ export class Environment {
 
       // Splatmap: R=grass, G=dirt, B=sand
       terrainMat.mixTexture = this.generateSplatmap();
+      mark("islas: splatmap");
 
       // Textures repeat every ~10 m so the lawn has detail up close
       const tiles = size / (10 * PROP_SCALE);
@@ -198,6 +174,7 @@ export class Environment {
       terrainMat.backFaceCulling = false;
 
       ground.material = terrainMat;
+      mark("islas: texturas");
     } catch (e) {
       console.warn("TerrainMaterial failed, using fallback:", e);
       const fallback = new StandardMaterial("groundFallback", this.scene);
@@ -216,32 +193,24 @@ export class Environment {
   }
 
   /**
-   * Splatmap: lawn almost everywhere (R), lush unmown grass in broad patches
-   * (B), worn earth in spots and along the very edge of the bank (G).
+   * Splatmap from the precomputed layout: lawn almost everywhere (R), worn
+   * earth in spots and along the bank edge (G), lush unmown grass (B).
    */
-  private generateSplatmap(): DynamicTexture {
-    const field = this.waterDistance;
-    const size = field.res;
-    const tex = new DynamicTexture("splatmap", size, this.scene, false);
-
-    paintPixels(tex, size, (px, py, out) => {
-      // Canvas row 0 is the far (+z) edge of the ground once uploaded
-      const j = size - 1 - py;
-      const x = -field.size / 2 + (px + 0.5) * field.cell;
-      const z = -field.size / 2 + (j + 0.5) * field.cell;
-
-      // Trodden earth in irregular patches (paths, under trees)...
-      const patches = smoothstep(0.58, 0.72, this.fbm(x * 0.03, z * 0.03, 3, 456));
-      // ...and where the bank edge crumbles
-      const edge = 1 - smoothstep(0.5, 2.5, field.atCell(px, j) + (this.fbm(x * 0.2, z * 0.2, 2, 457) - 0.5) * 2);
-      // Kept light: worn earth the color of the river reads as water from above
-      const dirt = clamp(Math.max(patches * 0.3, edge * 0.45), 0, 0.5);
-      const lush = smoothstep(0.48, 0.68, this.fbm(x * 0.012 + 40, z * 0.012, 3, 458)) * (1 - dirt) * 0.85;
-      out[0] = (1 - dirt) * (1 - lush);
-      out[1] = dirt;
-      out[2] = lush;
-    });
-
+  private generateSplatmap(): RawTexture {
+    const { splat, splatRes: res } = this.layout;
+    const rgba = new Uint8Array(res * res * 4);
+    for (let k = 0; k < res * res; k++) {
+      const dirt = splat[k * 2];
+      const lush = splat[k * 2 + 1];
+      rgba[k * 4] = Math.max(0, 255 - dirt - lush);
+      rgba[k * 4 + 1] = dirt;
+      rgba[k * 4 + 2] = lush;
+      rgba[k * 4 + 3] = 255;
+    }
+    const tex = RawTexture.CreateRGBATexture(rgba, res, res, this.scene, false, false, Texture.BILINEAR_SAMPLINGMODE);
+    tex.name = "splatmap";
+    tex.wrapU = Texture.CLAMP_ADDRESSMODE;
+    tex.wrapV = Texture.CLAMP_ADDRESSMODE;
     return tex;
   }
 
@@ -805,10 +774,6 @@ function hashString(text: string): number {
   let h = 2166136261;
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
   return (h >>> 0) % 2147483646 + 1;
-}
-function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
-  return t * t * (3 - 2 * t);
 }
 
 const WALL_COLORS =["#d4c5a0", "#c9b896", "#b8a882", "#e0d5b8"].map(hexToColor3);
