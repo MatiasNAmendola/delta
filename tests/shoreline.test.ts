@@ -94,3 +94,37 @@ describe("ShoreIndex", () => {
     expect(mismatches).toBe(0);
   });
 });
+
+describe("roughenRing", () => {
+  it("makes the shore irregular but keeps it close to the original", async () => {
+    const { roughenRing } = await import("../src/world/shoreline");
+    const square: [number, number][] = [[-20, -20], [20, -20], [20, 20], [-20, 20]];
+    const rough = roughenRing(square, 0.5, 1, () => 10);
+    expect(rough.length).toBeGreaterThan(200);
+    // Not straight anymore along the bottom edge...
+    const bottom = rough.filter(([x, z]) => Math.abs(z + 20) < 2 && Math.abs(x) < 15).map(([, z]) => z);
+    expect(Math.max(...bottom) - Math.min(...bottom)).toBeGreaterThan(0.2);
+    // ...but within the amplitude, and the area barely changes
+    expect(bottom.every((z) => Math.abs(z + 20) <= 1)).toBe(true);
+    expect(Math.abs(signedArea2(rough) / 2 - 1600)).toBeLessThan(1600 * 0.05);
+  });
+
+  it("never moves the shore more than a fraction of the room it has", async () => {
+    const { roughenRing } = await import("../src/world/shoreline");
+    const square: [number, number][] = [[-20, -20], [20, -20], [20, 20], [-20, 20]];
+    const rough = roughenRing(square, 0.5, 5, () => 1);
+    expect(rough.every(([x, z]) => Math.max(Math.abs(x), Math.abs(z)) <= 20.31)).toBe(true);
+  });
+});
+
+describe("ShoreIndex.signedDistance", () => {
+  const rings = traceShorelines(grid);
+  const index = new ShoreIndex(rings, 20, (x, z) => grid.wet(Math.floor(x + 10), Math.floor(z + 10)), 2);
+
+  it("is positive on land, negative on water, exact near the shore and clamped far away", () => {
+    // Lake west shore at x = -6
+    expect(index.signedDistance(-6.5, 0, 3)).toBeCloseTo(0.5, 5);
+    expect(index.signedDistance(-5.5, 0, 3)).toBeCloseTo(-0.5, 5);
+    expect(index.signedDistance(-9.5, -9.5, 3)).toBe(3);
+  });
+});

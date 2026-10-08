@@ -37,8 +37,8 @@ describe("offsetPolyline", () => {
 
 describe("breaksWakeCourtesy", () => {
   it("only fast passes close to the rowers break the rule", () => {
-    expect(breaksWakeCourtesy(4, 0.9)).toBe(true);
-    expect(breaksWakeCourtesy(4, 0.3)).toBe(false); // slowed down: fine
+    expect(breaksWakeCourtesy(2, 0.9)).toBe(true);
+    expect(breaksWakeCourtesy(2, 0.3)).toBe(false); // slowed down: fine
     expect(breaksWakeCourtesy(30, 1)).toBe(false); // far away: fine
   });
 });

@@ -57,9 +57,10 @@ void main(void) {
 
   // Three ripple layers drifting with the current at different scales
   vec2 flow = vec2(0.6, 0.8);
-  vec2 s1 = slopeAt(p * 0.06 + flow * uTime * 0.015);
-  vec2 s2 = slopeAt(p * 0.17 - flow.yx * uTime * 0.025);
-  vec2 s3 = slopeAt(p * 0.43 + vec2(-flow.x, flow.y) * uTime * 0.04);
+  // Ripple scales are relative to the boat (2 units long at 8 m per unit)
+  vec2 s1 = slopeAt(p * 0.2 + flow * uTime * 0.03);
+  vec2 s2 = slopeAt(p * 0.55 - flow.yx * uTime * 0.05);
+  vec2 s3 = slopeAt(p * 1.4 + vec2(-flow.x, flow.y) * uTime * 0.08);
   vec2 slope = s1 * 0.5 + s2 * 0.35 + s3 * 0.3;
   vec3 N = normalize(vec3(slope.x * 0.7, 1.0, slope.y * 0.7));
 
@@ -72,11 +73,11 @@ void main(void) {
   // Sky reflected by the ripples; near the banks the trees reflect dark green
   vec3 R = reflect(-V, N);
   vec3 sky = mix(uHorizon, uZenith, pow(clamp(R.y, 0.0, 1.0), 0.6));
-  float underTrees = 1.0 - smoothstep(1.5, 12.0, shore);
+  float underTrees = 1.0 - smoothstep(0.5, 4.0, shore);
   sky = mix(sky, uBank, underTrees * 0.8);
 
   // Sediment-laden body color: lighter and yellower in the shallows by the bank
-  vec3 body = mix(uShallow, uDeep, smoothstep(0.5, 9.0, shore));
+  vec3 body = mix(uShallow, uDeep, smoothstep(0.2, 3.0, shore));
   body *= 0.93 + 0.14 * slope.x;
 
   vec3 color = mix(body, sky, clamp(fresnel * 0.85, 0.0, 1.0));
@@ -85,12 +86,12 @@ void main(void) {
   // away the ripples are smaller than a pixel, so glints would only alias
   vec3 H = normalize(uSunDir + V);
   float nh = max(dot(N, H), 0.0);
-  float near = 1.0 - smoothstep(70.0, 220.0, dist);
+  float near = 1.0 - smoothstep(25.0, 80.0, dist);
   color += uSunColor * (pow(nh, 500.0) * 1.8 * near + pow(nh, 80.0) * 0.05);
 
   // Water lapping the bank: a thin, moving line of foam
-  float lap = 0.5 + 0.5 * sin(uTime * 1.4 + p.x * 0.35 + p.y * 0.27);
-  float foam = 1.0 - smoothstep(0.0, 0.7 + lap * 0.5, shore + slope.y * 0.5);
+  float lap = 0.5 + 0.5 * sin(uTime * 1.4 + p.x * 1.2 + p.y * 0.9);
+  float foam = 1.0 - smoothstep(0.0, 0.2 + lap * 0.15, shore + slope.y * 0.15);
   color = mix(color, uFoam, foam * 0.6);
 
   // Same EXP2 fog as the rest of the scene

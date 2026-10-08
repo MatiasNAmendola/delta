@@ -5,7 +5,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import "@babylonjs/core/Meshes/thinInstanceMesh";
-import { WATER_LEVEL } from "../utils/constants";
+import { PROP_SCALE, WATER_LEVEL } from "../utils/constants";
 import { seededRandom } from "../utils/helpers";
 import type { WorldDoc } from "./WorldDoc";
 import type { WaterSystem } from "./WaterSystem";
@@ -36,10 +36,10 @@ interface Rowing {
 }
 
 const ROWING_CREWS = 6;
-const ROW_SPEED = 1.5; // world units per second
+const ROW_SPEED = 0.45; // world units per second (~3.5 m/s)
 const MIN_ROUTE_LENGTH = 120;
 const HULL_LENGTH = 2.8;
-const BUMP_DISTANCE = 2.2;
+const BUMP_DISTANCE = 2.2 * PROP_SCALE;
 const COMPLAINT_COOLDOWN = 4;
 /** Oar roll that puts the blade at the waterline. */
 const BLADE_DIP = -0.17;
@@ -119,9 +119,9 @@ export class YolaTraffic {
     // Moored yolas: hull only, afloat beside the bank
     for (const spot of moored) {
       const m = Matrix.Compose(
-        Vector3.One(),
+        new Vector3(PROP_SCALE, PROP_SCALE, PROP_SCALE),
         Quaternion.FromEulerAngles(0, spot.heading, 0.02),
-        new Vector3(spot.x, WATER_LEVEL + 0.05, spot.z)
+        new Vector3(spot.x, WATER_LEVEL + 0.05 * PROP_SCALE, spot.z)
       );
       hullMatrices.push(...(m.toArray() as number[]));
     }
@@ -145,9 +145,10 @@ export class YolaTraffic {
       // Each stroke surges the boat a little and rocks it
       const bob = Math.sin(c.phase * 2) * 0.02;
       const parent = Matrix.Compose(
-        Vector3.One(),
+        // Designed at the old prop size: the parent scale brings rowers and oars down too
+        new Vector3(PROP_SCALE, PROP_SCALE, PROP_SCALE),
         Quaternion.FromEulerAngles(Math.sin(c.phase) * 0.02, heading, 0),
-        new Vector3(x, WATER_LEVEL + 0.05 + bob, z)
+        new Vector3(x, WATER_LEVEL + (0.05 + bob) * PROP_SCALE, z)
       );
       this.hulls.thinInstanceSetMatrixAt(c.hull, parent, false);
 

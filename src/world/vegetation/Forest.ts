@@ -21,11 +21,11 @@ export interface TreeSpot {
 }
 
 /** Trees closer than this use the detailed version... */
-const NEAR = 80;
+const NEAR = 30;
 /** ...and up to this distance the cheap one; further away the fog hides them. */
-const FAR = 340;
+const FAR = 170;
 /** Rebuild the visible set after the camera moves this much. */
-const REFRESH_DISTANCE = 12;
+const REFRESH_DISTANCE = 5;
 const VARIANTS = 2;
 
 interface Part {
@@ -120,8 +120,12 @@ export class Forest {
     mesh.isPickable = false;
     // Instances move in and out around the camera: skip per-mesh culling
     mesh.alwaysSelectAsActiveMesh = true;
+    // Register both instance buffers up front: adding "color" later leaves
+    // an already compiled shader without the instanceColor attribute
     mesh.thinInstanceSetBuffer("matrix", new Float32Array(16), 16, false);
-    mesh.thinInstanceCount = 0;
+    mesh.thinInstanceSetBuffer("color", new Float32Array(4), 4, false);
+    // With no instances Babylon would draw the base mesh once, at the origin
+    mesh.setEnabled(false);
     return mesh;
   }
 
@@ -149,10 +153,8 @@ export class Forest {
     for (const list of this.parts.values()) {
       for (const part of list) {
         const n = part.pick.length;
-        if (n === 0) {
-          part.mesh.thinInstanceCount = 0;
-          continue;
-        }
+        part.mesh.setEnabled(n > 0);
+        if (n === 0) continue;
         const mats = new Float32Array(n * 16);
         const cols = new Float32Array(n * 4);
         part.pick.forEach((i, k) => {

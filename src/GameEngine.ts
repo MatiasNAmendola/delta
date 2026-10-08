@@ -15,6 +15,7 @@ import { MobileControls } from "./controls/MobileControls";
 import { GameUI } from "./ui/GameUI";
 import {
   BOAT_MAX_SPEED,
+  PROP_SCALE,
   CAMERA_HEIGHT,
   CAMERA_DISTANCE,
   CAMERA_LERP,
@@ -87,7 +88,7 @@ export class GameEngine {
       this.scene
     );
     this.camera.setTarget(Vector3.Zero());
-    this.camera.minZ = 0.5;
+    this.camera.minZ = 0.05;
     this.camera.maxZ = this.aerialView ? 3000 : 800;
 
     // Lighting
@@ -372,7 +373,7 @@ export class GameEngine {
           // Show approach notification
         }
 
-        if (actionPressed && Math.abs(this.boat.speed) < 0.15) {
+        if (actionPressed && Math.abs(this.boat.speed) < BOAT_MAX_SPEED * 0.4) {
           this.handleDockAction(dock);
         } else if (actionPressed) {
           this.ui.showNotification("¡Reducí la velocidad para parar!", 1500);
@@ -436,16 +437,34 @@ export class GameEngine {
     // Camera orbits around the boat based on boat rotation + user angle offset
     const cameraAngle = this.boat.rotation + Math.PI + angleOffset;
     // `?view=aerial`: high bird's-eye camera to review the map (e.g. after a map update)
-    const dist = this.aerialView ? 300 : CAMERA_DISTANCE * 0.6;
-    const height = this.aerialView ? 450 : CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset;
+    const dist = this.aerialView ? 300 : CAMERA_DISTANCE;
+    // Camera drag offsets were tuned for the old, 3.5x bigger props
+    const baseHeight = this.aerialView ? 450 : Math.max(0.6, CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset * PROP_SCALE);
     // Snapping (lerp factor 1) jumps straight to the boat, e.g. at spawn.
     // CAMERA_LERP is per 60 fps frame; convert so smoothing feels the same at any FPS.
     const frames = Math.min(dt, 0.1) * 60;
     const follow = snap ? 1 : 1 - Math.pow(1 - CAMERA_LERP, frames);
     const look = snap ? 1 : 1 - Math.pow(1 - CAMERA_LERP * 2, frames);
 
-    const targetX = this.boat.position.x + Math.sin(cameraAngle) * dist;
-    const targetZ = this.boat.position.z + Math.cos(cameraAngle) * dist;
+    let targetX = this.boat.position.x + Math.sin(cameraAngle) * dist;
+    let targetZ = this.boat.position.z + Math.cos(cameraAngle) * dist;
+    let raise = 0;
+    if (!this.aerialView) {
+      // Keep the camera over the water: over the bank it ends up inside the
+      // trees. Pull it in towards the boat and lift it to keep the view.
+      let free = dist;
+      for (let d = 0.5; d <= dist; d += 0.5) {
+        const x = this.boat.position.x + Math.sin(cameraAngle) * d;
+        const z = this.boat.position.z + Math.cos(cameraAngle) * d;
+        if (!this.waterSystem.isWater(x, z)) {
+          free = Math.max(CAMERA_MIN_DISTANCE, d - 0.5);
+          break;
+        }
+      }
+      targetX = this.boat.position.x + Math.sin(cameraAngle) * free;
+      targetZ = this.boat.position.z + Math.cos(cameraAngle) * free;
+      raise = (dist - free) * 0.35;
+    }
 
     this.camera.position.x = lerp(
       this.camera.position.x,
@@ -459,7 +478,7 @@ export class GameEngine {
     );
     this.camera.position.y = lerp(
       this.camera.position.y,
-      height,
+      baseHeight + raise,
       follow
     );
 
@@ -529,6 +548,9 @@ export class GameEngine {
 
 const WAKE_PENALTY = 50;
 const BUMP_PENALTY = 100;
+
+/** Closest the chase camera gets to the boat when the bank is right behind it. */
+const CAMERA_MIN_DISTANCE = 3;
 
 /** How many of the nearest docks the next stop is drawn from. */
 const NEXT_STOP_CHOICES = 3;

@@ -7,11 +7,11 @@ import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { TerrainMaterial } from "@babylonjs/materials/terrain/terrainMaterial";
-import { WATER_LEVEL, COLORS } from "../utils/constants";
+import { WATER_LEVEL, COLORS, PROP_SCALE } from "../utils/constants";
 import { degToRad, type Dock, type ScatterRule, type Vec2, type WorldDoc } from "./WorldDoc";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { hexToColor3, seededRandom, clamp } from "../utils/helpers";
-import { WaterSystem, type Shore } from "./WaterSystem";
+import { SHORE_SDF_RANGE, WaterSystem, type Shore } from "./WaterSystem";
 import { InstancedBoxBatch, propTransform } from "./InstancedBatch";
 import { WaterDistanceField } from "./WaterDistanceField";
 import { placeDockModels } from "./DockModel";
@@ -43,7 +43,7 @@ export class Environment {
     this.forest = new Forest(scene);
     // ~3 world units per cell (256 for the original 800-unit Delta); also the splatmap size
     const res = world.world.size <= 800 ? 256 : 1024;
-    this.waterDistance = new WaterDistanceField(world.world.size, res, (x, z) => waterSystem.isWater(x, z));
+    this.waterDistance = new WaterDistanceField(world.world.size, res, (x, z) => waterSystem.isWaterCoarse(x, z));
     const shore = waterSystem.getShore();
     this.createGround(shore);
     this.createSkybox();
@@ -67,11 +67,12 @@ export class Environment {
       // Patches may straddle the bank: the shader drops blades rooted on water
       (x, z) =>
         // Skip patches wholly over the water
-        [[0, 0], [1.4, 0], [-1.4, 0], [0, 1.4], [0, -1.4]].some(([dx, dz]) => !waterSystem.isWater(x + dx, z + dz)) &&
+        [[0, 0], [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5]].some(([dx, dz]) => !waterSystem.isWater(x + dx, z + dz)) &&
         !this.nearDock(x, z) &&
-        !this.houses.some((h) => Math.abs(h.x - x) < 3 && Math.abs(h.z - z) < 3),
+        !this.houses.some((h) => Math.abs(h.x - x) < 3 * PROP_SCALE && Math.abs(h.z - z) < 3 * PROP_SCALE),
       WATER_LEVEL + BANK_TOP,
-      waterSystem.createLandMask(),
+      waterSystem.createShoreDistanceTexture(),
+      SHORE_SDF_RANGE,
       world.world.size
     );
     void this.buildDocks();
@@ -80,12 +81,12 @@ export class Environment {
     new RiverBanks(scene, shore.rings, {
       bankTop: BANK_TOP,
       isBulkhead: (x, z) =>
-        this.dockSites.some((d) => Math.hypot(d.x - x, d.z - z) < 14) ||
-        this.waterfrontHouses.some((h) => Math.hypot(h.x - x, h.z - z) < 9) ||
+        this.dockSites.some((d) => Math.hypot(d.x - x, d.z - z) < 14 * PROP_SCALE) ||
+        this.waterfrontHouses.some((h) => Math.hypot(h.x - x, h.z - z) < 9 * PROP_SCALE) ||
         this.fbm(x * 0.012, z * 0.012, 2, 77) > 0.68,
       keepClear: (x, z) =>
-        this.dockSites.some((d) => Math.hypot(d.x - x, d.z - z) < 10) ||
-        [...this.berths.values()].some((b) => Math.hypot(b.x - x, b.z - z) < 6),
+        this.dockSites.some((d) => Math.hypot(d.x - x, d.z - z) < 10 * PROP_SCALE) ||
+        [...this.berths.values()].some((b) => Math.hypot(b.x - x, b.z - z) < 6 * PROP_SCALE),
     });
   }
 
@@ -171,7 +172,7 @@ export class Environment {
       terrainMat.mixTexture = this.generateSplatmap();
 
       // Textures repeat every ~10 m so the lawn has detail up close
-      const tiles = size / 10;
+      const tiles = size / (10 * PROP_SCALE);
 
       // Lawn (R channel) - coherent noise texture
       const grassTex = this.createProceduralGrass();
@@ -189,7 +190,7 @@ export class Environment {
       terrainMat.diffuseTexture3 = lushTex;
 
       // Try loading higher-quality CDN textures (replaces procedural on success)
-      this.tryLoadCDNTextures(terrainMat, size / 10);
+      this.tryLoadCDNTextures(terrainMat, size / (10 * PROP_SCALE));
 
       terrainMat.specularColor = new Color3(0.05, 0.05, 0.05);
       terrainMat.specularPower = 4;
@@ -233,7 +234,8 @@ export class Environment {
       const patches = smoothstep(0.58, 0.72, this.fbm(x * 0.03, z * 0.03, 3, 456));
       // ...and where the bank edge crumbles
       const edge = 1 - smoothstep(0.5, 2.5, field.atCell(px, j) + (this.fbm(x * 0.2, z * 0.2, 2, 457) - 0.5) * 2);
-      const dirt = clamp(Math.max(patches * 0.8, edge * 0.7), 0, 0.85);
+      // Kept light: worn earth the color of the river reads as water from above
+      const dirt = clamp(Math.max(patches * 0.3, edge * 0.45), 0, 0.5);
       const lush = smoothstep(0.48, 0.68, this.fbm(x * 0.012 + 40, z * 0.012, 3, 458)) * (1 - dirt) * 0.85;
       out[0] = (1 - dirt) * (1 - lush);
       out[1] = dirt;
@@ -266,9 +268,10 @@ export class Environment {
       const n1 = this.fbm(x * 0.1, y * 0.1, 4, 888);
       const n2 = this.fbm(x * 0.2, y * 0.2, 2, 889);
       const n = (n1 - 0.5) * 0.25 + (n2 - 0.5) * 0.08;
-      out[0] = 0.5 + n * 0.8;
-      out[1] = 0.36 + n * 0.6;
-      out[2] = 0.2 + n * 0.4;
+      // Dark olive soil with leaf litter, clearly different from the river's cafe con leche
+      out[0] = 0.34 + n * 0.6;
+      out[1] = 0.32 + n * 0.55;
+      out[2] = 0.2 + n * 0.35;
     });
     return tex;
   }
@@ -288,7 +291,7 @@ export class Environment {
     return tex;
   }
 
-  /** Try loading higher-quality textures from BabylonJS CDN */
+  /** Try loading a higher-quality grass texture (and its normal map) from the BabylonJS CDN */
   private tryLoadCDNTextures(terrainMat: TerrainMaterial, tiles: number): void {
     const cdnBase = "https://assets.babylonjs.com/textures/";
 
@@ -328,26 +331,6 @@ export class Environment {
     } catch {
       /* keep procedural */
     }
-
-    // Ground/dirt texture from CDN
-    try {
-      const groundCDN = new Texture(
-        cdnBase + "ground.jpg",
-        this.scene,
-        false,
-        true,
-        Texture.TRILINEAR_SAMPLINGMODE,
-        () => {
-          groundCDN.uScale = groundCDN.vScale = tiles;
-          terrainMat.diffuseTexture2 = groundCDN;
-        },
-        () => {
-          /* CDN failed, keep procedural */
-        }
-      );
-    } catch {
-      /* keep procedural */
-    }
   }
 
   private createSkybox(): void {
@@ -373,22 +356,39 @@ export class Environment {
     // Fog for atmosphere
     this.scene.fogMode = Scene.FOGMODE_EXP2;
     // Humid haze of the Delta; also hides where the tree streaming ends
-    this.scene.fogDensity = 0.0032;
+    this.scene.fogDensity = 0.0065;
     this.scene.fogColor = new Color3(0.6, 0.78, 0.85);
   }
 
   /** A procedural tree, kept clear of houses, docks and moored boats. */
   private addTree(x: number, z: number, seed: number, species: SpeciesName, rotation?: number): void {
-    if (this.nearDock(x, z) || this.houses.some((h) => Math.abs(h.x - x) < 3.5 && Math.abs(h.z - z) < 3.5)) return;
+    const clear = 3.5 * PROP_SCALE;
+    if (this.nearDock(x, z) || this.houses.some((h) => Math.abs(h.x - x) < clear && Math.abs(h.z - z) < clear)) return;
     const rng = seededRandom(seed);
     this.forest.add({
       x,
       y: this.groundY(x, z),
       z,
       rotation: rotation ?? rng() * Math.PI * 2,
-      scale: 0.8 + rng() * 0.4,
+      scale: (0.8 + rng() * 0.4) * PROP_SCALE,
       species,
     });
+  }
+
+  /** Island woods: a clump of 3-8 trees of one or two species around a scattered seed point. */
+  private addGrove(x: number, z: number, seed: number, waterSystem: WaterSystem): void {
+    const rng = seededRandom(seed * 7 + 3);
+    const main = INLAND_SPECIES[seed % INLAND_SPECIES.length];
+    const other = INLAND_SPECIES[(seed >> 3) % INLAND_SPECIES.length];
+    const count = 3 + Math.floor(rng() * 6);
+    for (let k = 0; k < count; k++) {
+      const a = rng() * Math.PI * 2;
+      const r = Math.sqrt(rng()) * 2.2;
+      const tx = x + Math.cos(a) * r;
+      const tz = z + Math.sin(a) * r;
+      if (waterSystem.isWater(tx, tz)) continue;
+      this.addTree(tx, tz, Math.floor(rng() * 1e9), rng() < 0.7 ? main : other);
+    }
   }
 
   /**
@@ -402,7 +402,7 @@ export class Environment {
     let row: SpeciesName | null = null;
     let rowLeft = 0;
     for (const ring of rings) {
-      let next = rng() * 4;
+      let next = rng() * 4 * PROP_SCALE;
       let walked = 0;
       for (let i = 0; i < ring.length; i++) {
         const [ax, az] = ring[i];
@@ -412,11 +412,12 @@ export class Environment {
         const toWater: [number, number] = [-(bz - az) / len, (bx - ax) / len];
         while (next < walked + len) {
           const t = (next - walked) / len;
-          const back = 1.2 + rng() * 2.6;
+          const back = (1.2 + rng() * 2.6) * PROP_SCALE;
           const x = ax + (bx - ax) * t - toWater[0] * back;
           const z = az + (bz - az) * t - toWater[1] * back;
-          next += 2.6 + rng() * 3.4;
-          if (rng() < 0.18 || waterSystem.isWater(x, z) || this.waterDistance.at(x, z) < 0.8) continue;
+          // Denser than one tree per design spacing: the bank is a wall of trees
+          next += (2.6 + rng() * 3.4) * PROP_SCALE * 1.6;
+          if (rng() < 0.18 || waterSystem.isWater(x, z) || waterSystem.isWater(x - toWater[0] * 0.2, z - toWater[1] * 0.2)) continue;
 
           let species: SpeciesName;
           if (rowLeft > 0 && row) {
@@ -444,7 +445,7 @@ export class Environment {
   private addHouse(x: number, z: number, seed: number, onStilts: boolean): void {
     const rng = seededRandom(seed);
     const p = this.props;
-    const parent = propTransform(x, this.groundY(x, z), z, rng() * Math.PI * 2);
+    const parent = propTransform(x, this.groundY(x, z), z, rng() * Math.PI * 2, PROP_SCALE);
 
     const w = 2 + rng() * 2;
     const h = 1.5 + rng() * 1.5;
@@ -493,7 +494,7 @@ export class Environment {
       switch (rule.prefab) {
         case "tree":
           // The banks are planted along the shoreline; scattered trees are inland
-          if (!nearWater) this.addTree(x, z, seed, INLAND_SPECIES[seed % INLAND_SPECIES.length]);
+          if (!nearWater) this.addGrove(x, z, seed, waterSystem);
           break;
         case "house":
           this.addHouse(x, z, seed, nearWater);
@@ -514,27 +515,27 @@ export class Environment {
     const count = 2 + Math.floor(rng() * 3);
     for (let k = 0; k < count; k++) {
       // Clear of the deck and of the side stairs, one hull length apart
-      const off = side * (DOCK_HALF_ALONG + 3 + k * 3.1);
+      const off = side * (DOCK_HALF_ALONG + (3 + k * 3.1) * PROP_SCALE);
       let x = site.x + along[0] * off;
       let z = site.z + along[1] * off;
       // Find this spot's own water's edge across the shore line
       const wetHere = waterSystem.isWater(x, z);
       let found = false;
-      for (let t = 0; t < 12; t += 0.25) {
+      for (let t = 0; t < 12 * PROP_SCALE; t += 0.05) {
         const sx = x + (wetHere ? -toWater[0] : toWater[0]) * t;
         const sz = z + (wetHere ? -toWater[1] : toWater[1]) * t;
         if (waterSystem.isWater(sx, sz) !== wetHere) {
           // Last water point before the bank
-          x = wetHere ? sx + toWater[0] * 0.25 : sx;
-          z = wetHere ? sz + toWater[1] * 0.25 : sz;
+          x = wetHere ? sx + toWater[0] * 0.05 : sx;
+          z = wetHere ? sz + toWater[1] * 0.05 : sz;
           found = true;
           break;
         }
       }
       if (!found) continue;
       this.moored.push({
-        x: x + toWater[0] * 0.55,
-        z: z + toWater[1] * 0.55,
+        x: x + toWater[0] * 0.55 * PROP_SCALE,
+        z: z + toWater[1] * 0.55 * PROP_SCALE,
         heading: Math.atan2(along[0] * side, along[1] * side) + (rng() - 0.5) * 0.08,
       });
     }
@@ -554,8 +555,8 @@ export class Environment {
   /** Keeps vegetation and houses off the bus-boat stops. */
   private nearDock(x: number, z: number): boolean {
     return (
-      this.dockSites.some((site) => Math.abs(site.x - x) < 5 && Math.abs(site.z - z) < 5) ||
-      this.moored.some((spot) => Math.abs(spot.x - x) < 2 && Math.abs(spot.z - z) < 2)
+      this.dockSites.some((site) => Math.abs(site.x - x) < 5 * PROP_SCALE && Math.abs(site.z - z) < 5 * PROP_SCALE) ||
+      this.moored.some((spot) => Math.abs(spot.x - x) < 2 * PROP_SCALE && Math.abs(spot.z - z) < 2 * PROP_SCALE)
     );
   }
 
@@ -574,7 +575,7 @@ export class Environment {
 
   /** The Blender muelle at every dock; box docks if the model can't load. */
   private async buildDocks(): Promise<void> {
-    const placements = this.dockSites.map((site) => propTransform(site.x, WATER_LEVEL, site.z, site.rotation));
+    const placements = this.dockSites.map((site) => propTransform(site.x, WATER_LEVEL, site.z, site.rotation, PROP_SCALE));
     try {
       await placeDockModels(this.scene, placements);
     } catch (error) {
@@ -588,10 +589,10 @@ export class Environment {
   /** Box-built muelle (fallback): same layout as the Blender model, coarser. */
   private addBoxDock(p: PropBatches, site: { x: number; z: number; rotation: number; seed: number }): void {
     const rng = seededRandom(site.seed);
-    const parent = propTransform(site.x, WATER_LEVEL, site.z, site.rotation);
+    const parent = propTransform(site.x, WATER_LEVEL, site.z, site.rotation, PROP_SCALE);
     const deckTop = 1.3;
-    const halfX = DOCK_HALF_X;
-    const halfZ = DOCK_HALF_ALONG;
+    const halfX = BOX_DOCK_HALF_X;
+    const halfZ = BOX_DOCK_HALF_ALONG;
 
     // Piles from the river bottom up to the deck, plus diagonal bracing
     for (const px of [-halfX + 0.15, 0, halfX - 0.15]) {
@@ -688,11 +689,16 @@ const ROOF_SHEET_COLORS = [new Color3(0.62, 0.64, 0.66), new Color3(0.27, 0.4, 0
 /** Trees scattered away from the water. */
 const INLAND_SPECIES: SpeciesName[] = ["fronda", "fronda", "alamo", "casuarina", "fronda"];
 
-const DOCK_HALF_X = 1.5;
+const DOCK_HALF_X = 1.5 * PROP_SCALE;
 /** Half its length along the shore (4.2 m), stairs not included. */
-const DOCK_HALF_ALONG = 2.1;
+const DOCK_HALF_ALONG = 2.1 * PROP_SCALE;
+/** Design size of the box-built fallback muelle (before PROP_SCALE). */
+const BOX_DOCK_HALF_X = 1.5;
+const BOX_DOCK_HALF_ALONG = 2.1;
+/** Water between the muelle's open side and the boat's center when moored. */
+const BERTH_GAP = 1.5 * PROP_SCALE;
 /** Island ground height above the river: the low bank of the Delta islands. */
-const BANK_TOP = 0.6;
+const BANK_TOP = 0.6 * PROP_SCALE;
 /** How far from the World Doc point a dock may move to reach the bank. */
 const MAX_BANK_SEARCH = 40;
 
@@ -731,14 +737,14 @@ function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockS
     const across: [number, number] = [Math.cos(a), -Math.sin(a)];
     let best = Infinity;
     for (const s of [1, -1]) {
-      for (let t = 0.5; t <= MAX_BANK_SEARCH; t += 0.5) {
+      for (let t = 0.1; t <= MAX_BANK_SEARCH; t += 0.1) {
         const x = dock.x + s * across[0] * t;
         const z = dock.z + s * across[1] * t;
         if (!wet(x, z)) {
           if (t < best) {
             best = t;
             dir = [-s * across[0], -s * across[1]];
-            edge = [x - s * across[0] * 0.5, z - s * across[1] * 0.5];
+            edge = [x - s * across[0] * 0.1, z - s * across[1] * 0.1];
           }
           break;
         }
@@ -750,7 +756,7 @@ function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockS
     for (let k = 0; k < 24; k++) {
       const ang = (k / 24) * Math.PI * 2;
       const d: [number, number] = [Math.cos(ang), Math.sin(ang)];
-      for (let t = 0.5; t <= MAX_BANK_SEARCH && t < best; t += 0.5) {
+      for (let t = 0.1; t <= MAX_BANK_SEARCH && t < best; t += 0.1) {
         if (wet(dock.x + d[0] * t, dock.z + d[1] * t)) {
           best = t;
           dir = d;
@@ -769,16 +775,16 @@ function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockS
       z: dock.z,
       rotation,
       berth: {
-        x: dock.x + Math.cos(rotation) * (halfX + 1.5),
-        z: dock.z - Math.sin(rotation) * (halfX + 1.5),
+        x: dock.x + Math.cos(rotation) * (halfX + BERTH_GAP),
+        z: dock.z - Math.sin(rotation) * (halfX + BERTH_GAP),
         heading: -rotation,
       },
       toWater: null,
     };
   }
 
-  // Deck center: over the water, its land edge 0.5 units onto the bank
-  const inset = halfX - 0.5;
+  // Deck center: over the water, its land edge a little onto the bank
+  const inset = halfX - 0.5 * PROP_SCALE;
   const x = edge[0] + dir[0] * inset;
   const z = edge[1] + dir[1] * inset;
   // RotationY(r) maps local +x to (cos r, -sin r): solve for +x = dir
@@ -787,8 +793,8 @@ function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockS
   // Berth just off the open side, but never past mid-channel: in a narrow
   // arroyo that would land it on the far bank
   let width = 0;
-  while (width < MAX_BANK_SEARCH && wet(edge[0] + dir[0] * (width + 0.5), edge[1] + dir[1] * (width + 0.5))) width += 0.5;
-  const reach = Math.min(inset + halfX + 1.5, Math.max(0.5, width / 2));
+  while (width < MAX_BANK_SEARCH && wet(edge[0] + dir[0] * (width + 0.1), edge[1] + dir[1] * (width + 0.1))) width += 0.1;
+  const reach = Math.min(inset + halfX + BERTH_GAP, Math.max(0.2, width / 2));
   // Moored parallel to the shore: heading along the bank, atan2(dx, dz) convention
   const heading = Math.atan2(-dir[1], dir[0]);
   return { x, z, rotation, berth: { x: edge[0] + dir[0] * reach, z: edge[1] + dir[1] * reach, heading }, toWater: dir };

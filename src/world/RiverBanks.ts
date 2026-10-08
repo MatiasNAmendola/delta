@@ -5,14 +5,14 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { WATER_LEVEL } from "../utils/constants";
+import { PROP_SCALE, WATER_LEVEL } from "../utils/constants";
 import { seededRandom } from "../utils/helpers";
 import type { Vec2 } from "./WorldDoc";
 import { InstancedBoxBatch, propTransform } from "./InstancedBatch";
 import { paintPixels } from "./texturePaint";
 
 /** Wall bottom, below the (opaque) water surface. */
-const WALL_FOOT = -0.6;
+const WALL_FOOT = -0.6 * PROP_SCALE;
 
 export interface RiverBankOptions {
   /** Height of the island ground above the water. */
@@ -56,11 +56,11 @@ export class RiverBanks {
         const nx = -(b[1] - a[1]) / len;
         const nz = (b[0] - a[0]) / len;
         if (!bulkhead && !options.keepClear(mx, mz)) {
-          for (let t = 0; t < len; t += 3) {
+          for (let t = 0; t < len; t += 3 * PROP_SCALE) {
             const x = a[0] + ((b[0] - a[0]) * t) / len;
             const z = a[1] + ((b[1] - a[1]) * t) / len;
             const roll = rng();
-            if (roll < 0.03) addReeds(reeds, x + nx * 0.3, z + nz * 0.3, rng);
+            if (roll < 0.03) addReeds(reeds, x + nx * 0.3 * PROP_SCALE, z + nz * 0.3 * PROP_SCALE, rng);
             else if (roll < 0.045) addCamalotes(camalotes, x, z, nx, nz, rng);
           }
         }
@@ -70,8 +70,8 @@ export class RiverBanks {
 
     // Where the water surface meets the wall, as a fraction of its height
     const waterline = -WALL_FOOT / (options.bankTop - WALL_FOOT);
-    mud.build("barranca", scene, createMudBankMaterial(scene, waterline), 4);
-    wood.build("tablestacado", scene, createBulkheadMaterial(scene, waterline), 2.4);
+    mud.build("barranca", scene, createMudBankMaterial(scene, waterline), 4 * PROP_SCALE);
+    wood.build("tablestacado", scene, createBulkheadMaterial(scene, waterline), 2.4 * PROP_SCALE);
     reeds.build();
     camalotes.build();
   }
@@ -190,7 +190,13 @@ function addReeds(batch: InstancedBoxBatch, x: number, z: number, rng: () => num
     const a = rng() * Math.PI * 2;
     const r = rng() * 0.8;
     const tone = REED_COLORS[Math.floor(rng() * REED_COLORS.length)];
-    const parent = propTransform(x + Math.cos(a) * r, WATER_LEVEL - 0.3, z + Math.sin(a) * r, rng() * Math.PI);
+    const parent = propTransform(
+      x + Math.cos(a) * r * PROP_SCALE,
+      WATER_LEVEL - 0.3 * PROP_SCALE,
+      z + Math.sin(a) * r * PROP_SCALE,
+      rng() * Math.PI,
+      PROP_SCALE
+    );
     batch.add(parent, [0.07, h, 0.07], [0, h / 2, 0], tone, [(rng() - 0.5) * 0.35, 0, (rng() - 0.5) * 0.35]);
   }
 }
@@ -201,10 +207,10 @@ function addCamalotes(batch: InstancedBoxBatch, x: number, z: number, nx: number
   for (let k = 0; k < count; k++) {
     const out = 0.5 + rng() * 1.3;
     const side = (rng() - 0.5) * 2.5;
-    const px = x + nx * out - nz * side;
-    const pz = z + nz * out + nx * side;
+    const px = x + (nx * out - nz * side) * PROP_SCALE;
+    const pz = z + (nz * out + nx * side) * PROP_SCALE;
     const tone = HYACINTH_COLORS[Math.floor(rng() * HYACINTH_COLORS.length)];
-    const parent = propTransform(px, WATER_LEVEL + 0.05, pz, rng() * Math.PI);
+    const parent = propTransform(px, WATER_LEVEL + 0.05 * PROP_SCALE, pz, rng() * Math.PI, PROP_SCALE);
     batch.add(parent, [0.9 + rng() * 0.9, 0.35, 0.7 + rng() * 0.7], [0, 0, 0], tone);
   }
 }

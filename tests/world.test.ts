@@ -25,7 +25,8 @@ describe("delta.world.json", () => {
     expect(world.rules).toEqual({
       durationSec: 300,
       boatCapacity: 20,
-      pickupRadius: 8,
+      // 24 m: real-scale stops (was 8 units = 64 m with the oversized props)
+      pickupRadius: 3,
       scorePerPassenger: 100,
       timeBonusPerPassenger: 50,
     });
@@ -38,7 +39,7 @@ describe("delta.world.json", () => {
     const sarmiento = world.docks.find((d) => d.id === "sarmiento-centro")!;
     expect(degToRad(sarmiento.rotationDeg)).toBeCloseTo(Math.PI / 3, 12);
     expect(world.scatter.map((s) => [s.prefab, s.seed, s.attempts])).toEqual([
-      ["tree", 42, 600],
+      ["tree", 42, 1800], // denser island woods at real prop scale
       ["house", 123, 80],
     ]);
   });

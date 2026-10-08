@@ -55,7 +55,8 @@ export function offsetPolyline(points: Vec2[], offset: number): Vec2[] {
   });
 }
 
-export const COURTESY_RADIUS = 9;
+/** World units (8 m each): about 25 m around the rowers. */
+export const COURTESY_RADIUS = 3;
 /** Fraction of top speed above which the lancha's wake swamps the rowers. */
 export const COURTESY_SPEED = 0.55;
 

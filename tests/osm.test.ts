@@ -153,7 +153,7 @@ describe("osmToWorld", () => {
   it("credits OpenStreetMap and scales vegetation to the new area", () => {
     expect(world.world.attribution).toMatch(/OpenStreetMap/);
     const factor = (1200 / 800) ** 2;
-    expect(world.scatter[0].attempts).toBe(Math.round(600 * factor));
+    expect(world.scatter[0].attempts).toBe(Math.round(1800 * factor));
   });
 });
 
