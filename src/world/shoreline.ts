@@ -447,16 +447,19 @@ export function roughenRing(
     const fade = Math.max(0, Math.min(1, (edge - 1) / 3));
     const n = fractalNoise(x, z) * amplitude * fade;
     const limit = n > 0 ? room(x, z, wx, wz) : room(x, z, -wx, -wz);
-    const d = Math.sign(n) * Math.min(Math.abs(n), limit * 0.3);
+    // Into the water both banks may move: at most 25% of the channel each,
+    // so at least half of it stays open; coves into the land may go 40%
+    const d = Math.sign(n) * Math.min(Math.abs(n), limit * (n > 0 ? 0.25 : 0.4));
     out.push([Math.max(-half, Math.min(half, x + wx * d)), Math.max(-half, Math.min(half, z + wz * d))]);
   }
   return out;
 }
 
 /**
- * Smooth 2D value noise, two octaves: coves and points every ~4-11 units
- * (30-90 m). Finer detail would be smaller than the shore distance
- * texture's texels and grass could no longer follow the bank exactly.
+ * Smooth 2D value noise: coves and points every ~4-11 units (30-90 m),
+ * plus smaller bites and bulges of 15-30 m. Nothing finer than ~1 unit:
+ * that would be below the shore distance texture's texels and the grass
+ * could no longer follow the bank exactly.
  */
 function fractalNoise(x: number, z: number): number {
   let v = 0;
@@ -467,6 +470,9 @@ function fractalNoise(x: number, z: number): number {
     amp *= 0.45;
     f *= 2.6;
   }
+  // Small bites and bulges of eroded mud (~2-4 units, 15-30 m): nature, not survey lines
+  v += valueNoise(x * 0.38 + 41.7, z * 0.38 - 13.3) * 0.6;
+  v += valueNoise(x * 0.9 - 7.1, z * 0.9 + 3.9) * 0.22;
   return v;
 }
 
