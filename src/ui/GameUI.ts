@@ -1,10 +1,11 @@
 import { Scene } from "@babylonjs/core/scene";
 import type { WorldDoc } from "../world/WorldDoc";
-import { LanchaColectiva } from "../boat/LanchaColectiva";
 import { getPointOnPath } from "../utils/helpers";
 import { gsap } from "gsap";
 import { METERS_PER_UNIT } from "../utils/constants";
 import { StartScreen } from "./StartScreen";
+import type { BoatTypeId } from "../boat/boatTypes";
+import type { Summary } from "../game/modes";
 import { showEndScreen } from "./EndScreen";
 import { injectHudTheme } from "./hudTheme";
 
@@ -13,7 +14,8 @@ export class GameUI {
   private minimapCanvas!: HTMLCanvasElement;
   private minimapCtx!: CanvasRenderingContext2D;
   private scoreEl!: HTMLElement;
-  private passengersEl!: HTMLElement;
+  private secondEl!: HTMLElement;
+  private secondLabelEl!: HTMLElement;
   private timerEl!: HTMLElement;
   private locationEl!: HTMLElement;
   private notificationEl!: HTMLElement;
@@ -117,8 +119,8 @@ export class GameUI {
           <span class="value" id="hud-score">0</span>
         </div>
         <div class="hud-item">
-          <span class="label">Pasajeros</span>
-          <span class="value" id="hud-passengers">0/${this.world.rules.boatCapacity}</span>
+          <span class="label" id="hud-second-label">Pasajeros</span>
+          <span class="value" id="hud-second">0/${this.world.rules.boatCapacity}</span>
         </div>
         <div class="hud-item">
           <span class="label">Tiempo</span>
@@ -133,7 +135,8 @@ export class GameUI {
     injectHudTheme();
 
     this.scoreEl = document.getElementById("hud-score")!;
-    this.passengersEl = document.getElementById("hud-passengers")!;
+    this.secondEl = document.getElementById("hud-second")!;
+    this.secondLabelEl = document.getElementById("hud-second-label")!;
     this.timerEl = document.getElementById("hud-timer")!;
     this.locationEl = document.getElementById("hud-location")!;
     this.notificationEl = document.getElementById("hud-notification")!;
@@ -254,8 +257,8 @@ export class GameUI {
     ctx.restore();
   }
 
-  public showStartScreen(): void {
-    this.startScreen = new StartScreen(this.world);
+  public showStartScreen(selected: BoatTypeId, onSelect: (id: BoatTypeId) => void): void {
+    this.startScreen = new StartScreen(this.world, selected, onSelect);
   }
 
   public onPlayClick(callback: () => void): void {
@@ -281,8 +284,10 @@ export class GameUI {
     this.scoreEl.textContent = score.toLocaleString();
   }
 
-  public updatePassengers(current: number): void {
-    this.passengersEl.textContent = `${current}/${this.world.rules.boatCapacity}`;
+  /** Second HUD pill: passengers, energy, corners found or leg time, per boat. */
+  public updateSecondary(label: string, value: string): void {
+    if (this.secondLabelEl.textContent !== label) this.secondLabelEl.textContent = label;
+    if (this.secondEl.textContent !== value) this.secondEl.textContent = value;
   }
 
   public updateTimer(secondsLeft: number): void {
@@ -301,13 +306,13 @@ export class GameUI {
     this.locationEl.textContent = name;
   }
 
-  public updateNextStop(name: string, distance: number): void {
+  public updateNextStop(label: string, name: string, distance: number): void {
     const el = document.getElementById("hud-nextStop");
     if (el) {
       // World units are 8 m on the real map
       const meters = distance * METERS_PER_UNIT;
       const far = meters >= 1000 ? `${(meters / 1000).toFixed(1).replace(".", ",")} km` : `${Math.round(meters / 10) * 10} m`;
-      el.textContent = `Próxima parada · ${name} · ${far}`;
+      el.textContent = `${label} · ${name} · ${far}`;
     }
   }
 
@@ -332,7 +337,7 @@ export class GameUI {
     }, duration);
   }
 
-  public showEndScreen(score: number, passengersDelivered: number): void {
-    showEndScreen(score, passengersDelivered);
+  public showEndScreen(score: number, summary: Summary, boatName: string): void {
+    showEndScreen(score, summary, boatName);
   }
 }

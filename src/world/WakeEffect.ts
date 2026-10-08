@@ -9,10 +9,22 @@ import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { TrailMesh } from "@babylonjs/core/Meshes/trailMesh";
-import { WATER_LEVEL, BOAT_LENGTH, BOAT_MAX_SPEED, PROP_SCALE } from "../utils/constants";
+import { WATER_LEVEL, BOAT_LENGTH, PROP_SCALE } from "../utils/constants";
 
-/** The wake was designed for props 3.5x bigger: its sizes are scaled by this. */
-const S = PROP_SCALE;
+/**
+ * The wake was designed for props 3.5x bigger and the lancha colectiva:
+ * its sizes are scaled by this, set for the current boat in the constructor
+ * (one wake exists at a time; it is rebuilt when the boat changes).
+ */
+let S = PROP_SCALE;
+
+export interface WakeOptions {
+  /** Boat length and top speed (world units, per 60 fps frame). */
+  length: number;
+  maxSpeed: number;
+  /** How much wake it throws: 1 = lancha colectiva, ~0 = kayak. */
+  strength: number;
+}
 
 /** Brings a particle system designed at the old size down to the boat's scale. */
 function scaleParticles(ps: ParticleSystem): void {
@@ -76,7 +88,15 @@ export class WakeEffect {
   private rippleMat: StandardMaterial;
   private rippleTimer = 0;
 
-  constructor(scene: Scene) {
+  private length: number;
+  private maxSpeed: number;
+  private strength: number;
+
+  constructor(scene: Scene, options: WakeOptions) {
+    S = PROP_SCALE * (options.length / BOAT_LENGTH) ** 0.7;
+    this.length = options.length;
+    this.maxSpeed = options.maxSpeed;
+    this.strength = options.strength;
     this.scene = scene;
 
     // Create textures
@@ -407,10 +427,10 @@ export class WakeEffect {
     speed: number
   ): void {
     // The effects were tuned for the old boat (top speed 0.35): keep that feel
-    const absSpeed = (Math.abs(speed) / BOAT_MAX_SPEED) * 0.35;
+    const absSpeed = (Math.abs(speed) / this.maxSpeed) * 0.35;
     const sinR = Math.sin(boatRotation);
     const cosR = Math.cos(boatRotation);
-    const halfBoat = BOAT_LENGTH / 2;
+    const halfBoat = this.length / 2;
 
     // --- Update emitter positions ---
 
@@ -485,8 +505,8 @@ export class WakeEffect {
       this.centerTrail.diameter = (0.8 + absSpeed * 3) * S;
 
       // Faint: solid sheets read as plastic, not foam
-      this.trailMat.alpha = Math.min(0.1, absSpeed * 0.4);
-      this.centerTrailMat.alpha = Math.min(0.15, absSpeed * 0.6);
+      this.trailMat.alpha = Math.min(0.1, absSpeed * 0.4) * Math.min(1, this.strength * 1.5);
+      this.centerTrailMat.alpha = Math.min(0.15, absSpeed * 0.6) * Math.min(1, this.strength * 1.5);
     } else {
       // When stopped, fade trails
       this.trailMat.alpha = Math.max(0, this.trailMat.alpha - deltaTime * 0.5);
@@ -516,7 +536,7 @@ export class WakeEffect {
 
     // Stern foam: heavy churning behind the boat
     if (absSpeed > 0.03) {
-      this.sternFoam.emitRate = Math.floor(absSpeed * 500);
+      this.sternFoam.emitRate = Math.floor((absSpeed * 500) * this.strength);
       this.sternFoam.minEmitPower = (absSpeed * 1.5) * S;
       this.sternFoam.maxEmitPower = (absSpeed * 4.0) * S;
       this.sternFoam.minSize = (0.25 + absSpeed * 0.6) * S;
@@ -527,7 +547,7 @@ export class WakeEffect {
 
     // Surface foam: flat foam patches on water
     if (absSpeed > 0.05) {
-      this.surfaceFoam.emitRate = Math.floor(absSpeed * 300);
+      this.surfaceFoam.emitRate = Math.floor((absSpeed * 300) * this.strength);
       this.surfaceFoam.minEmitPower = (0.2 + absSpeed * 0.8) * S;
       this.surfaceFoam.maxEmitPower = (0.8 + absSpeed * 2.0) * S;
     } else {
@@ -537,7 +557,7 @@ export class WakeEffect {
     // Bow spray: only at higher speeds
     if (absSpeed > 0.12) {
       const sprayIntensity = (absSpeed - 0.12) / 0.23;
-      this.bowSpray.emitRate = Math.floor(sprayIntensity * 120);
+      this.bowSpray.emitRate = Math.floor((sprayIntensity * 120) * this.strength);
       this.bowSpray.minEmitPower = (0.4 + sprayIntensity * 0.8) * S;
       this.bowSpray.maxEmitPower = (0.8 + sprayIntensity * 1.6) * S;
     } else {
@@ -546,7 +566,7 @@ export class WakeEffect {
 
     // Side splashes
     if (absSpeed > 0.08) {
-      const splashRate = Math.floor(absSpeed * 50);
+      const splashRate = Math.floor(absSpeed * 50 * this.strength);
       this.sideSplashPort.emitRate = splashRate;
       this.sideSplashStarboard.emitRate = splashRate;
     } else {

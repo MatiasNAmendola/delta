@@ -1,21 +1,22 @@
 import { gsap } from "gsap";
 import { injectStyles } from "./StartScreen";
+import type { Summary } from "../game/modes";
 
 /** End of the run: the score counts up over the river, then "Zarpar de nuevo". */
-export function showEndScreen(score: number, delivered: number): void {
+export function showEndScreen(score: number, summary: Summary, boatName: string): void {
   injectStyles();
-  const verdict = score > 3000 ? "Capitán del Delta" : score > 1500 ? "Buen recorrido" : "Seguí practicando";
+  const verdict = summary.verdict;
   const root = document.createElement("div");
   root.id = "endScreen";
   root.className = "ss-screen";
   root.innerHTML = `
     <div class="ss-scrim"></div>
     <main class="ss-content">
-      <p class="ss-eyebrow"><span class="ss-dot"></span>Fin del recorrido</p>
+      <p class="ss-eyebrow"><span class="ss-dot"></span>Fin del recorrido · ${boatName}</p>
       <h1 class="ss-title ss-score" data-count="${score}">0</h1>
       <p class="ss-sub">${verdict}</p>
       <ul class="ss-stats">
-        <li><b data-count="${delivered}">0</b><span>pasajeros entregados</span></li>
+        ${summary.stats.map((st) => `<li><b data-count="${st.value}">0</b><span>${st.label}</span></li>`).join("")}
       </ul>
       <div class="ss-actions">
         <button id="replayBtn" class="ss-play" type="button">
@@ -52,7 +53,7 @@ export function showEndScreen(score: number, delivered: number): void {
       .from(q(".ss-eyebrow"), { y: 16, opacity: 0, duration: 0.8 }, 0.2)
       .from(q(".ss-score"), { y: 40, opacity: 0, duration: 1.2, onStart: () => count(q(".ss-score")[0], 1.8) }, 0.3)
       .from(q(".ss-sub"), { y: 16, opacity: 0, filter: "blur(6px)", duration: 1 }, 1.0)
-      .from(q(".ss-stats li"), { y: 14, opacity: 0, duration: 0.8, onStart: () => count(q(".ss-stats b")[0], 1.2) }, 1.1)
+      .from(q(".ss-stats li"), { y: 14, opacity: 0, duration: 0.8, stagger: 0.08, onStart: () => q(".ss-stats b").forEach((el: HTMLElement) => count(el, 1.2)) }, 1.1)
       .from(q(".ss-actions > *"), { y: 18, opacity: 0, scale: 0.94, duration: 0.9 }, 1.3);
   }
 
