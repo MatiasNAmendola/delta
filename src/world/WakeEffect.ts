@@ -463,10 +463,11 @@ export class WakeEffect {
       const trailScale = 0.3 + absSpeed * 4;
       this.portTrail.diameter = trailScale;
       this.starboardTrail.diameter = trailScale;
-      this.centerTrail.diameter = 1.0 + absSpeed * 6;
+      this.centerTrail.diameter = 0.8 + absSpeed * 3;
 
-      this.trailMat.alpha = Math.min(0.5, absSpeed * 2);
-      this.centerTrailMat.alpha = Math.min(0.6, absSpeed * 2.5);
+      // Faint: solid sheets read as plastic, not foam
+      this.trailMat.alpha = Math.min(0.2, absSpeed * 0.8);
+      this.centerTrailMat.alpha = Math.min(0.28, absSpeed * 1.1);
     } else {
       // When stopped, fade trails
       this.trailMat.alpha = Math.max(0, this.trailMat.alpha - deltaTime * 0.5);
@@ -518,8 +519,8 @@ export class WakeEffect {
     if (absSpeed > 0.12) {
       const sprayIntensity = (absSpeed - 0.12) / 0.23;
       this.bowSpray.emitRate = Math.floor(sprayIntensity * 120);
-      this.bowSpray.minEmitPower = 0.8 + sprayIntensity * 2.0;
-      this.bowSpray.maxEmitPower = 1.5 + sprayIntensity * 4.0;
+      this.bowSpray.minEmitPower = 0.4 + sprayIntensity * 0.8;
+      this.bowSpray.maxEmitPower = 0.8 + sprayIntensity * 1.6;
     } else {
       this.bowSpray.emitRate = 0;
     }

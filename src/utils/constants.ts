@@ -7,12 +7,12 @@ export const BOAT_MAX_SPEED = 0.35;
 export const BOAT_ACCELERATION = 0.008;
 export const BOAT_DECELERATION = 0.004;
 export const BOAT_TURN_SPEED = 0.025;
-export const BOAT_LENGTH = 6;
-export const BOAT_WIDTH = 2;
+export const BOAT_LENGTH = 7;
+export const BOAT_WIDTH = 1.7;
 
 // Camera
-export const CAMERA_HEIGHT = 12;
-export const CAMERA_DISTANCE = 18;
+export const CAMERA_HEIGHT = 7;
+export const CAMERA_DISTANCE = 21;
 export const CAMERA_LERP = 0.05;
 
 // Colors (Minecraft/Roblox style)

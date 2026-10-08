@@ -23,6 +23,9 @@ import { hexToColor3, clamp } from "../utils/helpers";
 import { WaterSystem } from "../world/WaterSystem";
 import { bestFitRotation, moveHull } from "./hullCollision";
 
+/** The boat's root rides this far above the water (the fallback blocks are built around it). */
+const HULL_RIDE_HEIGHT = 0.6;
+
 export class LanchaColectiva {
   public rootNode: TransformNode;
   public position: Vector3;
@@ -47,7 +50,7 @@ export class LanchaColectiva {
     private readonly capacity: number
   ) {
     this.scene = scene;
-    this.position = new Vector3(startX, WATER_LEVEL + 0.6, startZ);
+    this.position = new Vector3(startX, WATER_LEVEL + HULL_RIDE_HEIGHT, startZ);
     this.rootNode = new TransformNode("lancha", scene);
     this.rootNode.position = this.position.clone();
 
@@ -66,37 +69,20 @@ export class LanchaColectiva {
       const result = await SceneLoader.ImportMeshAsync(
         "",
         modelsUrl,
-        "lancha-optimized.glb",
+        "lancha-delta.glb",
         this.scene
       );
 
-      // Create container for the GLB model
+      // The Blender model (scripts/models/blender/lancha.py) is already in game
+      // units with its bow to +Z and the waterline at y = 0
       this.modelContainer = new TransformNode("lanchaModel", this.scene);
       this.modelContainer.parent = this.rootNode;
-
-      // Parent all loaded meshes to our container
+      this.modelContainer.position.y = -HULL_RIDE_HEIGHT; // waterline back at the water surface
       for (const mesh of result.meshes) {
         if (!mesh.parent) {
           mesh.parent = this.modelContainer;
         }
-      }
-
-      // Scale and orient the model to fit the game
-      const boundingInfo = result.meshes[0]?.getBoundingInfo();
-      if (boundingInfo) {
-        const extents = boundingInfo.boundingBox.extendSizeWorld;
-        const maxExtent = Math.max(extents.x, extents.y, extents.z) * 2;
-        const desiredSize = BOAT_LENGTH;
-        const scale = desiredSize / (maxExtent || 1);
-        this.modelContainer.scaling.setAll(scale);
-
-        // Center the model on its bounding box and raise it above water
-        const center = boundingInfo.boundingBox.centerWorld;
-        const minY = boundingInfo.boundingBox.minimumWorld.y;
-        this.modelContainer.position.y = -minY * scale + 0.4;
-      } else {
-        this.modelContainer.scaling.setAll(0.3);
-        this.modelContainer.position.y = 0.6;
+        mesh.isPickable = false;
       }
 
       // Remove fallback blocky boat
@@ -257,7 +243,7 @@ export class LanchaColectiva {
       this.position.z,
       this.time
     );
-    this.position.y = WATER_LEVEL + 0.6 + waveH;
+    this.position.y = WATER_LEVEL + HULL_RIDE_HEIGHT + waveH;
 
     this.wakeIntensity = Math.abs(this.speed) / BOAT_MAX_SPEED;
 
