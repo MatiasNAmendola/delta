@@ -8,7 +8,7 @@ export const BOAT_ACCELERATION = 0.008;
 export const BOAT_DECELERATION = 0.004;
 export const BOAT_TURN_SPEED = 0.025;
 export const BOAT_LENGTH = 7;
-export const BOAT_WIDTH = 1.7;
+export const BOAT_WIDTH = 2.2;
 
 // Camera
 export const CAMERA_HEIGHT = 7;
