@@ -6,6 +6,8 @@ import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { gsap } from "gsap";
+import { mark, PERF_ENABLED, showPerfPanel } from "./utils/perf";
+import { loadLayout } from "./world/layout/loadLayout";
 
 import { WaterSystem } from "./world/WaterSystem";
 import { Environment } from "./world/Environment";
@@ -82,6 +84,7 @@ export class GameEngine {
   private async init(): Promise<void> {
     await this.updateLoadingBar(10, "Creando escena...");
     this.scene = new Scene(this.engine);
+    mark("escena");
 
     // Camera
     this.camera = new FreeCamera(
@@ -114,12 +117,14 @@ export class GameEngine {
     await this.updateLoadingBar(30, "Generando ríos del Delta...");
 
     // Create water system
-    this.waterSystem = new WaterSystem(this.scene, this.world);
+    const { layout, origin } = await loadLayout(this.world);
+    mark(`mundo (${origin})`);
+    this.waterSystem = new WaterSystem(this.scene, this.world, layout);
 
     await this.updateLoadingBar(50, "Construyendo islas y vegetación...");
 
     // Create environment
-    this.environment = new Environment(this.scene, this.waterSystem, this.world);
+    this.environment = new Environment(this.scene, this.waterSystem, this.world, layout);
 
     await this.updateLoadingBar(70, "Preparando las embarcaciones...");
 
@@ -153,6 +158,7 @@ export class GameEngine {
 
     await this.updateLoadingBar(85, "Configurando controles...");
 
+    mark("botes y tráfico");
     // Controls
     this.controls = new MobileControls(this.scene);
 
@@ -160,6 +166,7 @@ export class GameEngine {
 
     // UI
     this.ui = new GameUI(this.scene, this.world);
+    mark("interfaz");
 
     await this.updateLoadingBar(100, "¡Listo!");
 
@@ -179,8 +186,16 @@ export class GameEngine {
       showTitle();
     }
 
-    // Start render loop
-    this.engine.runRenderLoop(() => this.gameLoop());
+    // Start render loop; the first frame compiles every shader
+    let firstFrame = true;
+    this.engine.runRenderLoop(() => {
+      this.gameLoop();
+      if (firstFrame) {
+        firstFrame = false;
+        mark("primer cuadro");
+      }
+    });
+    if (PERF_ENABLED) showPerfPanel(this.engine, this.scene);
 
     // Handle resize
     window.addEventListener("resize", () => {

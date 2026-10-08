@@ -5,6 +5,7 @@ import "@fontsource-variable/fraunces/opsz.css";
 import "@fontsource-variable/fraunces/opsz-italic.css";
 import "@fontsource-variable/inter/index.css";
 import { loadWorldFromUrl } from "./world/loadWorld";
+import { mark } from "./utils/perf";
 
 // Import side-effects needed by BabylonJS
 import "@babylonjs/core/Meshes/meshBuilder";
@@ -39,6 +40,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Start the game
   loadWorldFromUrl()
+    .then((world) => {
+      mark("mundo descargado");
+      return world;
+    })
     .then((world) => new GameEngine(canvas, world))
     .catch((error) => {
       console.error("Could not load the world:", error);

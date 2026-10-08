@@ -6,3 +6,6 @@ dist/
 
 # Python bytecode (Blender model scripts)
 __pycache__/
+
+# Baked world layouts (npm run bake, run by dev/build)
+public/worlds/

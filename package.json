@@ -4,13 +4,14 @@
   "description": "Videojuego de lancha colectiva navegando por el Delta de Tigre - Estilo Minecraft/Roblox",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "npm run bake && vite",
+    "build": "npm run bake && tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "world:import": "tsx scripts/osm/import.ts",
-    "map:update": "bash scripts/osm/update-map.sh"
+    "map:update": "bash scripts/osm/update-map.sh",
+    "bake": "tsx scripts/bake/bakeWorlds.ts"
   },
   "dependencies": {
     "@babylonjs/core": "^7.0.0",
