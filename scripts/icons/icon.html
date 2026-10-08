@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- App icon: just the name, in the game's own type (Fraunces + Inter).
+     Rendered to PNG by scripts/icons/render.mjs. Kept inside the central
+     80% so it also works as a maskable icon. -->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  @font-face { font-family: "Fraunces"; src: url("FRAUNCES") format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "Inter"; src: url("INTER") format("woff2"); font-weight: 100 900; }
+  html, body { margin: 0; width: SIZEpx; height: SIZEpx; overflow: hidden; }
+  .icon {
+    width: SIZEpx; height: SIZEpx; box-sizing: border-box;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(120% 100% at 30% 20%, #2a5a48 0%, #16302a 62%, #10241f 100%);
+    padding: calc(SIZEpx * PAD);
+  }
+  .name {
+    font-family: "Fraunces", Georgia, serif; font-weight: 560; font-variation-settings: "opsz" 144, "SOFT" 50;
+    font-size: calc(SIZEpx * 0.30 * (1 - 2 * PAD) / 0.8); line-height: 0.9; color: #f4efe3; letter-spacing: -0.01em;
+  }
+  .rule { width: 34%; height: calc(SIZEpx * 0.008); min-height: 1px; background: #e9b44c; opacity: 0.85; margin: calc(SIZEpx * 0.045) 0 calc(SIZEpx * 0.04); border-radius: 2px; }
+  .place {
+    font-family: "Inter", Helvetica, Arial, sans-serif; font-weight: 600;
+    font-size: calc(SIZEpx * 0.075 * (1 - 2 * PAD) / 0.8); letter-spacing: 0.32em; margin-right: -0.32em; color: #e9b44c;
+  }
+</style>
+</head>
+<body><div class="icon"><div class="name">Delta</div><div class="rule"></div><div class="place">TIGRE</div></div></body>
+</html>

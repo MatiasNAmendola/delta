@@ -27,3 +27,13 @@ Un selector **Manejo: Clásico / Realista** en el menú. Se guarda entre visitas
 - Modo "asistido" intermedio con el timón que vuelve al centro.
 - Un multiplicador global de inercia, como sugiere el juez.
 - Calibrar con lancheros y remeros (pendientes del doc 02).
+
+## Agregado: esquemas de control (2026-10-08)
+En **Ajustes** del menú, separado del manejo y guardado entre visitas:
+- **Botones:** ▲▼ mueven la palanca un punto y ◀▶ el timón (lo que había).
+- **Flechas:** el clásico de juego; mantenés ▲ para avanzar y al soltar frena.
+- **Palanca y timón:** en pantalla, una **palanca de mando** vertical que se arrastra (arriba avante, abajo atrás, con tope en neutro; queda donde la dejás y muestra velocidad y límite) y una **rueda de timón** que se gira con el dedo. Con el manejo realista de la colectiva o la clásica, la palanca se encastra en las 5 posiciones del telégrafo y la rueda queda donde la dejás. Kayak y single siguen con botones, porque se reman.
+- **Nombres técnicos:**
+  - **palanca de mando**: en inglés *single lever control* / *throttle and shift*; en las lanchas grandes, *telégrafo de máquinas*;
+  - **marcha avante / punto muerto (neutro) / marcha atrás**;
+  - **rueda de timón** o **caña del timón**.

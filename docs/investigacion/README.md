@@ -12,6 +12,10 @@ Cada documento lo escribió un agente investigador y lo revisó un juez independ
 | [04](04-olas-estelas-y-costas.md) | Alturas de estela medidas (Bhowmik y otros), irregularidad, reflexión en tablestacados y barrancas | Media: física y fórmula validadas; tabla del juego en parte estimada |
 | [05](05-apis-y-scraping.md) | APIs y sitios públicos: río, mareas, clima, tráfico, normas | Media-alta |
 | [06](06-prueba-de-fuentes.md) | Prueba real de las fuentes desde GitHub Actions | Alta: medido |
+| [07](07-fuentes-del-mapa.md) + [JSON](07-fuentes-del-mapa.json) | 44 fuentes de mapas, licencias, método de cruce de nombres, geometría y anchos, y erratas detectadas en OSM | Media: inventario sólido, cruce pendiente de ejecutar en GitHub Actions |
+| [08a](08a-gaussian-splatting-a-favor.md) / [08b](08b-gaussian-splatting-en-contra.md) / [08](08-veredicto-gaussian-splatting.md) | Debate adversarial sobre Gaussian Splatting para la vegetación: a favor, en contra y veredicto del juez | En revisión |
+| [09](09-estrategia-de-datos.md) | Estrategia de datos: API, scraping, curaduría o comunidad; marco legal argentino; arquitectura | Media |
+| [08](08-veredicto-gaussian-splatting.md) ([08a](08a-gaussian-splatting-a-favor.md) / [08b](08b-gaussian-splatting-en-contra.md)) | Gaussian splatting para vegetación y capturas de la comunidad: debate y veredicto | Media: verificado contra el código de Babylon 7.54.3; sin mediciones en celulares |
 
 **Para cerrar los pendientes** (lo que solo se resuelve con acceso directo o preguntando):
 - el texto de la Disposición PZDE RI.7 Nº 02/2015 y sus reemplazos;

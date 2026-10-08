@@ -24,6 +24,7 @@ import { COURTESY_SPEED } from "./world/rowingRoute";
 import { Handling } from "./boat/handling";
 import { compassName, fetchLiveConditions, isSudestada, levelOffset, SAN_FERNANDO_ALERT, windVector, type LiveConditions } from "./world/liveConditions";
 import { handlingInput, handlingKeys, handlingMode, touchLabels } from "./controls/handlingInput";
+import { controlScheme } from "./controls/MobileControls";
 import { NO_WAKE_M, realWidthM, ROWING_ZONE_WAKE_M } from "./game/waterwayRules";
 import { froude, wakeAmplitude } from "./world/wakePhysics";
 import { createMode, type GameMode } from "./game/modes";
@@ -322,6 +323,12 @@ export class GameEngine {
     this.boat.setHandling(realistic);
     this.controls.lever.notch = realistic?.kind === "rueda" ? 0.5 : 0.25;
     this.controls.setLabels(touchLabels(realistic?.kind ?? null));
+    // Buttons, arrows, or the on-screen palanca de mando and rueda de timón
+    // (paddles and oars are stroked: they keep the buttons)
+    const stroked = realistic?.kind === "kayak" || realistic?.kind === "single";
+    const scheme = stroked ? "botones" : controlScheme();
+    this.controls.setScheme(scheme, { telegraph: realistic?.kind === "rueda", wheelStays: realistic?.kind === "rueda" });
+    this.ui.setGaugeVisible(scheme !== "palanca");
     this.controls.setKeysHint(handlingKeys(realistic?.kind ?? null));
     this.mode = createMode(this.spec.id, {
       scene: this.scene,
@@ -374,7 +381,7 @@ ${this.spec.mission}`, 2800);
       const realistic = this.boat.realistic;
       if (realistic) {
         const helm = controlState.gyroSteering ?? controlState.steering;
-        this.boat.handlingInput = handlingInput(realistic.kind, controlState.raw, controlState.throttle, helm);
+        this.boat.handlingInput = handlingInput(realistic.kind, controlState.raw, controlState.throttle, helm, controlState.helmIsPosition);
       }
 
       // Update boat
@@ -411,6 +418,15 @@ ${this.spec.mission}`, 2800);
       // Rowers ahead come first: their limit is the one that fines on the spot
       const rowers = this.rules?.has("wakeCourtesy") && this.yolas.nearestCrew(this.boat.position.x, this.boat.position.z) < ROWERS_WARNING;
       const status = this.boat.realistic?.status();
+      const zoneLimit = rowers ? COURTESY_SPEED : this.rules?.zone === "sinola" ? this.wakeSpeedLimit(NO_WAKE_M) : this.rules?.zone === "remo" ? this.wakeSpeedLimit(ROWING_ZONE_WAKE_M) : this.rules?.zone ? ZONE_SPEED : null;
+      const zoneName = rowers ? "Remeros · despacio" : this.rules?.zone === "sinola" ? "Sin ola" : this.rules?.zone === "remo" ? "Zona de remo" : this.rules?.zone ? `${this.rules.zone === "arroyo" ? "Arroyo" : "Muelle"} · despacio` : null;
+      const leverValue = status ? status.lever : this.controls.lever.value;
+      this.controls.showLever(
+        leverValue,
+        this.boat.speed / this.spec.maxSpeed,
+        zoneLimit,
+        zoneName ?? status?.label ?? (leverValue === 0 ? "Neutro" : leverValue < 0 ? "Atrás" : `${Math.round(leverValue * 100)}%`)
+      );
       this.ui.updateThrottle(
         status ? status.lever : this.controls.lever.value,
         this.boat.speed / this.spec.maxSpeed,

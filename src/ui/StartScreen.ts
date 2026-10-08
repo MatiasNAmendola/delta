@@ -4,6 +4,7 @@ import { chooseZone, currentZone, ZONES } from "../world/loadWorld";
 import { enterPlayMode, mountInstallButton } from "./install";
 import { handlingHelp, handlingMode, setHandlingMode, type HandlingMode } from "../controls/handlingInput";
 import { handlingKind } from "../boat/handling";
+import { controlScheme, setControlScheme, type ControlScheme } from "../controls/MobileControls";
 import { BOAT_TYPES, FAMILIES, type BoatFamily, type BoatTypeId } from "../boat/boatTypes";
 
 /** Start screen tabs: one per boat, or one per family of boats. */
@@ -66,6 +67,7 @@ export class StartScreen {
             </span>
           </button>
           <button id="howBtn" class="ss-ghost" type="button" aria-expanded="false">Cómo se juega</button>
+          <button id="setBtn" class="ss-ghost" type="button" aria-expanded="false">Ajustes</button>
         </div>
         <ul class="ss-stats">
           <li><b data-count="${world.docks.length}">0</b><span>muelles</span></li>
@@ -73,7 +75,11 @@ export class StartScreen {
           <li><b data-count="${minutes}">0</b><span>minutos</span></li>
         </ul>
       </main>
-      <aside class="ss-how" aria-hidden="true">
+      <aside class="ss-how ss-settings" aria-hidden="true">
+        <h2>Ajustes</h2>
+        <div class="ss-settings-body"></div>
+      </aside>
+      <aside class="ss-how ss-howto" aria-hidden="true">
         <h2>Cómo se juega</h2>
         <ol>
           <li><p><b>El acelerador queda donde lo dejás,</b> como una palanca: ${touch ? "▲▼" : "W/S"} lo mueven un punto por toque, o suave si los mantenés${touch ? "" : " (X: punto muerto)"}. ${touch ? "◀▶ o inclinar el celular" : "A/D"} mueven el timón; ${touch ? "PARADA" : "ESPACIO"} para en los muelles.</p></li>
@@ -97,7 +103,8 @@ export class StartScreen {
       e.preventDefault();
       this.start();
     });
-    this.root.querySelector("#howBtn")!.addEventListener("click", () => this.toggleHow());
+    this.root.querySelector("#howBtn")!.addEventListener("click", () => this.togglePanel(".ss-howto", "#howBtn"));
+    this.root.querySelector("#setBtn")!.addEventListener("click", () => this.togglePanel(".ss-settings", "#setBtn"));
     mountInstallButton(this.root.querySelector(".ss-actions")!, "ss-ghost ss-install");
     // Another section of the Delta: a new world, so the page reloads into it
     const zone = this.root.querySelector<HTMLSelectElement>(".ss-zone select")!;
@@ -109,14 +116,16 @@ export class StartScreen {
         this.choose(tab in FAMILIES ? this.lastInFamily[tab as BoatFamily] : (tab as BoatTypeId));
       })
     );
+    // Ajustes: handling and control scheme chips
+    this.root.querySelector(".ss-settings")!.addEventListener("click", (e) => {
+      const schemeChip = (e.target as HTMLElement).closest<HTMLElement>(".ss-scheme");
+      if (schemeChip) setControlScheme(schemeChip.dataset.scheme as ControlScheme);
+      const modeChip = (e.target as HTMLElement).closest<HTMLElement>(".ss-mode");
+      if (modeChip) setHandlingMode(modeChip.dataset.mode as HandlingMode);
+      if (schemeChip || modeChip) this.renderSettings();
+    });
     // Variant chips of the private launches (re-rendered with the detail)
     this.root.querySelector(".ss-boat-detail")!.addEventListener("click", (e) => {
-      const modeChip = (e.target as HTMLElement).closest<HTMLElement>(".ss-mode");
-      if (modeChip) {
-        setHandlingMode(modeChip.dataset.mode as HandlingMode);
-        this.renderDetail();
-        return;
-      }
       const chip = (e.target as HTMLElement).closest<HTMLElement>(".ss-variant");
       if (chip) this.choose(chip.dataset.boat as BoatTypeId);
     });
@@ -164,6 +173,34 @@ export class StartScreen {
     this.onSelect(id);
   }
 
+
+  /** The Ajustes panel: how the boat handles and which controls, for the chosen boat. */
+  private renderSettings(): void {
+    const b = BOAT_TYPES[this.selected];
+    const mode = handlingMode();
+    const touch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    const handling = `
+      <div class="ss-variants ss-handling" role="radiogroup" aria-label="Manejo">
+        <span class="ss-handling-label">Manejo</span>
+        <button type="button" role="radio" class="ss-variant ss-mode" data-mode="clasico" aria-checked="${mode === "clasico"}">Clásico</button>
+        <button type="button" role="radio" class="ss-variant ss-mode" data-mode="realista" aria-checked="${mode === "realista"}">Realista</button>
+      </div>
+      <div class="ss-variants ss-handling" role="radiogroup" aria-label="Controles">
+        <span class="ss-handling-label">Controles</span>
+        ${(
+          [
+            ["botones", "Botones"],
+            ["flechas", "Flechas"],
+            ["palanca", "Palanca y timón"],
+          ] as Array<[ControlScheme, string]>
+        )
+          .map(([id, name]) => `<button type="button" role="radio" class="ss-variant ss-scheme" data-scheme="${id}" aria-checked="${controlScheme() === id}">${name}</button>`)
+          .join("")}
+      </div>
+      ${mode === "realista" ? `<p class="ss-handling-help">${handlingHelp(handlingKind(b), touch)} <b>Rigen las reglas de Prefectura por río:</b> sin ola en el Luján, Sarmiento y otros; despacio en las zonas de remo.</p>` : ""}`;
+    this.root.querySelector<HTMLElement>(".ss-settings-body")!.innerHTML = handling;
+  }
+
   /** Slides the amber highlight under the selected tab. */
   private movePill(animate: boolean): void {
     const pill = this.root.querySelector<HTMLElement>(".ss-boats-pill");
@@ -186,20 +223,11 @@ export class StartScreen {
     const variants = b.family
       ? `<div class="ss-variants" role="radiogroup" aria-label="${FAMILIES[b.family].label}">${FAMILIES[b.family].boats.map((id) => `<button type="button" role="radio" class="ss-variant" data-boat="${id}" aria-checked="${id === b.id}">${BOAT_TYPES[id].short}</button>`).join("")}</div>`
       : "";
-    const mode = handlingMode();
-    const touch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    const handling = `
-      <div class="ss-variants ss-handling" role="radiogroup" aria-label="Manejo">
-        <span class="ss-handling-label">Manejo</span>
-        <button type="button" role="radio" class="ss-variant ss-mode" data-mode="clasico" aria-checked="${mode === "clasico"}">Clásico</button>
-        <button type="button" role="radio" class="ss-variant ss-mode" data-mode="realista" aria-checked="${mode === "realista"}">Realista</button>
-      </div>
-      ${mode === "realista" ? `<p class="ss-handling-help">${handlingHelp(handlingKind(b), touch)} <b>Rigen las reglas de Prefectura por río:</b> sin ola en el Luján, Sarmiento y otros; despacio en las zonas de remo.</p>` : ""}`;
     this.root.querySelector<HTMLElement>(".ss-boat-detail")!.innerHTML = `
       ${variants}
       <p class="ss-boat-mission"><b>${b.mission}.</b> ${b.tagline}.</p>
-      <div class="ss-bars">${bar("Velocidad", b.stats.velocidad)}${bar("Maniobra", b.stats.maniobra)}${bar("Olas", b.stats.olas)}</div>
-      ${handling}`;
+      <div class="ss-bars">${bar("Velocidad", b.stats.velocidad)}${bar("Maniobra", b.stats.maniobra)}${bar("Olas", b.stats.olas)}</div>`;
+    this.renderSettings();
   }
 
   onPlayClick(callback: () => void): void {
@@ -263,10 +291,20 @@ export class StartScreen {
     });
   }
 
-  private toggleHow(): void {
-    const how = this.root.querySelector<HTMLElement>(".ss-how")!;
-    const btn = this.root.querySelector<HTMLElement>("#howBtn")!;
+  /** Opens one side panel (Cómo se juega, Ajustes) and closes the other. */
+  private togglePanel(panel: string, button: string): void {
+    const how = this.root.querySelector<HTMLElement>(panel)!;
+    const btn = this.root.querySelector<HTMLElement>(button)!;
     const open = how.getAttribute("aria-hidden") === "true";
+    for (const [other, otherBtn] of [[".ss-howto", "#howBtn"], [".ss-settings", "#setBtn"]]) {
+      if (other === panel) continue;
+      const el = this.root.querySelector<HTMLElement>(other)!;
+      if (el.getAttribute("aria-hidden") === "false") {
+        el.setAttribute("aria-hidden", "true");
+        this.root.querySelector<HTMLElement>(otherBtn)!.setAttribute("aria-expanded", "false");
+        gsap.to(el, { autoAlpha: 0, x: 24, duration: this.reduced ? 0 : 0.3 });
+      }
+    }
     how.setAttribute("aria-hidden", String(!open));
     btn.setAttribute("aria-expanded", String(open));
     gsap.to(how, {
@@ -276,7 +314,7 @@ export class StartScreen {
       ease: "expo.out",
     });
     if (open) {
-      gsap.from(how.querySelectorAll("li"), {
+      gsap.from(how.querySelectorAll("li, .ss-handling, .ss-handling-help"), {
         x: 16,
         opacity: 0,
         duration: this.reduced ? 0 : 0.6,
@@ -440,6 +478,8 @@ export function injectStyles(): void {
       font: 600 12px/1 "Inter Variable", Inter, sans-serif; color: #1b140a; background: var(--accent);
     }
     .ss-screen .ss-how b { color: var(--ink); font-weight: 600; }
+    .ss-screen .ss-settings { max-height: calc(100% - 32px); overflow-y: auto; }
+    .ss-screen .ss-settings .ss-handling { margin-top: 4px; margin-bottom: 10px; }
     body.menu-open #mobileControls, body.menu-open #desktopHint, body.menu-open #minimap { visibility: hidden; }
     .ss-screen .ss-credit { position: absolute; left: clamp(20px, 7vw, 96px); bottom: 14px; font-size: 11px; color: rgba(244, 239, 227, 0.5); }
     /* Short desktop windows: drop the numbers, they are the least needed */

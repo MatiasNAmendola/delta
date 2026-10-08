@@ -13,10 +13,10 @@
 import type { HandlingInput, HandlingKind } from "../boat/handling";
 import type { RawInput } from "./MobileControls";
 
-export function handlingInput(kind: HandlingKind, raw: RawInput, lever: number, steering: number): HandlingInput {
+export function handlingInput(kind: HandlingKind, raw: RawInput, lever: number, steering: number, helmIsPosition = false): HandlingInput {
   const p = (...keys: string[]) => keys.some((k) => raw.pressed.has(k));
   const h = (...keys: string[]) => keys.some((k) => raw.held.has(k));
-  const input: HandlingInput = { lever, helm: steering, strokeLeft: false, strokeRight: false, backLeft: false, backRight: false, pressure: 0 };
+  const input: HandlingInput = { lever, helm: steering, strokeLeft: false, strokeRight: false, backLeft: false, backRight: false, pressure: 0, helmIsPosition };
   switch (kind) {
     case "moto": {
       const gas = h("w", "arrowup", "touch-up");

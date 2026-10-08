@@ -179,6 +179,10 @@ export class GameUI {
     });
   }
 
+  public setGaugeVisible(on: boolean): void {
+    this.throttle.setVisible(on);
+  }
+
   /** Throttle lever, actual speed and the slow-zone limit (fractions of top speed). */
   public updateThrottle(lever: number, speed: number, zone: SlowZone, limit: number, label?: string): void {
     this.throttle.update(lever, speed, zone, limit, label);

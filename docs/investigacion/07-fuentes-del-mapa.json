@@ -1,0 +1,820 @@
+{
+ "meta": {
+  "titulo": "Fuentes para verificar ríos y arroyos del Delta de Tigre",
+  "fecha": "2026-10-08",
+  "leyenda": {
+   "[verificado]": "visto en un resultado de búsqueda o en un archivo del repo durante esta sesión",
+   "[según documentación]": "surge de documentación oficial o conocimiento general, no abierta en esta sesión",
+   "[no verificado]": "no pude comprobarlo"
+  },
+  "alcanzable_desde_dev": false,
+  "nota_red": "curl y WebFetch fallaron en todos los dominios probados (403 de CONNECT o ENOTFOUND). Todo lo 'verificado' viene de WebSearch o del volcado local scripts/osm/*.overpass.json."
+ },
+ "fuentes": [
+  {
+   "id": "osm",
+   "categoria": "Comunidad abierta",
+   "nombre": "OpenStreetMap (HOT export / Geofabrik / Overpass)",
+   "url": "https://wiki.openstreetmap.org/wiki/Tag:waterway%3Driver",
+   "ofrece": "Geometría (líneas waterway=river/stream/canal y polígonos natural=water) y nombres (name, name:xx; alt_name, old_name, wikidata son posibles pero en el volcado local no aparecen). Sin anchos medidos (a lo sumo width=*).",
+   "formato": "PBF, Overpass JSON, GeoJSON, export HOT",
+   "cobertura": "Las cuatro extracciones locales (Tigre, Segunda, Escobar, Guazú) tienen 351, 132, 191 y 86 vías waterway; solo 150, 88, 43 y 67 llevan name (Tigre: 43 %).",
+   "licencia": "ODbL 1.0. El mapa renderizado es 'Produced Work' (atribución visible). Si el repo publica el volcado o un derivado de la base, ese derivado va bajo ODbL. Compatible con repo público y juego gratuito si se cumple eso.",
+   "automatizacion": "Overpass: POST https://overpass-api.de/api/interpreter (ver Parte B); espejo https://overpass.kumi.systems/api/interpreter; el repo ya tiene scripts/osm/fetch-delta.sh. Overpass dio 504 en la prueba del doc 06.",
+   "confiabilidad": "Media: geometría buena donde alguien la trazó, pero nombres incompletos o con erratas (ver Parte C).",
+   "evidencia_urls": [
+    "https://wiki.openstreetmap.org/wiki/Tag:waterway%3Driver",
+    "https://help.openstreetmap.org/questions/78764/how-does-the-license-apply-to-my-project-if-i-generate-game-maps-from-osm-data",
+    "https://osmfoundation.org/wiki/Attribution"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.6
+  },
+  {
+   "id": "overpass-politica",
+   "categoria": "Comunidad abierta",
+   "nombre": "Overpass API (instancias públicas)",
+   "url": "https://dev.overpass-api.de/overpass-doc/en/more_info/index.html",
+   "ofrece": "Consulta en vivo de OSM con filtros por bbox y etiquetas.",
+   "formato": "JSON/XML/CSV",
+   "cobertura": "Mundial.",
+   "licencia": "Datos ODbL; la instancia pide user agent descriptivo, sin consultas paralelas y esperar >=30 s tras un 429.",
+   "automatizacion": "POST con data=... ; en Actions usar un solo request por corrida y reintentos con espera.",
+   "confiabilidad": "Media: saturación frecuente (504 en el doc 06).",
+   "evidencia_urls": [
+    "https://dev.overpass-api.de/overpass-doc/en/more_info/index.html",
+    "https://wiki.openstreetmap.org/wiki/ES:Overpass_API"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "ign-capas-sig",
+   "categoria": "Oficial nacional",
+   "nombre": "IGN Argentina, Capas SIG: Cursos de agua y Espejos de agua",
+   "url": "https://www.ign.gob.ar/NuestrasActividades/InformacionGeoespacial/CapasSIG",
+   "ofrece": "Líneas de cursos de agua y polígonos de espejos de agua con nombre oficial (escala de captura 1:100.000 según IGN). Sin anchos.",
+   "formato": "Shapefile, GeoPackage (según catálogo de terceros); WMS/WFS",
+   "cobertura": "Nacional; el Delta está incluido pero a 1:100.000 los arroyos chicos probablemente faltan [no verificado].",
+   "licencia": "Los términos de ign.gob.ar (tyc1.html, 'Usos permitidos de la información descargada') exigen citar 'Fuente: Instituto Geográfico Nacional de la República Argentina'. Un ticket de JOSM concluyó que el texto no era claro para OSM. Los espejos de la PBA y del Banco Mundial lo republican como CC BY 4.0. Para un repo público: usar con atribución y pedir confirmación escrita al IGN.",
+   "automatizacion": "Descarga directa del zip desde la página CapasSIG, o WFS (ver Parte B). Desde este equipo el dominio da 403 del proxy.",
+   "confiabilidad": "Alta en nombres y jerarquía oficial; baja definición geométrica.",
+   "evidencia_urls": [
+    "https://catalogo.datos.gba.gob.ar/en/dataset/cursos-agua",
+    "https://josm.openstreetmap.de/ticket/15010",
+    "https://josm.openstreetmap.de/wiki/Maps/Argentina?version=44",
+    "https://wbwaterdata.org/dataset/argentina-water-courses/resource/f2488547-58f1-4d3b-8c63-4924325e17f6"
+   ],
+   "estado": "[verificado] (existencia de la capa y términos); formato WFS [según documentación]",
+   "peso_nombres": 0.9
+  },
+  {
+   "id": "ign-geoservicios",
+   "categoria": "Oficial nacional",
+   "nombre": "IGN Argentina, geoservicios (ide.ign.gob.ar y wms.ign.gob.ar)",
+   "url": "https://ide.ign.gob.ar/geoservicios/rest/services",
+   "ofrece": "Teselas y WMS del Mapa topográfico IGN (nombres rotulados en el mapa); WFS de capas vectoriales.",
+   "formato": "ArcGIS REST/TMS, WMS, WFS, WMTS",
+   "cobertura": "Nacional; el JOSM lista también ortofotos del AMBA.",
+   "licencia": "Mismos términos que IGN SIG (atribución). JOSM lo trae con permission-ref a ign.gob.ar/descargas/tyc1.html.",
+   "automatizacion": "Mapa topográfico: https://ide.ign.gob.ar/geoservicios/rest/services/Mapas_IGN/mapa_topografico/MapServer/tile/{z}/{y}/{x} (zoom 1-20). WFS hidrográfico: nombre de capa [no verificado]; listar con GetCapabilities.",
+   "confiabilidad": "Alta, pero a veces el servidor cae.",
+   "evidencia_urls": [
+    "https://josm.openstreetmap.de/wiki/Maps/Argentina?version=29",
+    "https://josm.openstreetmap.de/wiki/Maps/Argentina?version=44",
+    "https://atlas.co/data-portals/ign-argentina/"
+   ],
+   "estado": "[verificado] (WMS/TMS topográfico); WFS hidrografía [no verificado]",
+   "peso_nombres": 0.9
+  },
+  {
+   "id": "idera",
+   "categoria": "Oficial nacional",
+   "nombre": "IDERA (Infraestructura de Datos Espaciales de la República Argentina)",
+   "url": "https://www.idera.gob.ar/",
+   "ofrece": "Catálogo de geoservicios de todos los organismos (IGN, provincias, INA, etc.). No es productora de datos.",
+   "formato": "Catálogo CSW, enlaces a WMS/WFS",
+   "cobertura": "Nacional.",
+   "licencia": "Depende del organismo de cada capa.",
+   "automatizacion": "Catálogo con GetCapabilities/CSW; plugin QGIS ArgentinaGeoServices lista WMS/WFS. [no verificado]",
+   "confiabilidad": "Media: muchos enlaces rotos.",
+   "evidencia_urls": [
+    "https://www.santafe.gov.ar/idesf/geoportal/paginas/ides-de-argentina",
+    "https://plugins.qgis.org/plugins/argentinageoservices_zip/json",
+    "https://opendata.fi.uncoma.edu.ar/jornadasIDERA/trabajos2023/Pose_etal.docx"
+   ],
+   "estado": "[verificado] (existe y lista IDEs); endpoints WFS [no verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "pba-datos",
+   "categoria": "Oficial provincial",
+   "nombre": "Provincia de Buenos Aires, Datos Abiertos: dataset 'Cursos de agua' (IDEBA)",
+   "url": "https://catalogo.datos.gba.gob.ar/en/dataset/cursos-agua",
+   "ofrece": "Cursos de agua de la provincia con nombre, derivados del IGN. Sin anchos.",
+   "formato": "Shapefile, GeoJSON, KML (EPSG:4326)",
+   "cobertura": "Toda la provincia, incluye el Delta bonaerense.",
+   "licencia": "Creative Commons Atribución 4.0 (ficha del dataset). Apto para repo público y juego gratuito con atribución.",
+   "automatizacion": "Enlaces de descarga directos en la ficha del dataset (CKAN: /api/3/action/package_show?id=cursos-agua [según documentación]). La frecuencia figura como 'cada medio año' en una versión de la ficha y 'eventual' en otra.",
+   "confiabilidad": "Alta en licencia clara; la geometría es la del IGN (1:100.000).",
+   "evidencia_urls": [
+    "https://catalogo.datos.gba.gob.ar/en/dataset/cursos-agua",
+    "https://catalogo.datos.gba.gob.ar/sr/dataset/cursos-agua"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.85
+  },
+  {
+   "id": "ideba",
+   "categoria": "Oficial provincial",
+   "nombre": "IDEBA (visor y geoservicios de la Provincia)",
+   "url": "https://ideba.gba.gob.ar/",
+   "ofrece": "Visor y servicios OGC de capas provinciales (hidrografía, límites, catastro).",
+   "formato": "WMS/WFS",
+   "cobertura": "Provincial.",
+   "licencia": "Datos abiertos PBA, normalmente CC BY 4.0 [no verificado]",
+   "automatizacion": "URL base de WFS [no verificado]; GetCapabilities para descubrirla.",
+   "confiabilidad": "Media.",
+   "evidencia_urls": [
+    "https://www.santafe.gov.ar/idesf/geoportal/paginas/ides-de-argentina",
+    "https://50jaiio.sadio.org.ar:443/pdfs/sie/SIE-11.pdf"
+   ],
+   "estado": "[verificado] (portal y uso de OGC); URLs de servicio [no verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "ada",
+   "categoria": "Oficial provincial",
+   "nombre": "Autoridad del Agua (ADA) de la Provincia de Buenos Aires: visor GIS",
+   "url": "http://gis.ada.gba.gov.ar/gis/",
+   "ofrece": "Visor con capas de recursos hídricos y peligrosidad; no encontré mapa específico del Delta.",
+   "formato": "Visor web [no verificado]",
+   "cobertura": "Provincia, foco en cuencas continentales.",
+   "licencia": "[no verificado]",
+   "automatizacion": "Sin API conocida.",
+   "confiabilidad": "Baja para el Delta.",
+   "evidencia_urls": [
+    "https://www.santafe.gov.ar/idesf/geoportal/paginas/visualizadores-de-argentina"
+   ],
+   "estado": "[verificado] (URL listada por terceros)",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "ministerio-infra",
+   "categoria": "Oficial provincial",
+   "nombre": "Ministerio de Infraestructura PBA / Plan de obras del Delta; ARBA (catastro CARTO)",
+   "url": "https://www.gba.gob.ar/node/23157",
+   "ofrece": "Dicen que el Delta bonaerense tiene unas 300.000 ha de islas y cerca de 350 cursos de agua. ARBA ofrece parcelas catastrales (CARTO) que lindan con los cursos y llevan frente a 'río/arroyo'.",
+   "formato": "HTML/PDF; ARBA: visor y WMS [no verificado]",
+   "cobertura": "Provincial.",
+   "licencia": "[no verificado]",
+   "automatizacion": "ARBA: ver plugin QGIS CatastroV3 para los endpoints (https://plugins.qgis.org/plugins/CatastroV3).",
+   "confiabilidad": "Media.",
+   "evidencia_urls": [
+    "https://www.gba.gob.ar/node/23157",
+    "https://intranet.hcdiputados-ba.gov.ar/proyectos/07-08d12800.doc",
+    "https://plugins.qgis.org/plugins/CatastroV3"
+   ],
+   "estado": "[verificado] (cifras y plugin); endpoints [no verificado]",
+   "peso_nombres": 0.3
+  },
+  {
+   "id": "tigre",
+   "categoria": "Municipal",
+   "nombre": "Municipio de Tigre (tigre.gob.ar: turismo, catastro, zonificación del Delta)",
+   "url": "https://www.tigre.gob.ar/",
+   "ofrece": "Mapas turísticos, zonificación 'Zona Delta residencial consolidado/de expansión', Primera Sección de Islas.",
+   "formato": "HTML/PDF [no verificado]",
+   "cobertura": "Primera, Segunda (parte) y Tercera sección de Tigre.",
+   "licencia": "[no verificado] (pedir autorización).",
+   "automatizacion": "Ninguna API encontrada. En el doc 06 el sitio no respondió desde servidores de EE. UU.",
+   "confiabilidad": "Alta si publicaran la nomenclatura; no encontré un mapa PDF.",
+   "evidencia_urls": [
+    "https://www.frommers.com/destinations/tigre/planning-a-trip/",
+    "https://roomix.ai/blog/tigre-delta-guia-vivir"
+   ],
+   "estado": "[no verificado]",
+   "peso_nombres": 0.8
+  },
+  {
+   "id": "sanfernando",
+   "categoria": "Municipal",
+   "nombre": "Municipio de San Fernando (islas de Segunda y Tercera sección, Reserva de Biosfera)",
+   "url": "https://es.hispanopedia.com/wiki/Partido_de_San_Fernando",
+   "ofrece": "El partido tiene 950 km2 con 2.ª y 3.ª sección; listados nombran arroyos Paycarabí, Cueva Grande, Estudiantes.",
+   "formato": "HTML",
+   "cobertura": "Segunda y Tercera sección.",
+   "licencia": "Wikipedia espejo CC BY-SA; geoportal municipal no encontrado.",
+   "automatizacion": "Sin API.",
+   "confiabilidad": "Media-baja.",
+   "evidencia_urls": [
+    "https://es.hispanopedia.com/wiki/Partido_de_San_Fernando",
+    "https://www.argenprop.com/casas/casa/zona-delta-san-fernando/dolares-hasta-75000"
+   ],
+   "estado": "[verificado] (texto); geoportal [no verificado]",
+   "peso_nombres": 0.3
+  },
+  {
+   "id": "escobar",
+   "categoria": "Municipal",
+   "nombre": "Municipio de Escobar (y Campana: 4.ª sección)",
+   "url": "https://www.argenprop.com/terrenos/zona-delta-campana",
+   "ofrece": "Solo avisos que ubican el Paraná de las Palmas y el Canal Zorrilla en Escobar/Campana; los avisos se contradicen sobre la sección y el partido.",
+   "formato": "HTML",
+   "cobertura": "Islas de Escobar y Campana.",
+   "licencia": "Sin licencia (avisos comerciales).",
+   "automatizacion": "Sin API.",
+   "confiabilidad": "Baja.",
+   "evidencia_urls": [
+    "https://www.argenprop.com/terrenos/zona-delta-campana",
+    "https://www.argenprop.com/casa-en-venta-en-parana-de-las-palmas-1-ambiente--20048967"
+   ],
+   "estado": "[verificado] (solo avisos)",
+   "peso_nombres": 0.1
+  },
+  {
+   "id": "shn",
+   "categoria": "Oficial náutico",
+   "nombre": "Servicio de Hidrografía Naval (SHN): cartas náuticas y Derrotero",
+   "url": "https://www.hidro.gob.ar/",
+   "ofrece": "Cartas oficiales: H-1001 Canal Emilio Mitre, 'Río Paraná de las Palmas', serie H-1014..H-1018A del Paraná a 1:25.000 / 1:10.000. Nombres y balizamiento. Profundidades de los canales troncales.",
+   "formato": "Cartas papel y ráster (BSB/ENC) de pago; tablas de marea HTML",
+   "cobertura": "Canales navegables troncales; arroyos chicos no están.",
+   "licencia": "Carta oficial con derechos del SHN; no redistribuir. Solo para consulta de nombres.",
+   "automatizacion": "Alturas y mareas por scraping HTML (doc 06: 200). Catálogo de cartas [no verificado]",
+   "confiabilidad": "Muy alta para canales navegables.",
+   "evidencia_urls": [
+    "https://legacy.iho.int/mtg_docs/rhc/SWATHC/SWATHC6/CHAtSO6-08-Reporte_Nacional_de_Argentina.pdf",
+    "https://legacy.iho.int/mtg_docs/rhc/SWATHC/SWATHC7/CHAtSO7-6a_Informe_Naciona_Argentina.pdf",
+    "https://www.swedishclub.com/news/loss-prevention/paraguay-parana-waterway-use-of-argentinean-charts/"
+   ],
+   "estado": "[verificado] (existencia de las cartas H-1001/H-1014+); códigos H-112/H-211/H-212 que se me pidieron: no aparecieron [no verificado]",
+   "peso_nombres": 1.0
+  },
+  {
+   "id": "pna",
+   "categoria": "Oficial náutico",
+   "nombre": "Prefectura Naval Argentina: disposiciones de navegación del Delta, zonas",
+   "url": "https://www.argentina.gob.ar/prefecturanaval/reglamentacion/ordenanzas",
+   "ofrece": "Normas que nombran arroyos y zonas habilitadas: PZDE RI7 N° 02/15 (Primera Sección de Islas, Tigre), Ordenanza 1/18 (DPSN), Disposición 1471/2025; anexos con listas de arroyos (los de Paranacito son de Entre Ríos).",
+   "formato": "PDF/HTML",
+   "cobertura": "Zona Delta (Tigre, San Fernando, Escobar).",
+   "licencia": "Normativa pública (dominio público).",
+   "automatizacion": "PDFs en argentina.gob.ar/sites/default/files y argentina.gob.ar/normativa; parseo de anexos con pdftotext.",
+   "confiabilidad": "Alta para el nombre usado en reglamentación.",
+   "evidencia_urls": [
+    "https://mail.centronaval.org.ar/yccn/instrucciones-regatas/DISPOSICIONES-PREFECTURA-2016.doc",
+    "https://www.argentina.gob.ar/normativa/nacional/norma-419036/texto"
+   ],
+   "estado": "[verificado] (disposiciones); anexos de Tigre no leídos [no verificado]",
+   "peso_nombres": 0.9
+  },
+  {
+   "id": "ina",
+   "categoria": "Científico oficial",
+   "nombre": "INA, proyecto Delta del Paraná (INA-DELTA, INA-CARU)",
+   "url": "https://www.argentina.gob.ar/ina/recursos/delta-parana",
+   "ofrece": "Mapas de sitios de medición, relevamientos batimétricos, 'cursos de agua modelados', modelo topobatimétrico, informes con red de canales (HEC-RAS/Delft3D).",
+   "formato": "PDF, mapas; modelo de elevación y shapefile [no verificado]",
+   "cobertura": "Delta completo, énfasis en brazos principales y Bajo Delta.",
+   "licencia": "[no verificado] (publicaciones del Estado; pedir al INA).",
+   "automatizacion": "Informes en https://www.ina.gob.ar/delta/pdf/ ; repositorio https://repositorio.ina.gob.ar ; serie de alturas INA a5 ya probada en el doc 06.",
+   "confiabilidad": "Alta en hidráulica; no es fuente de toponimia fina.",
+   "evidencia_urls": [
+    "https://www.ina.gob.ar/delta/pdf/INA-DELTA_Info_01_Topobatimetria.pdf",
+    "https://www.ina.gob.ar/delta/pdf/INA-CARU_2019_Informe3_ModeloHidrodinamico.pdf",
+    "https://repositorio.ina.gob.ar/bitstreams/bb06f976-9ccf-4fee-8bbb-b88431184cd2/download"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.6
+  },
+  {
+   "id": "ina-historicos",
+   "categoria": "Histórico",
+   "nombre": "INA, base cartográfica de 53 mapas históricos del Delta (400 años)",
+   "url": "https://www.ina.gob.ar/archivos/pdf/Ina-Phc-DBdelta.pdf",
+   "ofrece": "Fichas con origen, escala e imagen de 53 mapas históricos; sirve para ver cambios de nombres.",
+   "formato": "PDF",
+   "cobertura": "Frente del Delta y brazos.",
+   "licencia": "Mapas antiguos en dominio público, la ficha es del INA.",
+   "automatizacion": "PDF directo.",
+   "confiabilidad": "Media: solo contexto histórico.",
+   "evidencia_urls": [
+    "https://www.ina.gob.ar/archivos/pdf/Ina-Phc-DBdelta.pdf",
+    "https://repositorio.ina.gob.ar/bitstreams/eaf4274b-66f3-4a40-8c96-7495f4090ad0/download"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.1
+  },
+  {
+   "id": "inta",
+   "categoria": "Científico oficial",
+   "nombre": "INTA (EEA Delta del Paraná; mapa de susceptibilidad a la inundación)",
+   "url": "https://repositorio.inta.gob.ar/xmlui/handle/20.500.12123/7256",
+   "ofrece": "Mapas de agua derivados de imágenes satelitales 1980-2010; forestación en islas. Útil como máscara de agua independiente.",
+   "formato": "PDF/ráster [no verificado]",
+   "cobertura": "Delta.",
+   "licencia": "[no verificado]",
+   "automatizacion": "Repositorio institucional.",
+   "confiabilidad": "Media.",
+   "evidencia_urls": [
+    "https://repositorio.inta.gob.ar/xmlui/handle/20.500.12123/7256",
+    "https://revistas.unc.edu.ar/index.php/revista-asagai/article/download/46086/46262/189784"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.2
+  },
+  {
+   "id": "atlas-amba",
+   "categoria": "Oficial provincial",
+   "nombre": "Atlas Ambiental de Buenos Aires, mapa N2.6 Hidrografía (2006)",
+   "url": "https://observatorioamba.org/descargas/cartografia/N2_6_hidrografia.pdf",
+   "ofrece": "Hoja de hidrografía con rótulos (Paraná Miní, Paraná de las Palmas, Luján, Canal Mitre, Río Unión, Río San Antonio, Barca Grande).",
+   "formato": "PDF",
+   "cobertura": "AMBA y bordes del Delta; pide citar el Atlas. Declara ajustarse a la cartografía oficial (Ley 22.963, IGM).",
+   "licencia": "Citar fuente 'Atlas Ambiental de Buenos Aires'.",
+   "automatizacion": "PDF directo; texto con pdftotext.",
+   "confiabilidad": "Media: 2006, escala chica.",
+   "evidencia_urls": [
+    "https://observatorioamba.org/descargas/cartografia/N2_6_hidrografia.pdf"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.5
+  },
+  {
+   "id": "wb-cursos",
+   "categoria": "Republicador",
+   "nombre": "Banco Mundial, 'Argentina Water Courses' y 'Water Bodies'",
+   "url": "https://wbwaterdata.org/dataset/argentina-water-courses/resource/f2488547-58f1-4d3b-8c63-4924325e17f6",
+   "ofrece": "Copia del shapefile de cursos y cuerpos de agua del IGN (actualización marzo 2020; copia 2017 como 001_cursos_de_agua.zip).",
+   "formato": "Shapefile, Feature Service",
+   "cobertura": "Nacional.",
+   "licencia": "CC BY 4.0 (declarada por el repositorio; el origen es IGN).",
+   "automatizacion": "Descarga desde la ficha.",
+   "confiabilidad": "Media: igual que el IGN pero con fecha fija.",
+   "evidencia_urls": [
+    "https://wbwaterdata.org/dataset/argentina-water-courses/resource/adf24f3c-5e79-4913-b6f3-edaa5143cfb6",
+    "https://wbwaterdata.org/dataset/argentina-water-bodies/resource/4445a799-a440-4318-9f3e-d1bc40686094",
+    "https://datacatalog.worldbank.org/search/dataset/0042027/argentina-water-courses"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "wikipedia",
+   "categoria": "Enciclopedia",
+   "nombre": "Wikipedia (es/en) y espejos: Partido de Tigre, Río Luján, Delta del Paraná",
+   "url": "https://en.wikipedia.org/wiki/Tigre_Partido",
+   "ofrece": "Nombres de los ríos principales, longitudes, cuencas. El 'Anexo: Ríos y arroyos del Delta del Paraná' no apareció en ninguna búsqueda.",
+   "formato": "HTML, API MediaWiki, dumps",
+   "cobertura": "Solo ríos principales (Luján, Reconquista, Paraná de las Palmas).",
+   "licencia": "CC BY-SA 4.0.",
+   "automatizacion": "https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=... (desde Actions).",
+   "confiabilidad": "Media.",
+   "evidencia_urls": [
+    "https://en.wikipedia.org/wiki/Tigre_Partido",
+    "https://es.hispanopedia.com/wiki/R%C3%ADo_Luj%C3%A1n",
+    "https://ninos.kiddle.co/R%C3%ADo_Luj%C3%A1n"
+   ],
+   "estado": "[verificado] (artículos); Anexo [no verificado]",
+   "peso_nombres": 0.4
+  },
+  {
+   "id": "wikidata",
+   "categoria": "Enciclopedia",
+   "nombre": "Wikidata (SPARQL)",
+   "url": "https://query.wikidata.org/sparql",
+   "ofrece": "Entidades de cursos de agua con coordenadas (P625), alias y enlace a Wikipedia. Cobertura de arroyos chicos del Delta probablemente baja.",
+   "formato": "SPARQL JSON/CSV",
+   "cobertura": "[no verificado]",
+   "licencia": "CC0.",
+   "automatizacion": "GET con ?query=... y header Accept: application/sparql-results+json (ver Parte B).",
+   "confiabilidad": "Media-baja.",
+   "evidencia_urls": [
+    "https://query.wikidata.org/sparql"
+   ],
+   "estado": "[según documentación] (la búsqueda no devolvió ítems de Wikidata de arroyos de Tigre)",
+   "peso_nombres": 0.4
+  },
+  {
+   "id": "geonames",
+   "categoria": "Gazetteer",
+   "nombre": "GeoNames",
+   "url": "https://download.geonames.org/export/dump/",
+   "ofrece": "Topónimos con alternate names; para el Delta hay áreas postales (p. ej. 'Rio Carapachay', CP 1649, -34.3553 -58.5427) y pocos cursos.",
+   "formato": "TXT (dump), API JSON/XML",
+   "cobertura": "Pobre en arroyos.",
+   "licencia": "CC BY 4.0 (gratis, uso comercial permitido con crédito).",
+   "automatizacion": "Dump AR.zip + alternateNamesV2.zip; API api.geonames.org/searchJSON (10.000 créditos/día, 1.000/hora).",
+   "confiabilidad": "Media-baja.",
+   "evidencia_urls": [
+    "https://geonames.org/export/",
+    "https://www.geonames.org/export/geonames-search.html",
+    "https://data.mongabay.com/world_zip_codes/Argentina/RIO_CARAPACHAY.html"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.5
+  },
+  {
+   "id": "nga-gns",
+   "categoria": "Gazetteer",
+   "nombre": "NGA GEOnet Names Server (geonames.nga.mil)",
+   "url": "https://geonames.nga.mil/geon-ags/rest/services/RESEARCH/GIS_OUTPUT/MapServer/0",
+   "ofrece": "Topónimos oficiales de EE. UU. para el exterior; 'Río Paraná de las Palmas' en -34.32, -58.48.",
+   "formato": "ArcGIS REST (JSON)",
+   "cobertura": "Ríos grandes.",
+   "licencia": "Dato público de EE. UU. [no verificado]",
+   "automatizacion": "REST query con where=FULL_NAME LIKE '%Palmas%'.",
+   "confiabilidad": "Media.",
+   "evidencia_urls": [
+    "https://geonames.nga.mil/geon-ags/rest/services/RESEARCH/GIS_OUTPUT/MapServer/0/4125143"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.5
+  },
+  {
+   "id": "mapcarta",
+   "categoria": "Agregador",
+   "nombre": "Mapcarta (y satellites.pro)",
+   "url": "https://mapcarta.com/",
+   "ofrece": "Agrega OSM y Wikidata; no aporta nombres propios. La búsqueda no devolvió ninguna página de Mapcarta de arroyos del Delta.",
+   "formato": "HTML",
+   "cobertura": "[no verificado]",
+   "licencia": "Contenido derivado de OSM/Wikidata; sin API oficial.",
+   "automatizacion": "No recomendado.",
+   "confiabilidad": "Baja (no independiente de OSM).",
+   "evidencia_urls": [
+    "https://mapcarta.com/17370126"
+   ],
+   "estado": "[no verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "google",
+   "categoria": "Comercial",
+   "nombre": "Google Maps",
+   "url": "https://cloud.google.com/maps-platform/terms/maps-service-terms",
+   "ofrece": "Nombres en el mapa base y vista satelital; la cobertura de arroyos chicos no pude comprobarla.",
+   "formato": "Tiles/API",
+   "cobertura": "[no verificado]",
+   "licencia": "Prohíbe copiar, extraer, rasterizar, almacenar fuera del servicio y crear derivados (cache solo para IDs y por 30 días en ciertos campos). NO usar para datos del juego.",
+   "automatizacion": "Ninguna permitida. Solo consulta visual manual para detectar errores.",
+   "confiabilidad": "Alta visualmente, inutilizable como fuente de datos.",
+   "evidencia_urls": [
+    "https://cloud.google.com/maps-platform/terms/maps-service-terms",
+    "https://cesium.com/legal/terms-for-google/",
+    "https://conductatlas.com/platform/google-maps/google-maps-platform-terms-of-service/no-scraping-or-content-extraction/"
+   ],
+   "estado": "[verificado] (términos, por resumen de terceros y por Cesium)",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "bing",
+   "categoria": "Comercial",
+   "nombre": "Bing Maps / Azure Maps",
+   "url": "https://www.microsoft.com/en-us/maps/bing-maps/product",
+   "ofrece": "Mapa base. Bing Maps for Enterprise está en retiro hacia Azure Maps. Imágenes Bing se pueden calcar en OSM.",
+   "formato": "API/tiles",
+   "cobertura": "[no verificado]",
+   "licencia": "Azure Maps: prohíbe cachear para servir a varios usuarios; el texto de Bing no pude leerlo [no verificado]. No usar como datos.",
+   "automatizacion": "No aplicable.",
+   "confiabilidad": "n/a",
+   "evidencia_urls": [
+    "https://learn.microsoft.com/en-us/answers/questions/214472/azure-maps-caching-policy",
+    "https://wiki.openstreetmap.org/Tag:source:geometry=Bing"
+   ],
+   "estado": "[verificado] (retiro y caching de Azure); términos Bing [no verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "here",
+   "categoria": "Comercial",
+   "nombre": "HERE Platform",
+   "url": "https://developers.here.com/terms-and-conditions",
+   "ofrece": "Mapa base y geocodificación.",
+   "formato": "API",
+   "cobertura": "[no verificado]",
+   "licencia": "Tiene sección 'Restrictions on HERE Materials'; texto no recuperado [no verificado]. No usar como datos.",
+   "automatizacion": "No aplicable.",
+   "confiabilidad": "n/a",
+   "evidencia_urls": [
+    "https://developers.here.com/terms-and-conditions"
+   ],
+   "estado": "[verificado] (existe la restricción); texto [no verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "apple",
+   "categoria": "Comercial",
+   "nombre": "Apple Maps (MapKit JS)",
+   "url": "https://developer.apple.com/forums/thread/120637",
+   "ofrece": "Mapa base.",
+   "formato": "API",
+   "cobertura": "[no verificado]",
+   "licencia": "Schedule 6 §2.5: no cachear, precargar ni almacenar datos de mapa salvo temporal. No usar como datos.",
+   "automatizacion": "No aplicable.",
+   "confiabilidad": "n/a",
+   "evidencia_urls": [
+    "https://developer.apple.com/forums/thread/120637",
+    "https://developer.apple.com/forums/thread/116695"
+   ],
+   "estado": "[verificado] (copia de terceros del texto)",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "esri",
+   "categoria": "Imágenes",
+   "nombre": "Esri World Imagery",
+   "url": "https://wiki.openstreetmap.org/wiki/Esri",
+   "ofrece": "Fondo satelital para validar a ojo; los términos permiten calcar y validar para crear datos vectoriales.",
+   "formato": "Tiles",
+   "cobertura": "Delta con imagen de alta resolución (fecha variable).",
+   "licencia": "La imagen no es abierta; lo calcado a mano puede publicarse (en OSM va bajo ODbL). No exportar/rasterizar las teselas al repo.",
+   "automatizacion": "Solo editores (JOSM/iD) o inspección manual.",
+   "confiabilidad": "Alta para verificar geometría.",
+   "evidencia_urls": [
+    "https://wiki.openstreetmap.org/wiki/Esri",
+    "https://wiki.openstreetmap.org/wiki/Template:Esri_image/doc",
+    "https://geoawesomeness.com/esri-world-imagery-comes-to-openstreetmap/"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "naturalearth",
+   "categoria": "Abierto global",
+   "nombre": "Natural Earth (ríos y lagos 1:10m)",
+   "url": "https://www.naturalearthdata.com/downloads/10m-physical-vectors/",
+   "ofrece": "Ejes de grandes ríos. Demasiado grueso: el Delta sale como pocas líneas.",
+   "formato": "Shapefile",
+   "cobertura": "Mundial.",
+   "licencia": "Dominio público.",
+   "automatizacion": "Descarga directa.",
+   "confiabilidad": "Alta pero inútil para arroyos.",
+   "evidencia_urls": [
+    "https://geo.btaa.org/catalog/stanford-fv375tj7951",
+    "https://purl.stanford.edu/hv485tn5089"
+   ],
+   "estado": "[verificado] (licencia por espejos Stanford/BTAA)",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "jrc-gsw",
+   "categoria": "Satélite",
+   "nombre": "JRC Global Surface Water Explorer (Landsat 30 m, 1984-2021)",
+   "url": "https://data.jrc.ec.europa.eu/dataset/jrc-gswe-global-surface-water-explorer-v1",
+   "ofrece": "Ocurrencia, recurrencia y estacionalidad de agua. A 30 m solo resuelve cursos de más de ~60 m de ancho.",
+   "formato": "GeoTIFF por teselas 10x10 grados; Earth Engine (JRC/GSW1_4)",
+   "cobertura": "Mundial.",
+   "licencia": "Programa Copernicus, gratis, sin restricción de uso; citar 'EC JRC/Google'.",
+   "automatizacion": "Descarga de teselas por HTTP desde el portal JRC o Earth Engine.",
+   "confiabilidad": "Alta para brazos grandes; no para arroyos.",
+   "evidencia_urls": [
+    "https://data.jrc.ec.europa.eu/dataset/jrc-gswe-global-surface-water-explorer-v1",
+    "https://developers.google.com/earth-engine/tutorials/tutorial_global_surface_water_01"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "worldcover",
+   "categoria": "Satélite",
+   "nombre": "ESA WorldCover 2021 v200 (10 m)",
+   "url": "https://registry.opendata.aws/esa-worldcover-vito/index.html",
+   "ofrece": "Clasificación a 10 m; clase 80 = agua permanente. Máscara para anchos de más de ~30 m.",
+   "formato": "Cloud Optimized GeoTIFF en S3 (AWS Open Data)",
+   "cobertura": "Mundial.",
+   "licencia": "CC BY 4.0; atribución '© ESA WorldCover project / Contains modified Copernicus Sentinel data'.",
+   "automatizacion": "s3://esa-worldcover/v200/2021/map/ (acceso anónimo) [según documentación]",
+   "confiabilidad": "Media: clase 80 omite canales tapados por copa.",
+   "evidencia_urls": [
+    "https://registry.opendata.aws/esa-worldcover-vito/index.html",
+    "https://developers.google.com/earth-engine/datasets/catalog/ESA_WorldCover_v200",
+    "https://docs.planet.com/data/public-data/other-datasets/esa-worldcover/"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "sentinel2",
+   "categoria": "Satélite",
+   "nombre": "Sentinel-2 L2A (Copernicus Data Space Ecosystem)",
+   "url": "https://dataspace.copernicus.eu/node/605",
+   "ofrece": "Bandas B03/B08 a 10 m para calcular NDWI y medir anchos (Parte B).",
+   "formato": "SAFE, COG vía STAC, OData, openEO",
+   "cobertura": "Revisita de 5 días.",
+   "licencia": "Datos abiertos y gratuitos con política de uso justo (Copernicus).",
+   "automatizacion": "OData/STAC del CDSE; alternativa sin registro: Earth Search STAC en AWS (earth-search.aws.element84.com/v1) [según documentación]",
+   "confiabilidad": "Alta para geometría de agua a 10 m.",
+   "evidencia_urls": [
+    "https://dataspace.copernicus.eu/node/605",
+    "https://earthobservations.org/storage/documents/Events/Open-Data-Open-Knowledge-workshop/Session-1/Presentation 2 - Razvan Cosac - ESA.pdf"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "grwl-merit",
+   "categoria": "Satélite",
+   "nombre": "GRWL, MERIT Hydro y HydroRIVERS (anchos y redes globales)",
+   "url": "https://zenodo.org/record/1269595",
+   "ofrece": "GRWL: anchos de ríos de más de ~90 m (Landsat). MERIT Hydro: ancho a 556 m. HydroRIVERS: red vectorial para cuencas >10 km2.",
+   "formato": "Shapefile/GeoTIFF",
+   "cobertura": "Mundial; irrelevante para arroyos chicos, sirve para Luján, Paraná de las Palmas, Paraná Miní.",
+   "licencia": "GRWL: citar a Allen y Pavelsky (2018), licencia exacta [no verificado]. MERIT Hydro: CC BY-NC 4.0 u ODbL 1.0 a elección. HydroRIVERS: licencia HydroSHEDS [no verificado]",
+   "automatizacion": "Descarga desde Zenodo/Hydrosheds.",
+   "confiabilidad": "Media-baja.",
+   "evidencia_urls": [
+    "https://zenodo.org/record/1269595",
+    "https://developers.google.com/earth-engine/datasets/catalog/MERIT_Hydro_v1_0_1?hl=it"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "overture",
+   "categoria": "Abierto global",
+   "nombre": "Overture Maps (tema base/water)",
+   "url": "https://docs.overturemaps.org/",
+   "ofrece": "Agua derivada de OSM y otros; no es independiente de OSM.",
+   "formato": "GeoParquet en S3/Azure",
+   "cobertura": "Mundial.",
+   "licencia": "CDLA-Permissive 2.0, con ODbL en lo derivado de OSM.",
+   "automatizacion": "CLI overturemaps download --type=water --bbox=-58.95,-34.5,-58.3,-33.9 [según documentación]",
+   "confiabilidad": "Media; redundante con OSM.",
+   "evidencia_urls": [
+    "https://blog.desdelinux.net/overture-maps-el-google-maps-con-datos-abiertos-ya-esta-disponible-para-su-uso-en-general/",
+    "https://community.openstreetmap.org/t/overturemaps-org-big-businesses-osmf-alternative/6760/182"
+   ],
+   "estado": "[verificado] (licencias); capa water [no verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "academico",
+   "categoria": "Académico",
+   "nombre": "Trabajos académicos: Kandus et al. 2019 (Inventario de humedales del Bajo Paraná), Sarubbi et al. (Análisis cartográfico del Delta), Taller Ecologista 2010",
+   "url": "https://www.argentina.gob.ar/sites/default/files/inventario_de_humedales_delta_del_parana_final.pdf",
+   "ofrece": "Unidades de paisaje, mapas, histórico de 53 mapas. Los autores que me nombraste (Quesada, Fabricante) no los encontré en la búsqueda.",
+   "formato": "PDF",
+   "cobertura": "Bajo Delta.",
+   "licencia": "Cita académica; mapas con derechos de autor.",
+   "automatizacion": "PDF directo.",
+   "confiabilidad": "Alta en metodología, baja en nombres de arroyos.",
+   "evidencia_urls": [
+    "https://www.argentina.gob.ar/sites/default/files/inventario_de_humedales_delta_del_parana_final.pdf",
+    "https://rsistest.ramsar.org/RISapp/files/48745696/documents/AR2255_lit1510.doc",
+    "https://www.ina.gob.ar/archivos/pdf/Ina-Phc-DBdelta.pdf"
+   ],
+   "estado": "[verificado] (existencia); contenido [no verificado]",
+   "peso_nombres": 0.2
+  },
+  {
+   "id": "mapa-ningit",
+   "categoria": "Turismo",
+   "nombre": "Mapa Ningit 'Tigre & Delta' (plegable impermeable, 1:78.000, 1.ª y 2.ª sección + 1:260.000 con índice de canales y arroyos)",
+   "url": "https://www.stanfords.co.uk/mendoza-9789872616106",
+   "ofrece": "Índice de canales, arroyos e islas en papel. La ficha de la tienda tiene el título cruzado con otro producto (Mendoza): confirmar ISBN.",
+   "formato": "Papel",
+   "cobertura": "Primera y Segunda sección.",
+   "licencia": "Con derechos; solo comprar y consultar los nombres.",
+   "automatizacion": "Ninguna.",
+   "confiabilidad": "Media-alta.",
+   "evidencia_urls": [
+    "https://www.stanfords.co.uk/mendoza-9789872616106"
+   ],
+   "estado": "[verificado] (ficha comercial)",
+   "peso_nombres": 0.5
+  },
+  {
+   "id": "turismo",
+   "categoria": "Turismo",
+   "nombre": "Recorridos turísticos en catamarán y lanchas colectivas (Interisleña, Jilguero, Líneas Delta Argentino)",
+   "url": "https://es-academic.com/dic.nsf/eswiki/612645",
+   "ofrece": "Usan nombres de uso común: ríos Tigre, Luján, Sarmiento, Capitán, Carapachay, Angostura, Espera, arroyo Rama Negra Grande y Chico. Los mapas de recorrido de las líneas no aparecieron.",
+   "formato": "HTML/PDF",
+   "cobertura": "Primera Sección.",
+   "licencia": "Sin licencia.",
+   "automatizacion": "Scraping no recomendado; leer a mano.",
+   "confiabilidad": "Media (nombres de uso).",
+   "evidencia_urls": [
+    "https://es-academic.com/dic.nsf/eswiki/612645",
+    "https://www.welcomeargentina.com/tigre/delta-catamaran.html",
+    "https://www.guruwalk.com/es/walks/65959-senderos-cautivantes-del-delta-tigre-monte-blanco",
+    "https://www.civitatis.com/es/tigre/catamaran-rios-tigre-lujan-sarmiento/",
+    "https://www.lanacion.com.ar/salud/salidas-en-catamaran-entre-canales-y-vegetacion-frondosa-para-internarse-en-otro-mundo-nid01032025/"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.5
+  },
+  {
+   "id": "nautica-comercial",
+   "categoria": "Náutica comercial",
+   "nombre": "Cartas electrónicas para navegantes: Navionics/Garmin, GPSNauticalCharts (AR_H13001 Delta del Paraná 1:150.000)",
+   "url": "https://www.gpsnauticalcharts.com/main/ar_h13001-delta-del-parana-nautical-chart.html",
+   "ofrece": "Profundidades y nombres de canales principales; escala demasiado general para arroyos.",
+   "formato": "Apps/ENC",
+   "cobertura": "Delta.",
+   "licencia": "Navionics/Garmin: licencia de suscripción, términos de redistribución no recuperados [no verificado]; no usar como datos.",
+   "automatizacion": "Ninguna.",
+   "confiabilidad": "Media.",
+   "evidencia_urls": [
+    "https://www.gpsnauticalcharts.com/main/ar_h13001-delta-del-parana-nautical-chart.html",
+    "https://panbo.com/chart-wars-post-acquisitions-whats-the-status-of-charts/"
+   ],
+   "estado": "[verificado] (carta listada); términos [no verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "historicos",
+   "categoria": "Histórico",
+   "nombre": "Mapas históricos: Biblioteca Nacional, Academia Nacional de la Historia, IGN Cartoteca, Royal Museums Greenwich, British Library",
+   "url": "https://rmg.co.uk/collections/objects/rmgc-object-545843",
+   "ofrece": "'Plano de navegación del Río Paraná y Río de la Plata' (RMG), carta de 1817 (Aldao), manuscritos de la British Library, 'Plano del Río Tigre' de 1908 (ficha de cartoteca). No hallé material digital de la Biblioteca Nacional.",
+   "formato": "Imágenes/fichas",
+   "cobertura": "Variable.",
+   "licencia": "Dominio público en general; verificar cada institución.",
+   "automatizacion": "Manual.",
+   "confiabilidad": "Baja para nombres actuales; útil para toponimia vieja (old_name).",
+   "evidencia_urls": [
+    "https://rmg.co.uk/collections/objects/rmgc-object-545843",
+    "https://searcharchives.bl.uk/catalog/036-002027975",
+    "https://contenido.ign.es/web/catalogo-cartoteca/resources/pdfcards/card005775.pdf",
+    "https://historylab.es/?p=5131"
+   ],
+   "estado": "[verificado] (fichas); Biblioteca Nacional [no verificado]",
+   "peso_nombres": 0.1
+  },
+  {
+   "id": "inmobiliarias",
+   "categoria": "Uso popular",
+   "nombre": "Portales inmobiliarios (Argenprop, Zonaprop, MercadoLibre, Remax, Mudafy, Roomix)",
+   "url": "https://www.argenprop.com/inmuebles/venta/arroyo-carapachay/dolares-hasta-45000",
+   "ofrece": "Nombre de uso de cada curso en el campo 'Río/Arroyo' de la dirección y la sección (1.ª/2.ª). Muy útil como señal de uso, no como fuente oficial; los avisos a veces se contradicen.",
+   "formato": "HTML",
+   "cobertura": "Todas las secciones.",
+   "licencia": "Sin licencia; no copiar texto ni fotos, solo contar frecuencias de nombres.",
+   "automatizacion": "Sin API; scraping prohibido por los términos de la mayoría [no verificado]",
+   "confiabilidad": "Baja-media.",
+   "evidencia_urls": [
+    "https://www.argenprop.com/inmuebles/venta/arroyo-carapachay/dolares-hasta-45000",
+    "https://www.argenprop.com/inmuebles/espera",
+    "https://www.argenprop.com/inmuebles/capitan",
+    "https://mudafy.com.ar/casas/canal-gobernador-jose-inocencio-arias-dique-lujan-provincia-de-buenos-casa-en-venta-198214"
+   ],
+   "estado": "[verificado]",
+   "peso_nombres": 0.2
+  },
+  {
+   "id": "normativa",
+   "categoria": "Normativa",
+   "nombre": "Decreto o ley de nomenclatura de cursos de agua del Delta",
+   "url": "https://normas.gba.gob.ar/ar-b/decreto/2021/710/257115",
+   "ofrece": "No encontré ninguna norma que fije los nombres. Decreto 710/2021 (emergencia hídrica del Delta) y la Ley 22.963 (cartografía oficial en manos del IGN) son lo único cercano.",
+   "formato": "HTML/PDF",
+   "cobertura": "n/a",
+   "licencia": "Dominio público.",
+   "automatizacion": "Buscar en normas.gba.gob.ar y en infoleg por 'denominación' y 'cursos de agua'.",
+   "confiabilidad": "n/a",
+   "evidencia_urls": [
+    "https://normas.gba.gob.ar/ar-b/decreto/2021/710/257115",
+    "https://observatorioamba.org/descargas/cartografia/N2_6_hidrografia.pdf"
+   ],
+   "estado": "[verificado] (no encontrado); existencia de otra norma [no verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "vecinos",
+   "categoria": "Uso popular",
+   "nombre": "Asociaciones de vecinos, clubes de remo y náuticos del Delta",
+   "url": "https://mail.centronaval.org.ar/yccn/instrucciones-regatas/DISPOSICIONES-PREFECTURA-2016.doc",
+   "ofrece": "El Centro Naval difunde las zonas de remo de la disposición de Prefectura. No hallé mapas de asociaciones vecinales ni de clubes con nombres.",
+   "formato": "DOC/PDF",
+   "cobertura": "Primera Sección.",
+   "licencia": "[no verificado]",
+   "automatizacion": "Manual.",
+   "confiabilidad": "Baja.",
+   "evidencia_urls": [
+    "https://mail.centronaval.org.ar/yccn/instrucciones-regatas/DISPOSICIONES-PREFECTURA-2016.doc"
+   ],
+   "estado": "[verificado] (solo la difusión); mapas vecinales [no verificado]",
+   "peso_nombres": 0.0
+  },
+  {
+   "id": "ina-a5",
+   "categoria": "Datos vivos",
+   "nombre": "INA a5 (alerta.ina.gob.ar): alturas del río en San Fernando",
+   "url": "https://alerta.ina.gob.ar/a5/obs/puntual/series?var_id=2&estacion_id=52&format=json",
+   "ofrece": "No sirve para nombres ni geometría, pero fija el nivel de agua para elegir imágenes de Sentinel-2 (ver Parte B). Medido en el doc 06: 200 desde GitHub Actions.",
+   "formato": "JSON",
+   "cobertura": "Estación San Fernando (Luján).",
+   "licencia": "Datos públicos (Prefectura/INA).",
+   "automatizacion": "GET directo.",
+   "confiabilidad": "Alta.",
+   "evidencia_urls": [
+    "docs/investigacion/06-prueba-de-fuentes.md"
+   ],
+   "estado": "[verificado en doc 06, no en esta sesión]",
+   "peso_nombres": 0.0
+  }
+ ]
+}

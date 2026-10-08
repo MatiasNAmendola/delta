@@ -37,3 +37,9 @@ El Delta está habitado: casi todas las islas tienen casas mirando al río, cada
 - Árboles lejanos como planos cruzados (ADR 0003): los árboles son ahora la mayor parte de los triángulos.
 - Muelles sólidos para las colisiones, lanchas amarradas en los muelles particulares, y clubes y recreos (ADR 0007).
 - Ubicar las casas con los edificios reales de OpenStreetMap donde estén cargados.
+
+## Agregado: fundido en vez de aparición brusca (2026-10-08)
+`src/world/distanceFade.ts` es un plugin de material (Standard y PBR). Cerca del borde del radio de cada objeto que se carga por cercanía, descarta una parte creciente de sus píxeles con un tramado fino de pantalla (*interleaved gradient noise*). Así los objetos se disuelven en la niebla en lugar de aparecer o desaparecer de golpe.
+- **Árboles:** se disuelven entre el 70 % del radio (170) y el radio menos un paso de recarga. Además, el árbol detallado y el simple se funden entre sí alrededor de 30 unidades: cada uno toma exactamente los píxeles que deja el otro.
+- **Casas, detalles, juncos, camalotes y muelles públicos:** el mismo fundido en su radio.
+- **Pasto:** ya se hundía suavemente.
