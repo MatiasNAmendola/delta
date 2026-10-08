@@ -37,6 +37,10 @@ export class ThrottleGauge {
     this.label = this.root.querySelector(".tg-label")!;
   }
 
+  setVisible(on: boolean): void {
+    this.root.style.display = on ? "" : "none";
+  }
+
   /** lever and speed in -1..1 (fractions of top speed); limit: fraction allowed in the zone. */
   update(lever: number, speed: number, zone: SlowZone, limit: number, label?: string): void {
     const Z = ThrottleGauge.ZERO;

@@ -1,5 +1,32 @@
 import { Scene } from "@babylonjs/core/scene";
 import { ThrottleLever } from "./throttleLever";
+import { LeverWidget, WheelWidget } from "./widgets";
+
+/**
+ * How the player drives (chosen in the menu):
+ * - "botones": ▲▼ move the throttle lever a notch, ◀▶ the rudder;
+ * - "flechas": hold ▲ to go, release to slow down (classic arcade);
+ * - "palanca": an on-screen palanca de mando to drag and a rueda de timón to turn.
+ */
+export type ControlScheme = "botones" | "flechas" | "palanca";
+const SCHEME_KEY = "delta.controles";
+
+export function controlScheme(): ControlScheme {
+  try {
+    const v = localStorage.getItem(SCHEME_KEY);
+    return v === "flechas" || v === "palanca" ? v : "botones";
+  } catch {
+    return "botones";
+  }
+}
+
+export function setControlScheme(scheme: ControlScheme): void {
+  try {
+    localStorage.setItem(SCHEME_KEY, scheme);
+  } catch {
+    // Only for this visit
+  }
+}
 
 /** Buttons for the realistic handling: keys by name, touch buttons as "touch-up/down/left/right". */
 export interface RawInput {
@@ -15,6 +42,8 @@ export interface ControlState {
   action: boolean; // dock action
   gyroSteering: number | null;
   raw: RawInput;
+  /** Steering is a wheel position (on-screen wheel), not a turn-while-held input. */
+  helmIsPosition: boolean;
   cameraAngleOffset: number; // radians offset from behind-boat
   cameraPitchOffset: number; // up/down offset
 }
@@ -28,7 +57,11 @@ export class MobileControls {
     cameraAngleOffset: 0,
     cameraPitchOffset: 0,
     raw: { pressed: new Set(), held: new Set() },
+    helmIsPosition: false,
   };
+  private scheme: ControlScheme = controlScheme();
+  private leverWidget: LeverWidget | null = null;
+  private wheelWidget: WheelWidget | null = null;
 
   private isMobile: boolean;
   private gyroEnabled = false;
@@ -507,6 +540,48 @@ export class MobileControls {
     }
   }
 
+  /**
+   * Switches the control scheme: the on-screen lever and wheel replace the
+   * four buttons in "palanca". `telegraph` snaps the lever to its five
+   * positions; `wheelStays` keeps the wheel where it is left.
+   */
+  public setScheme(scheme: ControlScheme, options: { telegraph?: boolean; wheelStays?: boolean } = {}): void {
+    this.scheme = scheme;
+    const palanca = scheme === "palanca";
+    for (const id of ["btnForward", "btnReverse", "btnLeft", "btnRight"]) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = palanca ? "none" : "";
+    }
+    if (palanca && !this.leverWidget) {
+      this.leverWidget = new LeverWidget(document.body, (v) => this.lever.set(v));
+      this.wheelWidget = new WheelWidget(document.body);
+    }
+    this.leverWidget?.setVisible(palanca);
+    this.wheelWidget?.setVisible(palanca);
+    if (this.leverWidget) this.leverWidget.snaps = options.telegraph ? [-1, -0.5, 0, 0.5, 1] : null;
+    if (this.wheelWidget) {
+      this.wheelWidget.returnToCenter = !options.wheelStays;
+      this.wheelWidget.reset();
+    }
+    // The PARADA button moves left of the lever
+    const action = document.getElementById("btnAction");
+    if (action) action.style.right = palanca ? "96px" : "125px";
+  }
+
+  /** The on-screen lever shows the lever, the speed and the slow-zone limit. */
+  public showLever(value: number, speed: number, limit: number | null, label: string): boolean {
+    if (this.scheme !== "palanca" || !this.leverWidget) return false;
+    this.leverWidget.show(value, speed, limit, label);
+    return true;
+  }
+
+  /** Hides the on-screen lever and wheel (menus). */
+  public hideWidgets(hidden: boolean): void {
+    const on = !hidden && this.scheme === "palanca";
+    this.leverWidget?.setVisible(on);
+    this.wheelWidget?.setVisible(on);
+  }
+
   /** The desktop key reminder (it changes with the realistic handling). */
   public setKeysHint(html: string): void {
     const el = document.getElementById("desktopKeys");
@@ -537,12 +612,22 @@ export class MobileControls {
 
   public update(dt: number): ControlState {
     // Keyboard controls (desktop)
-    this.controlState.throttle = this.lever.update(dt);
+    const held = (...k: string[]) => k.some((x) => this.keysDown.has(x) || this.touchHeld.has(x));
+    if (this.scheme === "flechas") {
+      // Hold to go, release to slow down
+      this.controlState.throttle = held("w", "arrowup", "touch-up") ? 1 : held("s", "arrowdown", "touch-down") ? -1 : 0;
+    } else {
+      this.controlState.throttle = this.lever.update(dt);
+    }
     // Keyboard steering works on any device (touch laptops too)
     const left = this.keysDown.has("a") || this.keysDown.has("arrowleft");
     const right = this.keysDown.has("d") || this.keysDown.has("arrowright");
+    this.controlState.helmIsPosition = false;
     if (left || right) this.controlState.steering = (right ? 1 : 0) - (left ? 1 : 0);
-    else if (!this.isMobile) this.controlState.steering = 0;
+    else if (this.wheelWidget && this.scheme === "palanca") {
+      this.controlState.steering = this.wheelWidget.update(dt);
+      this.controlState.helmIsPosition = true;
+    } else if (!this.isMobile) this.controlState.steering = 0;
     if (!this.isMobile) {
       // Q/E for camera rotation on desktop
       if (this.keysDown.has("q")) {

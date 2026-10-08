@@ -59,6 +59,8 @@ export interface HandlingInput {
   backRight: boolean;
   /** Single scull: more pressure on one side while it is held (-1 left turn, 1 right turn). */
   pressure: number;
+  /** The helm is a wheel position (on-screen wheel), not "turn it while held". */
+  helmIsPosition?: boolean;
 }
 
 export const NO_INPUT: HandlingInput = { lever: 0, helm: 0, strokeLeft: false, strokeRight: false, backLeft: false, backRight: false, pressure: 0 };
@@ -172,7 +174,7 @@ export class Handling {
     const top = this.top;
     this.leverShown = input.lever;
     // Helm: the wheel turns while held and stays; tiller, handlebar and outboard wheels go where you put them
-    if (this.kind === "rueda") {
+    if (this.kind === "rueda" && !input.helmIsPosition) {
       this.rudder = clamp(this.rudder + input.helm * t.helmRate * dt, -1, 1);
     } else {
       const target = this.kind === "cana" ? -input.helm : input.helm;

@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseWorld } from "../../src/world/WorldDoc";
-import { DEFAULT_OPTIONS, osmToWorld, type OverpassElement } from "./osmToWorld";
+import { DEFAULT_OPTIONS, osmToWorld, setNameFixes, type OverpassElement } from "./osmToWorld";
 
 const args = process.argv.slice(2);
 const flag = (name: string, fallback: string) => {
@@ -30,6 +30,8 @@ const origin = originFlag ? { lat: Number(originFlag.split(",")[0]), lon: Number
 const overpass = JSON.parse(readFileSync(input, "utf8")) as { elements: OverpassElement[] };
 const base = parseWorld(JSON.parse(readFileSync(resolve(root, "src/world/data/delta.world.json"), "utf8")));
 
+// Typo fixes for OSM names (documented sources in the file)
+setNameFixes(JSON.parse(readFileSync(resolve(root, "scripts/osm/name-fixes.json"), "utf8")));
 const { world, report } = osmToWorld(
   overpass.elements,
   base,

@@ -7,6 +7,7 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import "@babylonjs/core/Meshes/thinInstanceMesh";
 import { crossedQuads } from "../InstancedBatch";
+import { addDistanceFade } from "../distanceFade";
 
 export type BatchShape = "box" | "prism" | "cross" | "blob";
 
@@ -61,6 +62,8 @@ export class StreamedBatch {
     const s = options.specular ?? 0.04;
     mat.specularColor = new Color3(s, s, s);
     if (options.emissive) mat.emissiveColor = options.emissive;
+    // Dissolve near the edge of the radius instead of popping
+    addDistanceFade(mat, { fadeStart: this.radius * 0.72, fadeEnd: this.radius - REFRESH });
     // Crossed quads are seen from both sides; prisms are closed but cheap to draw both ways
     if (options.shape === "cross" || options.shape === "prism") mat.backFaceCulling = false;
     this.mesh.material = mat;

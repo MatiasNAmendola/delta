@@ -3,6 +3,8 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { Matrix } from "@babylonjs/core/Maths/math.vector";
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import "@babylonjs/core/Meshes/thinInstanceMesh";
+import type { Material } from "@babylonjs/core/Materials/material";
+import { addDistanceFade } from "./distanceFade";
 // Only the core glTF 2.0 loader: our models use no glTF extensions
 import "@babylonjs/loaders/glTF/glTFFileLoader";
 import "@babylonjs/loaders/glTF/2.0/glTFLoader";
@@ -32,6 +34,7 @@ export async function placeDockModels(scene: Scene, placements: Matrix[]): Promi
   placements.forEach((m, i) => m.copyToArray(data, i * 16));
   // What is drawn: the nearby docks, packed at the front (shared by the model's meshes)
   const near = new Float32Array(data.length);
+  const faded = new Set<Material>();
 
   for (const node of result.meshes) {
     if (!(node instanceof Mesh) || node.getTotalVertices() === 0) continue;
@@ -43,6 +46,10 @@ export async function placeDockModels(scene: Scene, placements: Matrix[]): Promi
     node.alwaysSelectAsActiveMesh = true;
     node.isPickable = false;
     node.freezeWorldMatrix();
+    if (node.material && !faded.has(node.material)) {
+      faded.add(node.material);
+      addDistanceFade(node.material, { fadeStart: DOCK_RADIUS * 0.75, fadeEnd: DOCK_RADIUS - 8 });
+    }
     node.material?.freeze();
     meshes.push(node);
   }

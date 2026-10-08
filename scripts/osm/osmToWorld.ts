@@ -66,6 +66,27 @@ export const DEFAULT_OPTIONS: ImportOptions = {
   minWaterAreaSize: 6,
 };
 
+/**
+ * Clear typos in OSM names, fixed on import (scripts/osm/name-fixes.json,
+ * sources in docs/investigacion/07). Placeholder names are dropped.
+ */
+export interface NameFixes {
+  rename: Record<string, { to: string; source: string }>;
+  drop: Record<string, string>;
+}
+
+let nameFixes: NameFixes = { rename: {}, drop: {} };
+
+export function setNameFixes(fixes: NameFixes): void {
+  nameFixes = fixes;
+}
+
+export function fixName(name: string | undefined): string | undefined {
+  if (!name) return name;
+  if (name in nameFixes.drop) return undefined;
+  return nameFixes.rename[name]?.to ?? name;
+}
+
 /** Typical widths (meters) when OSM has no `width` tag. */
 const DEFAULT_WIDTH_M: Record<string, number> = {
   river: 150,
@@ -273,7 +294,7 @@ export function osmToWorld(
   for (const el of elements) {
     const type = el.tags?.waterway;
     if (el.type !== "way" || !type || !WATERWAY_TYPES.has(type) || !el.geometry) continue;
-    const name = el.tags?.name?.trim();
+    const name = fixName(el.tags?.name?.trim());
     if (!name && !opts.includeUnnamed) {
       report.droppedUnnamed++;
       continue;

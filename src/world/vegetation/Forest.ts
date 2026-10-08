@@ -2,6 +2,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { addDistanceFade } from "../distanceFade";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import "@babylonjs/core/Meshes/thinInstanceMesh";
@@ -86,25 +87,41 @@ export class Forest {
     });
 
     const used = new Set(this.spots.map((s) => s.species));
-    const barkMat = new StandardMaterial("corteza", this.scene);
-    barkMat.diffuseColor = Color3.White();
-    barkMat.specularColor = Color3.Black();
+    // Near and far versions cross-fade around NEAR, and everything dissolves
+    // before FAR (minus a refresh step, so nothing pops at the edge)
+    const fade = (lod: 0 | 1) => ({
+      fadeStart: FAR * 0.7,
+      fadeEnd: FAR - REFRESH_DISTANCE,
+      lod: { at: NEAR, band: 4, side: lod === 0 ? ("near" as const) : ("far" as const) },
+    });
+    const barkMats = [0, 1].map((lod) => {
+      const m = new StandardMaterial(`corteza_${lod}`, this.scene);
+      m.diffuseColor = Color3.White();
+      m.specularColor = Color3.Black();
+      addDistanceFade(m, fade(lod as 0 | 1));
+      return m;
+    });
     for (const name of used) {
       const sp = SPECIES[name];
-      const leafMat = new StandardMaterial(`follaje_${name}`, this.scene);
-      leafMat.diffuseTexture = createLeafTexture(this.scene, name as LeafStyle);
-      leafMat.diffuseTexture.hasAlpha = true;
-      leafMat.backFaceCulling = false;
-      leafMat.specularColor = Color3.Black();
-      // Light scattered through the leaves: shaded sides never go black
-      leafMat.emissiveColor = new Color3(0.1, 0.12, 0.06);
+      const leafTexture = createLeafTexture(this.scene, name as LeafStyle);
+      leafTexture.hasAlpha = true;
+      const leafMats = [0, 1].map((lod) => {
+        const m = new StandardMaterial(`follaje_${name}_${lod}`, this.scene);
+        m.diffuseTexture = leafTexture;
+        m.backFaceCulling = false;
+        m.specularColor = Color3.Black();
+        // Light scattered through the leaves: shaded sides never go black
+        m.emissiveColor = new Color3(0.1, 0.12, 0.06);
+        addDistanceFade(m, fade(lod as 0 | 1));
+        return m;
+      });
       const list: Part[] = [];
       for (let v = 0; v < VARIANTS; v++) {
         for (const lod of [0, 1] as const) {
           const tree = generateTree(sp, 101 + v * 37 + name.length * 7, lod);
           list.push(
-            { mesh: this.mesh(`${name}_${v}_${lod}_tronco`, tree.trunk, barkMat), pick: [] },
-            { mesh: this.mesh(`${name}_${v}_${lod}_follaje`, tree.foliage, leafMat), pick: [] }
+            { mesh: this.mesh(`${name}_${v}_${lod}_tronco`, tree.trunk, barkMats[lod]), pick: [] },
+            { mesh: this.mesh(`${name}_${v}_${lod}_follaje`, tree.foliage, leafMats[lod]), pick: [] }
           );
         }
       }
@@ -150,7 +167,9 @@ export class Forest {
     const l2 = lx * lx + lz * lz || 1;
 
     for (const list of this.parts.values()) for (const p of list) p.pick.length = 0;
-    const near2 = NEAR * NEAR;
+    // The band, widened by the refresh step: trees keep the right versions until the next refresh
+    const nearOut2 = (NEAR + 4 + REFRESH_DISTANCE) ** 2;
+    const nearIn2 = Math.max(0, NEAR - 4 - REFRESH_DISTANCE) ** 2;
     const far2 = FAR * FAR;
     for (let i = 0; i < this.spots.length; i++) {
       const t = this.spots[i];
@@ -168,11 +187,14 @@ export class Forest {
           continue;
         }
       }
-      const lod = d2 < near2 ? 0 : 1;
+      // Both versions inside the cross-fade band around NEAR
       const list = this.parts.get(t.species)!;
-      const base = (this.variantOf[i] * 2 + lod) * 2;
-      list[base].pick.push(i);
-      list[base + 1].pick.push(i);
+      for (const lod of [0, 1]) {
+        if (lod === 0 ? d2 > nearOut2 : d2 < nearIn2) continue;
+        const base = (this.variantOf[i] * 2 + lod) * 2;
+        list[base].pick.push(i);
+        list[base + 1].pick.push(i);
+      }
     }
 
     for (const list of this.parts.values()) {
