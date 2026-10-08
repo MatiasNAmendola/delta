@@ -194,7 +194,7 @@ export class StartScreen {
         <button type="button" role="radio" class="ss-variant ss-mode" data-mode="clasico" aria-checked="${mode === "clasico"}">Clásico</button>
         <button type="button" role="radio" class="ss-variant ss-mode" data-mode="realista" aria-checked="${mode === "realista"}">Realista</button>
       </div>
-      ${mode === "realista" ? `<p class="ss-handling-help">${handlingHelp(handlingKind(b), touch)}</p>` : ""}`;
+      ${mode === "realista" ? `<p class="ss-handling-help">${handlingHelp(handlingKind(b), touch)} <b>Rigen las reglas de Prefectura por río:</b> sin ola en el Luján, Sarmiento y otros; despacio en las zonas de remo.</p>` : ""}`;
     this.root.querySelector<HTMLElement>(".ss-boat-detail")!.innerHTML = `
       ${variants}
       <p class="ss-boat-mission"><b>${b.mission}.</b> ${b.tagline}.</p>
@@ -392,6 +392,7 @@ export function injectStyles(): void {
     .ss-screen .ss-handling { margin-top: 10px; margin-bottom: 0; align-items: center; }
     .ss-screen .ss-handling-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
     .ss-screen .ss-handling-help { margin-top: 8px; font-size: 12.5px; line-height: 1.5; color: var(--muted); max-width: 52ch; }
+    .ss-screen .ss-handling-help b { color: var(--ink); font-weight: 600; }
     .ss-screen .ss-variants { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
     .ss-screen .ss-variant { font: inherit; font-size: 12px; letter-spacing: 0.04em; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(244, 239, 227, 0.25); background: transparent; color: var(--muted); cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s; }
     .ss-screen .ss-variant:hover { color: var(--ink); border-color: rgba(244, 239, 227, 0.5); }

@@ -12,7 +12,11 @@
  * - hugTheBank: small craft on big rivers stay near a bank and only leave
  *   it to cross straight to the other side.
  */
-import type { BoatSpec, RuleId } from "../boat/boatTypes";
+import type { BoatSpec, RuleId as BoatRuleId } from "../boat/boatTypes";
+import { familyOf, NO_WAKE_M, ROWING_ZONE_WAKE_M, rulesAt, tooNarrow, type Family } from "./waterwayRules";
+
+/** The boat's own rules plus the ones that come from the river it is on. */
+export type RuleId = BoatRuleId | "sinOla" | "zonaRemo" | "prohibido" | "angosto";
 
 export type WaterTest = (x: number, z: number) => boolean;
 
@@ -56,7 +60,7 @@ export function onWrongSide(p: ChannelProbe, boatWidth: number): boolean {
   return p.starboard - p.port > p.width * 0.2;
 }
 
-export type SpeedZone = "arroyo" | "muelle" | null;
+export type SpeedZone = "arroyo" | "muelle" | "sinola" | "remo" | null;
 
 export function speedZoneAt(p: ChannelProbe, distanceToDock: number): SpeedZone {
   if (distanceToDock < DOCK_ZONE) return "muelle";
@@ -99,10 +103,14 @@ export interface RuleInputs {
   distanceToDock: number;
   /** Lanchas passing close enough to throw a wake at us. */
   wakes: Array<{ x: number; z: number }>;
+  /** The river or arroyo the boat is on and its width (m), if known. */
+  via?: { name: string; width: number } | null;
+  /** Height (m) of the wave the boat is making now (wakePhysics.ts). */
+  wakeHeight?: number;
 }
 
-const WARN_AFTER: Partial<Record<RuleId, number>> = { keepRight: 3, hugTheBank: 7, speedZones: 0.4 };
-const FINE_AFTER: Partial<Record<RuleId, number>> = { keepRight: 7, hugTheBank: 12, speedZones: 3.5 };
+const WARN_AFTER: Partial<Record<RuleId, number>> = { keepRight: 3, hugTheBank: 7, speedZones: 0.4, sinOla: 0.4, zonaRemo: 0.4, prohibido: 0.2, angosto: 0.2 };
+const FINE_AFTER: Partial<Record<RuleId, number>> = { keepRight: 7, hugTheBank: 12, speedZones: 3.5, sinOla: 4, zonaRemo: 4, prohibido: 5, angosto: 4 };
 const COOLDOWN = 6;
 /** No warnings or fines in the first seconds of a trip (leaving the dock). */
 export const START_GRACE = 6;
@@ -122,10 +130,19 @@ export class RuleBook {
   private cooldown = new Map<RuleId, number>();
   private warned = new Set<RuleId>();
 
-  constructor(private spec: BoatSpec) {}
+  private family: Family;
+
+  /**
+   * `strict`: also the Prefectura's per-river rules ("sin ola", rowing
+   * zones), with the realistic mode. The game's own rules (boats that don't
+   * belong in an arroyo) apply always.
+   */
+  constructor(private spec: BoatSpec, private options: { strict?: boolean } = {}) {
+    this.family = familyOf(spec);
+  }
 
   has(rule: RuleId): boolean {
-    return this.spec.rules.includes(rule);
+    return (this.spec.rules as string[]).includes(rule);
   }
 
   update(dt: number, s: RuleInputs): RuleEvent[] {
@@ -157,9 +174,38 @@ export class RuleBook {
       });
     }
 
+    // Rules of this river for this kind of boat (waterwayRules.ts)
+    const local = rulesAt(s.via?.name ?? null, this.family).filter((r) => this.options.strict || r.kind === "prohibido");
+    const noWake = local.find((r) => r.kind === "sin_ola");
+    const rowing = local.find((r) => r.kind === "prioridad_remo");
+    const banned = local.find((r) => r.kind === "prohibido");
+    if (!this.zone && (noWake || rowing)) this.zone = noWake ? "sinola" : "remo";
+    const wave = s.wakeHeight ?? 0;
+    this.lasting(dt, "sinOla", !!noWake && wave > NO_WAKE_M, events, {
+      warn: `${s.via?.name}: sin ola (Disp. 02/2015). Tu ola: ${Math.round(wave * 100)} cm, bajá`,
+      fine: `Multa: hiciste ola en el ${s.via?.name}`,
+      penalty: noWake?.penalty ?? 0,
+    });
+    this.lasting(dt, "zonaRemo", !noWake && !!rowing && wave > ROWING_ZONE_WAKE_M, events, {
+      warn: `${s.via?.name}: zona de remo, despacio y dejá paso`,
+      fine: "Multa: zona de remo, ibas muy rápido",
+      penalty: rowing?.penalty ?? 0,
+    });
+    this.lasting(dt, "prohibido", !!banned && moving, events, {
+      warn: `El ${s.via?.name} es para botes chicos, remo y kayak${banned?.confidence === "regla_del_juego" ? " (regla del juego)" : ""}: salí de acá`,
+      fine: `Multa: ${this.family === "colectiva" ? "una colectiva" : "una lancha"} en el ${s.via?.name}`,
+      penalty: banned?.penalty ?? 0,
+    });
+    const narrow = !!s.via && moving && tooNarrow(s.via.width, this.family);
+    this.lasting(dt, "angosto", narrow, events, {
+      warn: `Arroyo muy angosto para ${this.family === "colectiva" ? "la colectiva" : "esta embarcación"}: no entra`,
+      fine: "Multa: te metiste donde no entrás",
+      penalty: this.family === "colectiva" ? 200 : 60,
+    });
+
     if (this.has("speedZones")) {
       const zone = this.zone;
-      this.lasting(dt, "speedZones", zone !== null && ratio > ZONE_SPEED, events, {
+      this.lasting(dt, "speedZones", (zone === "arroyo" || zone === "muelle") && ratio > ZONE_SPEED, events, {
         warn: zone === "arroyo" ? "Arroyo: bajá la velocidad (acelerador a la mitad)" : "Muelle cerca: bajá la velocidad",
         fine: zone === "arroyo" ? "Multa: velocidad reducida en arroyos" : "Multa: despacio frente a los muelles",
         penalty: 50,

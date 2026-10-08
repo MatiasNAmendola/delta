@@ -4,7 +4,7 @@
  * dock), the speed limit line, turning amber/red when over it. Sits by
  * the ▲▼ buttons on phones and at the right edge on desktop.
  */
-export type SlowZone = "arroyo" | "muelle" | "remeros" | null;
+export type SlowZone = "arroyo" | "muelle" | "remeros" | "sinola" | "remo" | null;
 
 export class ThrottleGauge {
   private root: HTMLDivElement;
@@ -54,7 +54,7 @@ export class ThrottleGauge {
     this.limit.style.display = zone ? "block" : "none";
     this.limit.style.bottom = `${y(limit)}%`;
     this.root.classList.toggle("over", over);
-    this.label.textContent = label && !zone ? label : zone === "arroyo" ? "Arroyo · despacio" : zone === "muelle" ? "Muelle · despacio" : zone === "remeros" ? "Remeros · despacio" : lever === 0 ? "Punto muerto" : lever < 0 ? "Reversa" : `${Math.round(lever * 100)}%`;
+    this.label.textContent = label && !zone ? label : zone === "arroyo" ? "Arroyo · despacio" : zone === "muelle" ? "Muelle · despacio" : zone === "remeros" ? "Remeros · despacio" : zone === "sinola" ? "Sin ola" : zone === "remo" ? "Zona de remo" : lever === 0 ? "Punto muerto" : lever < 0 ? "Reversa" : `${Math.round(lever * 100)}%`;
   }
 }
 
