@@ -2,8 +2,8 @@
   "$comment": "Corrections to OpenStreetMap waterway names, applied by the importer (osmToWorld.ts). Only clear typos are fixed here; doubtful spellings stay as in OSM until an official source (IGN, Provincia, SHN, Prefectura) confirms them. See docs/investigacion/07-fuentes-del-mapa.md (part C). Each fix should also be reported upstream to OSM.",
   "rename": {
     "Río URíon": {
-      "to": "Río Unión",
-      "source": "Atlas Ambiental de Buenos Aires rotula «Río Unión»; «URíon» es una errata de tipeo"
+      "to": "Río Urión",
+      "source": "OSM tenía solo la mayúscula mal («URíon»). Un aviso inmobiliario ubica una isla «sobre río Urión a 300 metros del arroyo Borazo» (argenprop.com, partido de Tigre), y en el mapa el Arroyo Boraso desemboca en este río. Antes se había corregido a «Río Unión» por error: esa grafía no apareció en ninguna fuente sobre Tigre. Confianza: probable; falta una fuente oficial."
     },
     "Arroyo Panatanosito": {
       "to": "Arroyo Pantanosito",
