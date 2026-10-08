@@ -174,6 +174,8 @@ export class Environment {
       terrainMat.backFaceCulling = false;
 
       ground.material = terrainMat;
+      // Static: freeze once textures are in (the CDN grass may swap in later and unfreezes it)
+      terrainMat.freeze();
       mark("islas: texturas");
     } catch (e) {
       console.warn("TerrainMaterial failed, using fallback:", e);
@@ -274,7 +276,9 @@ export class Environment {
         Texture.TRILINEAR_SAMPLINGMODE,
         () => {
           grassCDN.uScale = grassCDN.vScale = tiles;
+          terrainMat.unfreeze();
           terrainMat.diffuseTexture1 = grassCDN;
+          terrainMat.freeze();
 
           // Also try loading grass normal map
           try {
@@ -286,7 +290,9 @@ export class Environment {
               Texture.TRILINEAR_SAMPLINGMODE,
               () => {
                 grassNormal.uScale = grassNormal.vScale = tiles;
+                terrainMat.unfreeze();
                 terrainMat.bumpTexture1 = grassNormal;
+                terrainMat.freeze();
               }
             );
           } catch {
@@ -511,8 +517,8 @@ export class Environment {
   }
 
   /** Streams trees and grass around the camera. */
-  public update(dt: number, camera: Vector3): void {
-    this.forest.update(camera);
+  public update(dt: number, camera: Vector3, focus?: { x: number; z: number }): void {
+    this.forest.update(camera, focus);
     this.grass.update(dt, camera);
   }
 

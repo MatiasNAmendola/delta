@@ -59,6 +59,7 @@ export class StartScreen {
           <li><p><b>Navegá</b> ${touch ? "con los botones o inclinando el celular" : "con W A S D o las flechas"}; ${touch ? "PARADA" : "ESPACIO"} para parar en los muelles.</p></li>
           <li><p><b>Por la derecha:</b> como en la ruta, en el río se navega por la mano derecha.</p></li>
           <li><p><b>Despacio</b> en los arroyos, frente a los muelles y cerca de remeros y kayaks: tu ola los moja.</p></li>
+          <li><p><b>Limpiá el río:</b> ${touch ? "tocá" : "hacé clic en"} la basura que flota cerca tuyo y ganás créditos.</p></li>
           <li><p><b>En kayak o a remo,</b> recibí la ola de las lanchas de proa, y en los ríos anchos quedate cerca de la costa.</p></li>
         </ol>
       </aside>

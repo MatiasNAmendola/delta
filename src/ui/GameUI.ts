@@ -180,6 +180,22 @@ export class GameUI {
     this.scoreEl.textContent = score.toLocaleString();
   }
 
+  /** Credits (or a hint) rising from where the player tapped. */
+  public floatCredits(x: number, y: number, text: string, caption: string): void {
+    const el = document.createElement("div");
+    el.className = "credit-pop";
+    el.innerHTML = `<b></b><span></span>`;
+    el.querySelector("b")!.textContent = text;
+    el.querySelector("span")!.textContent = caption;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    document.body.appendChild(el);
+    gsap
+      .timeline({ onComplete: () => el.remove() })
+      .fromTo(el, { y: 0, scale: 0.6, opacity: 0 }, { y: -36, scale: 1, opacity: 1, duration: 0.45, ease: "back.out(2.2)" })
+      .to(el, { y: -70, opacity: 0, duration: 0.6, ease: "power2.in" }, "+=0.35");
+  }
+
   /** Second HUD pill: passengers, energy, corners found or leg time, per boat. */
   public updateSecondary(label: string, value: string): void {
     if (this.secondLabelEl.textContent !== label) this.secondLabelEl.textContent = label;

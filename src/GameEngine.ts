@@ -18,6 +18,7 @@ import { BOAT_TYPES, isBoatType, type BoatTypeId, type BoatSpec } from "./boat/b
 import { createMode, type GameMode } from "./game/modes";
 import { probeChannel, RuleBook, type RuleEvent } from "./game/navigationRules";
 import { Traffic } from "./world/Traffic";
+import { Trash, TRASH_REACH } from "./world/Trash";
 import { MobileControls } from "./controls/MobileControls";
 import { GameUI } from "./ui/GameUI";
 import { PROP_SCALE, CAMERA_LERP } from "./utils/constants";
@@ -43,10 +44,17 @@ export class GameEngine {
   private mode: GameMode | null = null;
   private rules: RuleBook | null = null;
   private traffic!: Traffic;
+  private trash!: Trash;
   private spawn!: { x: number; z: number; heading: number };
   private controls!: MobileControls;
   private ui!: GameUI;
 
+  /** `?fps=30` (remembered) caps the frame rate. */
+  private readonly fpsCap = (() => {
+    const param = new URLSearchParams(window.location.search).get("fps");
+    if (param) safeStore("delta.fps", param);
+    return Number(param ?? safeStorage("delta.fps") ?? 60) <= 30 ? 30 : 60;
+  })();
   private gameStarted = false;
   /** The full map pauses the game. */
   private mapOpen = false;
@@ -72,7 +80,7 @@ export class GameEngine {
 
     // Start sharp (capped pixel ratio) and let FPS drive the resolution
     const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    this.resolutionPolicy = defaultPolicy(window.devicePixelRatio || 1, isTouch);
+    this.resolutionPolicy = defaultPolicy(window.devicePixelRatio || 1, isTouch, this.fpsCap);
     this.resolution = { level: this.resolutionPolicy.minLevel, goodWindows: 0 };
     this.engine.setHardwareScalingLevel(this.resolution.level);
 
@@ -86,6 +94,10 @@ export class GameEngine {
   private async init(): Promise<void> {
     await this.updateLoadingBar(10, "Creando escena...");
     this.scene = new Scene(this.engine);
+    // No mouse picking (taps are handled by hand). Not performancePriority
+    // Intermediate: it turns off the color clear, which on tile-based phone
+    // GPUs makes them reload the previous frame from memory (ADR 0004)
+    this.scene.skipPointerMovePicking = true;
     mark("escena");
 
     // Camera
@@ -157,6 +169,9 @@ export class GameEngine {
     this.yolas = new YolaTraffic(this.scene, this.world, this.waterSystem, start, this.environment.getMooredYolas());
     // Other lanchas colectivas on the big rivers, keeping right
     this.traffic = new Traffic(this.scene, this.world, this.waterSystem, start);
+    // Floating trash to fish out with a tap
+    this.trash = new Trash(this.scene, (x, z) => this.waterSystem.isWater(x, z));
+    this.listenForTaps();
 
     await this.updateLoadingBar(85, "Configurando controles...");
 
@@ -191,7 +206,12 @@ export class GameEngine {
 
     // Start render loop; the first frame compiles every shader
     let firstFrame = true;
+    let lastFrame = 0;
     this.engine.runRenderLoop(() => {
+      // 30 fps mode (?fps=30): skip display refreshes to save battery and heat
+      const now = performance.now();
+      if (this.fpsCap <= 30 && now - lastFrame < 1000 / 30 - 4) return;
+      lastFrame = now;
       this.gameLoop();
       if (firstFrame) {
         firstFrame = false;
@@ -305,9 +325,10 @@ ${this.spec.mission}`, 2800);
         this.boat.speed
       );
 
-      // Rowers and other lanchas keep moving
+      // Rowers, other lanchas and floating trash keep moving
       this.yolas.update(dt);
       this.traffic.update(dt);
+      this.trash.update(dt, this.boat.position.x, this.boat.position.z);
       this.checkRowers();
       this.checkTraffic();
       this.applyRules(dt);
@@ -334,6 +355,7 @@ ${this.spec.mission}`, 2800);
       this.waterSystem.update(dt);
       this.yolas.update(dt);
       this.traffic.update(dt);
+      this.trash.update(dt, this.boat.position.x, this.boat.position.z);
       this.boat.update(dt, this.waterSystem, null);
       // Behind the title screen the camera circles the lancha slowly
       if (!this.gameStarted) {
@@ -343,9 +365,37 @@ ${this.spec.mission}`, 2800);
     }
 
     // Trees and grass stream in around the camera
-    this.environment.update(dt, this.camera.position);
+    this.environment.update(dt, this.camera.position, this.boat.position);
 
     this.scene.render();
+  }
+
+  /**
+   * A tap or click on the river (not a camera drag: short and still)
+   * fishes out the trash under it if it is within reach of the boat.
+   */
+  private listenForTaps(): void {
+    let down: { x: number; y: number; t: number } | null = null;
+    this.canvas.addEventListener("pointerdown", (e) => {
+      down = { x: e.clientX, y: e.clientY, t: performance.now() };
+    });
+    this.canvas.addEventListener("pointerup", (e) => {
+      const start = down;
+      down = null;
+      if (!start || !this.gameStarted || this.gameOver || this.mapOpen || e.button > 0) return;
+      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12 || performance.now() - start.t > 450) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const { x, z } = this.boat.position;
+      const got = this.trash.tryCollect(px, py, this.camera, x, z);
+      if (got) {
+        this.score += got.credits;
+        this.ui.floatCredits(e.clientX, e.clientY, `+${got.credits}`, got.name);
+      } else if (this.trash.outOfReachAt(px, py, this.camera, x, z)) {
+        this.ui.floatCredits(e.clientX, e.clientY, "Acercate más", `alcance ${Math.round(TRASH_REACH * 8)} m`);
+      }
+    });
   }
 
   /** Delta etiquette: never hit the rowers; motor boats also slow down passing them. */
@@ -513,7 +563,9 @@ ${this.spec.mission}`, 2800);
 
   private endGame(): void {
     this.gameOver = true;
-    this.ui.showEndScreen(this.score, this.mode!.summary(this.score), this.spec.name);
+    const summary = this.mode!.summary(this.score);
+    if (this.trash.collected > 0) summary.stats.push({ value: this.trash.collected, label: "residuos sacados del río" });
+    this.ui.showEndScreen(this.score, summary, this.spec.name);
   }
 }
 
