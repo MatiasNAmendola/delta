@@ -24,6 +24,8 @@ import { COURTESY_SPEED } from "./world/rowingRoute";
 import { Handling } from "./boat/handling";
 import { compassName, fetchLiveConditions, isSudestada, levelOffset, SAN_FERNANDO_ALERT, windVector, type LiveConditions } from "./world/liveConditions";
 import { handlingInput, handlingKeys, handlingMode, touchLabels } from "./controls/handlingInput";
+import { NO_WAKE_M, realWidthM, ROWING_ZONE_WAKE_M } from "./game/waterwayRules";
+import { froude, wakeAmplitude } from "./world/wakePhysics";
 import { createMode, type GameMode } from "./game/modes";
 import { probeChannel, RuleBook, ZONE_SPEED, type RuleEvent } from "./game/navigationRules";
 import { Traffic } from "./world/Traffic";
@@ -312,10 +314,11 @@ export class GameEngine {
     this.gameTime = 0;
     this.score = 0;
     this.ui.hideStartScreen();
-    this.rules = new RuleBook(this.spec);
-    this.controls.lever.set(0);
-    // Optional realistic handling: wheel and telegraph, strokes, gears (ADR 0013)
+    // Optional realistic handling: wheel and telegraph, strokes, gears (ADR 0013),
+    // with the Prefectura's per-river rules
     const realistic = handlingMode() === "realista" ? new Handling(this.spec) : null;
+    this.rules = new RuleBook(this.spec, { strict: realistic !== null });
+    this.controls.lever.set(0);
     this.boat.setHandling(realistic);
     this.controls.lever.notch = realistic?.kind === "rueda" ? 0.5 : 0.25;
     this.controls.setLabels(touchLabels(realistic?.kind ?? null));
@@ -412,7 +415,7 @@ ${this.spec.mission}`, 2800);
         status ? status.lever : this.controls.lever.value,
         this.boat.speed / this.spec.maxSpeed,
         rowers ? "remeros" : (this.rules?.zone ?? null),
-        rowers ? COURTESY_SPEED : ZONE_SPEED,
+        rowers ? COURTESY_SPEED : this.rules?.zone === "sinola" ? this.wakeSpeedLimit(NO_WAKE_M) : this.rules?.zone === "remo" ? this.wakeSpeedLimit(ROWING_ZONE_WAKE_M) : ZONE_SPEED,
         status ? status.label : undefined
       );
       this.ui.updateScore(this.score);
@@ -581,6 +584,8 @@ ${this.spec.mission}`, 2800);
       probe: probeChannel((px, pz) => this.waterSystem.isWater(px, pz), x, z, this.boat.rotation),
       distanceToDock: dockDistance,
       wakes: this.traffic.wakesNear(x, z),
+      via: this.currentVia,
+      wakeHeight: this.wakeNow(),
     });
     for (const e of events) this.showRule(e);
   }
@@ -679,6 +684,7 @@ ${this.spec.mission}`, 2800);
     const area = this.namedAreaAt(this.boat.position.x, this.boat.position.z);
     let nearestRiver = area ?? this.zoneName;
     let minDist = area === null ? Infinity : -1;
+    let onRiver: string | null = area;
 
     for (const river of this.world.rivers) {
       for (const point of river.points) {
@@ -691,13 +697,29 @@ ${this.spec.mission}`, 2800);
         if (dist < minDist) {
           minDist = dist;
           nearestRiver = river.name;
+          onRiver = dist < river.width ? river.name : null;
         }
       }
     }
 
+    this.currentVia = onRiver ? { name: onRiver, width: realWidthM(onRiver) } : null;
     this.ui.updateLocation(nearestRiver, this.mode?.hint() ?? null);
   }
 
+  /** Height (m) of the wave the boat makes at its current speed (wakePhysics.ts). */
+  private wakeNow(ratio = Math.abs(this.boat.speed) / this.spec.maxSpeed): number {
+    const o = wakeOptions(this.spec);
+    return wakeAmplitude({ U: Math.max(0, ratio) * o.topSpeed, L: o.length, beam: o.beam, height: o.height, topFroude: froude(o.topSpeed, o.length), hull: o.hull });
+  }
+
+  /** Fraction of top speed at which the boat starts making a wave above `limit` (m). */
+  private wakeSpeedLimit(limit: number): number {
+    for (let r = 0.05; r <= 1; r += 0.01) if (this.wakeNow(r) > limit) return r;
+    return 1;
+  }
+
+  /** The river or arroyo the boat is on (for its rules). */
+  private currentVia: { name: string; width: number } | null = null;
   private readonly aerialView = new URLSearchParams(window.location.search).get("view") === "aerial";
   private namedAreas: Array<{ area: WaterArea; bounds: [number, number, number, number] }> = [];
 

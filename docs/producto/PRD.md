@@ -25,11 +25,11 @@ Un juego que se siente como estar en el Delta de Tigre. No es un juego de carrer
 | F4 | Controles clásicos simples (palanca que queda, timón progresivo) | Hecho | — |
 | F5 | Manejo realista optativo por embarcación | Hecho (primera versión) | [02-maniobra](../investigacion/02-maniobra-y-controles.md), ADR 0013 |
 | F6 | Reglas de navegación con avisos y multas | Hecho: derecha, zonas lentas, remeros, ola de costado | [03-reglas](../investigacion/03-reglas-de-navegacion.md) |
-| F7 | Vías restringidas por tamaño o reglamento (colectiva en arroyos angostos, zonas de remo) | Pendiente | [03-restricciones-vias.json](../investigacion/03-restricciones-vias.json) |
+| F7 | Vías restringidas por tamaño o reglamento (sin ola, zonas de remo, Gambado) | Hecho (v1); faltan anchos reales de los arroyos | ADR 0015 |
 | F8 | Río vivo: marea, corriente, viento, sudestada | Hecho | ADR 0009 |
 | F9 | Estelas con física real (Kelvin, Froude) | Hecho | ADR 0012 |
-| F10 | Estela irregular y rebote de olas en tablestacados | Pendiente | [04-olas](../investigacion/04-olas-estelas-y-costas.md) |
-| F11 | Altura del río y clima reales del día (INA, Open-Meteo) | Pendiente; fuentes verificadas | [05-apis](../investigacion/05-apis-y-scraping.md), [06-prueba](../investigacion/06-prueba-de-fuentes.md) |
+| F10 | Estela irregular y rebote de olas en tablestacados | Hecho | ADR 0012 (v2) |
+| F11 | Altura del río y clima reales del día (INA, Open-Meteo) | Hecho | ADR 0008, [06-prueba](../investigacion/06-prueba-de-fuentes.md) |
 | F12 | Casas, muelles particulares, clubes y puntos de interés | Parcial: casas y muelles hechos, faltan clubes | ADR 0011, 0007 |
 | F13 | Basura para juntar | Hecho | — |
 | F14 | Vista de dron | Pendiente | ADR 0006 |

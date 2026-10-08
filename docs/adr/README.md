@@ -18,6 +18,7 @@ Cada ADR registra una decisión: el contexto, qué decidimos, qué otras opcione
 | [0012](0012-fisica-de-la-estela.md) | Física de la estela (Kelvin, Froude, estela turbulenta) | Implementada |
 | [0013](0013-manejo-realista.md) | Manejo realista optativo por embarcación | Implementada (v1) |
 | [0014](0014-pwa.md) | App instalable (PWA) y nitidez en celulares | Implementada |
+| [0015](0015-reglas-por-via.md) | Reglas por río y arroyo (sin ola, remo, Gambado) | Implementada (v1) |
 
 ## Cómo medimos
 
