@@ -96,10 +96,10 @@ def page_names(url):
     """River and arroyo names written on a public web page (maps, guides)."""
     html = get(url, 60).decode("utf-8", "ignore")
     text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S | re.I)
-    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"<[^>]+>", "\n", text)
     import html as h
     text = h.unescape(text)
-    found = sorted({m.group(1).strip(" .,;:") for m in NAME_RE.finditer(text)})
+    found = sorted({m.group(1).strip(" .,;:") for line in text.splitlines() for m in NAME_RE.finditer(line.strip())})
     print(f"{url}: {len(found)} nombres", found[:400])
     return [{"name": n, "alt": [n]} for n in found]
 
@@ -142,7 +142,8 @@ def ign_geoportal():
             continue
         layers = sorted(set(re.findall(r"<(?:wfs:)?Name>([^<]*(?:curso|agua|hidro|rio|arroyo|canal)[^<]*)</(?:wfs:)?Name>", caps, re.I)))
         print(base, "capas:", layers)
-        for layer in layers[:8]:
+        layers = [l for l in layers if "aguas_continentales" in l] or layers
+        for layer in layers:
             url = (base + "?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&srsName=EPSG:4326"
                    f"&typeNames={urllib.parse.quote(layer)}&bbox={BBOX[0]},{BBOX[1]},{BBOX[2]},{BBOX[3]},EPSG:4326&count=5000")
             try:
@@ -151,10 +152,13 @@ def ign_geoportal():
                 print("  ", layer, "falló:", e)
                 continue
             n0 = len(out)
-            for feat in fc.get("features", []):
+            feats = fc.get("features", [])
+            if feats:
+                print("  ", layer, len(feats), "rasgos; campos:", {k: v for k, v in (feats[0].get("properties") or {}).items()})
+            for feat in feats:
                 props = feat.get("properties") or {}
                 for k, v in props.items():
-                    if k.lower() in ("nam", "fna", "gna", "nombre", "name") and isinstance(v, str) and v.strip():
+                    if k.lower() in ("nam", "fna", "gna", "nombre", "name", "nom", "nombre_geo") and isinstance(v, str) and v.strip() and v.strip().lower() not in ("s/n", "sin nombre"):
                         out.append({"name": v.strip(), "alt": [v.strip()], "layer": layer})
                         break
             print("  ", layer, len(out) - n0, "nombres")
