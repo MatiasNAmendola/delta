@@ -1,9 +1,10 @@
 import { Scene } from "@babylonjs/core/scene";
 import type { WorldDoc } from "../world/WorldDoc";
-import { getPointOnPath } from "../utils/helpers";
 import { gsap } from "gsap";
 import { METERS_PER_UNIT } from "../utils/constants";
 import { StartScreen } from "./StartScreen";
+import { MapView, type MapMarker } from "./MapView";
+import type { WorldLayout } from "../world/layout/worldLayout";
 import type { BoatTypeId } from "../boat/boatTypes";
 import type { Summary } from "../game/modes";
 import { showEndScreen } from "./EndScreen";
@@ -11,8 +12,6 @@ import { injectHudTheme } from "./hudTheme";
 
 export class GameUI {
   private hudDiv!: HTMLDivElement;
-  private minimapCanvas!: HTMLCanvasElement;
-  private minimapCtx!: CanvasRenderingContext2D;
   private scoreEl!: HTMLElement;
   private secondEl!: HTMLElement;
   private secondLabelEl!: HTMLElement;
@@ -22,9 +21,11 @@ export class GameUI {
   private notificationTimeout: number | null = null;
   private startScreen: StartScreen | null = null;
 
-  constructor(private scene: Scene, private world: WorldDoc) {
+  private map: MapView;
+
+  constructor(private scene: Scene, private world: WorldDoc, layout: WorldLayout) {
     this.createHUD();
-    this.createMinimap();
+    this.map = new MapView(world, layout);
     // The title screen is shown by the engine once the loader is gone
   }
 
@@ -127,7 +128,8 @@ export class GameUI {
           <span class="value" id="hud-timer">5:00</span>
         </div>
       </div>
-      <div id="hud-location">Delta de Tigre</div>
+      <div id="hud-river"><span id="hud-river-name">Delta de Tigre</span></div>
+      <div id="hud-location"></div>
       <div id="hud-notification"></div>
       <div id="hud-nextStop"></div>
     `;
@@ -142,119 +144,13 @@ export class GameUI {
     this.notificationEl = document.getElementById("hud-notification")!;
   }
 
-  private createMinimap(): void {
-    const container = document.createElement("div");
-    container.style.cssText = `
-      position:fixed;top:55px;right:10px;
-      width:120px;height:120px;
-      border:2px solid rgba(232,213,163,0.5);
-      border-radius:8px;overflow:hidden;
-      background:rgba(0,0,0,0.5);z-index:51;
-      pointer-events:none;
-    `;
-
-    this.minimapCanvas = document.createElement("canvas");
-    this.minimapCanvas.width = 120;
-    this.minimapCanvas.height = 120;
-    container.appendChild(this.minimapCanvas);
-    container.id = "minimap";
-    document.body.appendChild(container);
-
-    this.minimapCtx = this.minimapCanvas.getContext("2d")!;
-    this.drawMinimapBase();
+  /** Map card in the corner; tap to open the full chart (pauses the game). */
+  public updateMap(x: number, z: number, heading: number, target: MapMarker | null): void {
+    this.map.update(x, z, heading, target);
   }
 
-  /** Static minimap layer (land, water, docks), rendered once and reused every frame. */
-  private minimapBase: HTMLCanvasElement | null = null;
-
-  private drawMinimapBase(): void {
-    if (!this.minimapBase) {
-      this.minimapBase = document.createElement("canvas");
-      this.minimapBase.width = 120;
-      this.minimapBase.height = 120;
-      this.renderMinimapBase(this.minimapBase.getContext("2d")!);
-    }
-    this.minimapCtx.clearRect(0, 0, 120, 120);
-    this.minimapCtx.drawImage(this.minimapBase, 0, 0);
-  }
-
-  private renderMinimapBase(ctx: CanvasRenderingContext2D): void {
-    const w = 120;
-    const h = 120;
-    const size = this.world.world.size;
-    const mx = (x: number) => ((x + size / 2) / size) * w;
-    const my = (z: number) => ((z + size / 2) / size) * h;
-
-    // Background (land)
-    ctx.fillStyle = "#2a5a35";
-    ctx.fillRect(0, 0, w, h);
-
-    // Real water shapes; islands (holes) cut out with the even-odd rule
-    ctx.fillStyle = "#4a9a7a";
-    for (const area of this.world.waterAreas ?? []) {
-      ctx.beginPath();
-      for (const ring of [area.outer, ...area.holes]) {
-        ring.forEach(([x, z], i) => (i === 0 ? ctx.moveTo(mx(x), my(z)) : ctx.lineTo(mx(x), my(z))));
-        ctx.closePath();
-      }
-      ctx.fill("evenodd");
-    }
-
-    // Draw rivers
-    ctx.strokeStyle = "#4a9a7a";
-    ctx.lineWidth = 2;
-
-    for (const river of this.world.rivers) {
-      ctx.beginPath();
-      ctx.lineWidth = Math.max(1, (river.width / this.world.world.size) * w * 0.8);
-
-      for (let i = 0; i <= 20; i++) {
-        const t = i / 20;
-        const [rx, rz] = getPointOnPath(river.points, t);
-        const mx = ((rx + this.world.world.size / 2) / this.world.world.size) * w;
-        const my = ((rz + this.world.world.size / 2) / this.world.world.size) * h;
-
-        if (i === 0) ctx.moveTo(mx, my);
-        else ctx.lineTo(mx, my);
-      }
-      ctx.stroke();
-    }
-
-    // Draw docks
-    for (const dock of this.world.docks) {
-      const dx = ((dock.x + this.world.world.size / 2) / this.world.world.size) * w;
-      const dy = ((dock.z + this.world.world.size / 2) / this.world.world.size) * h;
-      ctx.fillStyle = "#e8d5a3";
-      ctx.fillRect(dx - 1.5, dy - 1.5, 3, 3);
-    }
-  }
-
-  public updateMinimap(boatX: number, boatZ: number, boatRot: number): void {
-    // Redraw base
-    this.drawMinimapBase();
-
-    const ctx = this.minimapCtx;
-    const w = 120;
-    const h = 120;
-
-    // Draw boat position
-    const bx = ((boatX + this.world.world.size / 2) / this.world.world.size) * w;
-    const by = ((boatZ + this.world.world.size / 2) / this.world.world.size) * h;
-
-    ctx.save();
-    ctx.translate(bx, by);
-    ctx.rotate(boatRot);
-
-    // Boat arrow
-    ctx.fillStyle = "#ff4444";
-    ctx.beginPath();
-    ctx.moveTo(0, -4);
-    ctx.lineTo(-3, 3);
-    ctx.lineTo(3, 3);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
+  public onMapToggle(callback: (open: boolean) => void): void {
+    this.map.onToggle = callback;
   }
 
   public showStartScreen(selected: BoatTypeId, onSelect: (id: BoatTypeId) => void): void {
@@ -302,8 +198,24 @@ export class GameUI {
     }
   }
 
-  public updateLocation(name: string): void {
-    this.locationEl.textContent = name;
+  private riverName = "";
+
+  /** River you are on (big, top center, animated when it changes) and what to do here (bottom line). */
+  public updateLocation(river: string, hint: string | null): void {
+    if (river !== this.riverName) {
+      this.riverName = river;
+      const el = document.getElementById("hud-river-name")!;
+      gsap.killTweensOf(el);
+      gsap
+        .timeline()
+        .to(el, { y: -10, opacity: 0, filter: "blur(4px)", duration: 0.25, ease: "power2.in" })
+        .call(() => {
+          el.textContent = river;
+        })
+        .to(el, { y: 0, opacity: 1, filter: "blur(0px)", duration: 0.6, ease: "expo.out" });
+    }
+    const text = hint ?? "";
+    if (this.locationEl.textContent !== text) this.locationEl.textContent = text;
   }
 
   public updateNextStop(label: string, name: string, distance: number): void {

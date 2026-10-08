@@ -27,6 +27,15 @@ export function injectHudTheme(): void {
       font-family: "Fraunces Variable", Fraunces, Georgia, serif; font-weight: 600; font-size: 22px; line-height: 1;
       color: #f4efe3; font-variant-numeric: tabular-nums;
     }
+    body #gameHUD #hud-river {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%); pointer-events: none;
+      padding: 7px 18px 8px; border-radius: 999px; white-space: nowrap; max-width: 46vw; overflow: hidden; text-overflow: ellipsis;
+      font: italic 600 20px/1.1 "Fraunces Variable", Fraunces, Georgia, serif; color: #f4efe3;
+      background: rgba(12, 26, 22, 0.42); border: 1px solid rgba(244, 239, 227, 0.12);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); text-shadow: 0 1px 8px rgba(0,0,0,0.35);
+    }
+    body #gameHUD #hud-river span { display: inline-block; }
+    body #gameHUD #hud-location:empty { display: none; }
     body #gameHUD #hud-location {
       position: fixed; top: auto; bottom: 14px; left: 50%; transform: translateX(-50%);
       font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
@@ -46,7 +55,6 @@ export function injectHudTheme(): void {
       backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
       box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.6);
     }
-    body #minimap { border-radius: 16px !important; border: 1px solid rgba(244, 239, 227, 0.18) !important; overflow: hidden; }
     body #desktopHint > div {
       font-family: "Inter Variable", Inter, system-ui, sans-serif !important; font-size: 12px !important; letter-spacing: 0.02em;
       color: rgba(244, 239, 227, 0.75) !important; background: rgba(12, 26, 22, 0.5) !important;
@@ -67,11 +75,15 @@ export function injectHudTheme(): void {
       font-family: "Inter Variable", Inter, system-ui, sans-serif; border: 1px solid rgba(244, 239, 227, 0.22);
       background: rgba(12, 26, 22, 0.45); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     }
+    /* Below the map card (136 px, or 104 px on landscape phones) */
+    body #mobileControls .gyro-toggle { top: 158px !important; right: 12px !important; }
     @media (max-height: 520px) {
       body #gameHUD .hud-bar { padding: 8px 10px; gap: 6px; }
       body #gameHUD .hud-item { padding: 5px 10px 6px; }
       body #gameHUD .hud-item .value { font-size: 17px; }
       body #gameHUD #hud-nextStop { top: 56px; left: 10px; font-size: 12px; padding: 6px 12px; }
+      body #gameHUD #hud-river { font-size: 16px; top: 8px; padding: 5px 14px 6px; }
+      body #mobileControls .gyro-toggle { top: 120px !important; right: 8px !important; }
     }
   `;
   document.head.appendChild(style);
