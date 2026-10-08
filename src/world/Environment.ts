@@ -13,6 +13,7 @@ import { degToRad, type Dock, type ScatterRule, type WorldDoc } from "./WorldDoc
 import { hexToColor3, seededRandom, clamp } from "../utils/helpers";
 import { WaterSystem } from "./WaterSystem";
 import { InstancedBoxBatch, propTransform } from "./InstancedBatch";
+import { WaterDistanceField } from "./WaterDistanceField";
 
 export class Environment {
   private scene: Scene;
@@ -20,18 +21,26 @@ export class Environment {
   private props: PropBatches;
   /** Static meshes worth showing in the water reflection/refraction passes. */
   private reflectedMeshes: AbstractMesh[] = [];
+  /** Distance to the nearest water, shared by texturing, relief and vegetation. */
+  private waterDistance: WaterDistanceField;
+  private berths = new Map<string, { x: number; z: number }>();
+  private dockSites: Array<{ x: number; z: number }> = [];
 
   constructor(scene: Scene, waterSystem: WaterSystem, world: WorldDoc) {
     this.scene = scene;
     this.world = world;
-    this.createGround(waterSystem);
+    // ~3 world units per cell (256 for the original 800-unit Delta); also the splatmap size
+    const res = world.world.size <= 800 ? 256 : 1024;
+    this.waterDistance = new WaterDistanceField(world.world.size, res, (x, z) => waterSystem.isWater(x, z));
+    this.createGround();
     this.createSkybox();
     this.props = createPropBatches(scene);
+    // Docks first: vegetation and houses keep clear of where they end up
+    for (const dock of world.docks) {
+      this.addDock(dock, waterSystem);
+    }
     for (const rule of world.scatter) {
       this.scatter(rule, waterSystem);
-    }
-    for (const dock of world.docks) {
-      this.addDock(dock);
     }
     for (const batch of Object.values(this.props)) {
       this.reflectedMeshes.push(batch.build());
@@ -83,7 +92,7 @@ export class Environment {
     return value;
   }
 
-  private createGround(waterSystem: WaterSystem): void {
+  private createGround(): void {
     // More subdivisions for vertex displacement (hills/terrain)
     // ~12 world units per terrain quad (64 for the original 800-unit Delta)
     const subdivisions = Math.min(256, Math.max(64, Math.round(this.world.world.size / 12.5)));
@@ -97,13 +106,13 @@ export class Environment {
     this.reflectedMeshes.push(ground);
 
     // Displace vertices to create terrain elevation
-    this.displaceTerrainVertices(ground, waterSystem, subdivisions);
+    this.displaceTerrainVertices(ground);
 
     try {
       const terrainMat = new TerrainMaterial("terrainMat", this.scene);
 
       // Splatmap: R=grass, G=dirt, B=sand
-      terrainMat.mixTexture = this.generateSplatmap(waterSystem);
+      terrainMat.mixTexture = this.generateSplatmap();
 
       // Grass (R channel) - coherent noise texture
       const grassTex = this.createProceduralGrass();
@@ -138,146 +147,68 @@ export class Environment {
     }
   }
 
-  /** Displace terrain vertices — raise land areas, keep river areas flat/low */
-  private displaceTerrainVertices(
-    ground: Mesh,
-    waterSystem: WaterSystem,
-    subdivisions: number
-  ): void {
+  /** Displace terrain vertices: below the water under rivers, low banks, rolling hills inland. */
+  private displaceTerrainVertices(ground: Mesh): void {
     const positions = ground.getVerticesData(VertexBuffer.PositionKind);
     if (!positions) return;
 
-    const half = this.world.world.size / 2;
     for (let i = 0; i < positions.length; i += 3) {
-      const localX = positions[i];
-      const localZ = positions[i + 2];
+      // Ground is centered at the origin, so local = world
+      const x = positions[i];
+      const z = positions[i + 2];
+      const d = this.waterDistance.at(x, z);
 
-      // World position (ground is centered at origin)
-      const worldX = localX;
-      const worldZ = localZ;
-
-      // Check if this is a water area — keep flat
-      if (waterSystem.isWater(worldX, worldZ)) {
-        positions[i + 1] = -0.5; // Slightly below water
+      if (d === 0) {
+        positions[i + 1] = -0.5; // Under the water surface
         continue;
       }
 
-      // Estimate distance to water for smooth transition
-      let nearWater = false;
-      for (const d of [3, 6, 10]) {
-        for (let dir = 0; dir < 4; dir++) {
-          const angle = (dir / 4) * Math.PI * 2;
-          if (
-            waterSystem.isWater(
-              worldX + Math.cos(angle) * d,
-              worldZ + Math.sin(angle) * d
-            )
-          ) {
-            nearWater = true;
-            break;
-          }
-        }
-        if (nearWater) break;
-      }
-
-      if (nearWater) {
-        // Near river banks — gentle slope, slight elevation
-        const bankHeight = this.fbm(worldX * 0.02, worldZ * 0.02, 3, 42) * 0.8;
-        positions[i + 1] = Math.max(0, bankHeight);
-      } else {
-        // Inland — rolling hills
-        const height =
-          this.fbm(worldX * 0.008, worldZ * 0.008, 4, 42) * 4.0 +
-          this.fbm(worldX * 0.025, worldZ * 0.025, 2, 99) * 1.0;
-        positions[i + 1] = Math.max(0.2, height);
-      }
+      // Low muddy bank right at the water, blending into hills further inland
+      const bank = this.fbm(x * 0.02, z * 0.02, 3, 42) * 0.8;
+      const hills =
+        this.fbm(x * 0.008, z * 0.008, 4, 42) * 4.0 +
+        this.fbm(x * 0.025, z * 0.025, 2, 99) * 1.0;
+      const inland = smoothstep(4, 20, d);
+      positions[i + 1] = Math.max(0, bank + (Math.max(0.2, hills) - bank) * inland);
     }
 
     ground.updateVerticesData(VertexBuffer.PositionKind, positions);
     ground.createNormals(true);
   }
 
-  /** Generate a splatmap DynamicTexture based on river proximity.
+  /** Splatmap from the water distance field.
    *  R = grass (far from water), G = dirt (medium), B = sand (near water) */
-  private generateSplatmap(waterSystem: WaterSystem): DynamicTexture {
-    // ~3 world units per texel (256 for the original 800-unit Delta)
-    const size = this.world.world.size <= 800 ? 256 : 1024;
+  private generateSplatmap(): DynamicTexture {
+    const field = this.waterDistance;
+    const size = field.res;
     const tex = new DynamicTexture("splatmap", size, this.scene, false);
-    const ctx = tex.getContext();
 
-    const checkDists = [2, 5, 9, 14, 20, 28];
-    const numDirs = 6;
-    const rng = seededRandom(456);
+    paintPixels(tex, size, (px, py, out) => {
+      // Canvas row 0 is the far (+z) edge of the ground once uploaded
+      const j = size - 1 - py;
+      const x = -field.size / 2 + (px + 0.5) * field.cell;
+      const z = -field.size / 2 + (j + 0.5) * field.cell;
 
-    for (let py = 0; py < size; py++) {
-      for (let px = 0; px < size; px++) {
-        const worldX = (px / size - 0.5) * this.world.world.size;
-        const worldZ = (py / size - 0.5) * this.world.world.size;
+      // Coherent noise makes the mud/grass edges irregular, not banded
+      const noise = (this.fbm(x * 0.15, z * 0.15, 2, 456) - 0.5) * 2.5;
+      const dist = clamp(field.atCell(px, j) + noise, 0, 30);
 
-        const onWater = waterSystem.isWater(worldX, worldZ);
-
-        // Find minimum distance to water by sampling in directions
-        let minDist = 30;
-        if (onWater) {
-          minDist = 0;
-        } else {
-          for (const d of checkDists) {
-            let found = false;
-            for (let dir = 0; dir < numDirs; dir++) {
-              const angle = (dir / numDirs) * Math.PI * 2;
-              if (
-                waterSystem.isWater(
-                  worldX + Math.cos(angle) * d,
-                  worldZ + Math.sin(angle) * d
-                )
-              ) {
-                found = true;
-                break;
-              }
-            }
-            if (found) {
-              minDist = d;
-              break;
-            }
-          }
-        }
-
-        // Add noise for natural-looking irregular transitions
-        const noise = (rng() - 0.5) * 6;
-        const effectiveDist = clamp(minDist + noise, 0, 30);
-
-        // Compute blend weights
-        let r: number, g: number, b: number;
-        if (effectiveDist <= 3) {
-          // Sand zone (very close to or on water)
-          r = 0;
-          g = 0.15;
-          b = 0.85;
-        } else if (effectiveDist <= 8) {
-          // Sand-to-dirt transition
-          const t = (effectiveDist - 3) / 5;
-          r = 0;
-          g = t * 0.85;
-          b = (1 - t) * 0.85;
-        } else if (effectiveDist <= 18) {
-          // Dirt-to-grass transition
-          const t = (effectiveDist - 8) / 10;
-          r = t * 0.9;
-          g = (1 - t) * 0.8;
-          b = 0;
-        } else {
-          // Full grass
-          r = 0.9;
-          g = 0.1;
-          b = 0;
-        }
-
-        ctx.fillStyle = `rgb(${Math.floor(r * 255)},${Math.floor(g * 255)},${Math.floor(b * 255)})`;
-        ctx.fillRect(px, py, 1, 1);
+      // Delta banks: a thin strip of wet sand and mud, then grass almost to the water
+      if (dist <= 1) {
+        out[0] = 0; out[1] = 0.25; out[2] = 0.75;
+      } else if (dist <= 2.5) {
+        // Sand-to-mud transition
+        const t = (dist - 1) / 1.5;
+        out[0] = 0; out[1] = 0.25 + t * 0.6; out[2] = (1 - t) * 0.75;
+      } else if (dist <= 6) {
+        // Mud-to-grass transition
+        const t = (dist - 2.5) / 3.5;
+        out[0] = t * 0.9; out[1] = (1 - t) * 0.85 + t * 0.1; out[2] = 0;
+      } else {
+        out[0] = 0.9; out[1] = 0.1; out[2] = 0;
       }
-    }
+    });
 
-    tex.update(true);
     return tex;
   }
 
@@ -285,24 +216,14 @@ export class Environment {
   private createProceduralGrass(): DynamicTexture {
     const size = 128;
     const tex = new DynamicTexture("grassProc", size, this.scene, true);
-    const ctx = tex.getContext();
-
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        // Multi-octave noise for natural grass variation
-        const n1 = this.fbm(x * 0.08, y * 0.08, 4, 777);
-        const n2 = this.fbm(x * 0.15, y * 0.15, 2, 778);
-        const n = (n1 - 0.5) * 0.3 + (n2 - 0.5) * 0.1;
-
-        const cr = Math.floor(clamp((0.28 + n * 0.3) * 255, 0, 255));
-        const cg = Math.floor(clamp((0.58 + n * 0.6) * 255, 0, 255));
-        const cb = Math.floor(clamp((0.18 + n * 0.15) * 255, 0, 255));
-        ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
-
-    tex.update(true);
+    paintPixels(tex, size, (x, y, out) => {
+      const n1 = this.fbm(x * 0.08, y * 0.08, 4, 777);
+      const n2 = this.fbm(x * 0.15, y * 0.15, 2, 778);
+      const n = (n1 - 0.5) * 0.3 + (n2 - 0.5) * 0.1;
+      out[0] = 0.28 + n * 0.3;
+      out[1] = 0.58 + n * 0.6;
+      out[2] = 0.18 + n * 0.15;
+    });
     return tex;
   }
 
@@ -310,23 +231,14 @@ export class Environment {
   private createProceduralDirt(): DynamicTexture {
     const size = 128;
     const tex = new DynamicTexture("dirtProc", size, this.scene, true);
-    const ctx = tex.getContext();
-
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const n1 = this.fbm(x * 0.1, y * 0.1, 4, 888);
-        const n2 = this.fbm(x * 0.2, y * 0.2, 2, 889);
-        const n = (n1 - 0.5) * 0.25 + (n2 - 0.5) * 0.08;
-
-        const cr = Math.floor(clamp((0.50 + n * 0.8) * 255, 0, 255));
-        const cg = Math.floor(clamp((0.36 + n * 0.6) * 255, 0, 255));
-        const cb = Math.floor(clamp((0.20 + n * 0.4) * 255, 0, 255));
-        ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
-
-    tex.update(true);
+    paintPixels(tex, size, (x, y, out) => {
+      const n1 = this.fbm(x * 0.1, y * 0.1, 4, 888);
+      const n2 = this.fbm(x * 0.2, y * 0.2, 2, 889);
+      const n = (n1 - 0.5) * 0.25 + (n2 - 0.5) * 0.08;
+      out[0] = 0.5 + n * 0.8;
+      out[1] = 0.36 + n * 0.6;
+      out[2] = 0.2 + n * 0.4;
+    });
     return tex;
   }
 
@@ -334,23 +246,14 @@ export class Environment {
   private createProceduralSand(): DynamicTexture {
     const size = 128;
     const tex = new DynamicTexture("sandProc", size, this.scene, true);
-    const ctx = tex.getContext();
-
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const n1 = this.fbm(x * 0.12, y * 0.12, 3, 999);
-        const n2 = this.fbm(x * 0.3, y * 0.3, 2, 1000);
-        const n = (n1 - 0.5) * 0.15 + (n2 - 0.5) * 0.05;
-
-        const cr = Math.floor(clamp((0.80 + n * 0.6) * 255, 0, 255));
-        const cg = Math.floor(clamp((0.70 + n * 0.55) * 255, 0, 255));
-        const cb = Math.floor(clamp((0.40 + n * 0.4) * 255, 0, 255));
-        ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
-
-    tex.update(true);
+    paintPixels(tex, size, (x, y, out) => {
+      const n1 = this.fbm(x * 0.12, y * 0.12, 3, 999);
+      const n2 = this.fbm(x * 0.3, y * 0.3, 2, 1000);
+      const n = (n1 - 0.5) * 0.15 + (n2 - 0.5) * 0.05;
+      out[0] = 0.8 + n * 0.6;
+      out[1] = 0.7 + n * 0.55;
+      out[2] = 0.4 + n * 0.4;
+    });
     return tex;
   }
 
@@ -513,13 +416,9 @@ export class Environment {
       const x = (rng() - 0.5) * range;
       const z = (rng() - 0.5) * range;
 
-      if (waterSystem.isWater(x, z)) continue;
+      if (waterSystem.isWater(x, z) || this.nearDock(x, z)) continue;
 
-      const nearWater =
-        waterSystem.isWater(x + d, z) ||
-        waterSystem.isWater(x - d, z) ||
-        waterSystem.isWater(x, z + d) ||
-        waterSystem.isWater(x, z - d);
+      const nearWater = this.waterDistance.at(x, z) <= d;
 
       if (!nearWater && rng() >= rule.inlandChance) continue;
 
@@ -527,6 +426,8 @@ export class Environment {
       switch (rule.prefab) {
         case "tree":
           this.addTree(x, z, seed);
+          // Delta banks are a wall of vegetation: grow a small grove at the water
+          if (nearWater) this.addGrove(x, z, seed, waterSystem);
           break;
         case "house":
           this.addHouse(x, z, seed, nearWater);
@@ -535,23 +436,117 @@ export class Environment {
     }
   }
 
-  /** Bus-boat stop: platform on posts, sign and a small shelter. */
-  private addDock(dock: Dock): void {
-    const p = this.props;
-    const parent = propTransform(dock.x, WATER_LEVEL, dock.z, degToRad(dock.rotationDeg));
+  /** 1-3 extra trees around a bank tree, on dry ground only. */
+  private addGrove(x: number, z: number, seed: number, waterSystem: WaterSystem): void {
+    const rng = seededRandom(seed * 31 + 7);
+    const extra = 1 + Math.floor(rng() * 3);
+    for (let k = 0; k < extra; k++) {
+      const angle = rng() * Math.PI * 2;
+      const r = 1.5 + rng() * 2.5;
+      const tx = x + Math.cos(angle) * r;
+      const tz = z + Math.sin(angle) * r;
+      if (waterSystem.isWater(tx, tz) || this.nearDock(tx, tz)) continue;
+      this.addTree(tx, tz, seed * 97 + k);
+    }
+  }
 
-    p.dockPlatforms.add(parent, [3, 0.3, 5], [0, 0.3, 0], COLOR.dock);
-    for (let i = -1; i <= 1; i += 2) {
-      for (let j = -1; j <= 1; j += 2) {
-        p.dockPosts.add(parent, [0.25, 1.5, 0.25], [i * 1.2, -0.2, j * 2], COLOR.woodDark);
+  /** Keeps vegetation and houses off the bus-boat stops. */
+  private nearDock(x: number, z: number): boolean {
+    return this.dockSites.some((site) => Math.abs(site.x - x) < 5 && Math.abs(site.z - z) < 5);
+  }
+
+  /**
+   * Bus-boat stop modeled on real Delta muelles: plank deck raised on piles
+   * with cross bracing, white railing, a gable-roofed quincho and stairs down
+   * to the water. Local +x is the water side, where the boat comes alongside.
+   */
+  private addDock(dock: Dock, waterSystem: WaterSystem): void {
+    const p = this.props;
+    const rng = seededRandom(hashString(dock.id));
+    const site = placeOnBank(dock, waterSystem, DOCK_HALF_X);
+    this.berths.set(dock.id, site.berth);
+    this.dockSites.push({ x: site.x, z: site.z });
+    const parent = propTransform(site.x, WATER_LEVEL, site.z, site.rotation);
+    const deckTop = 1.3;
+    const halfX = DOCK_HALF_X; // deck 4 x 3
+    const halfZ = 1.5;
+
+    // Piles from the river bottom up to the deck, plus diagonal bracing
+    for (const px of [-halfX + 0.15, 0, halfX - 0.15]) {
+      for (const pz of [-halfZ + 0.15, halfZ - 0.15]) {
+        p.dockPosts.add(parent, [0.22, 2.6, 0.22], [px, deckTop - 1.35, pz], COLOR.pile);
       }
     }
-    p.dockPosts.add(parent, [0.15, 2.0, 0.15], [1.3, 1.2, 0], COLOR.signPost);
-    p.signs.add(parent, [1.5, 0.6, 0.1], [1.3, 2.1, 0], COLOR.sign);
-    p.dockPlatforms.add(parent, [2.5, 0.1, 2.5], [-0.5, 2.2, -1], COLOR.roofBlue);
-    for (let i = -1; i <= 1; i += 2) {
-      p.dockPosts.add(parent, [0.1, 1.8, 0.1], [-0.5 + i * 1, 1.3, -2], COLOR.shelterPost);
+    for (const pz of [-halfZ + 0.15, halfZ - 0.15]) {
+      for (const side of [-1, 1]) {
+        p.dockPosts.add(parent, [2.2, 0.1, 0.08], [side * 0.92, 0.35, pz], COLOR.pile, [0, 0, side * 0.55]);
+      }
     }
+
+    // Deck: separate planks with slightly different tones read as real wood
+    for (let k = 0; k < 7; k++) {
+      const shade = 0.9 + rng() * 0.2;
+      const plank = new Color3(COLOR.deck.r * shade, COLOR.deck.g * shade, COLOR.deck.b * shade);
+      p.dockPlatforms.add(parent, [halfX * 2, 0.12, 0.4], [0, deckTop - 0.06, -halfZ + 0.22 + k * 0.43], plank);
+    }
+    p.dockPlatforms.add(parent, [halfX * 2, 0.18, 0.12], [0, deckTop - 0.2, -halfZ + 0.06], COLOR.pile);
+    p.dockPlatforms.add(parent, [halfX * 2, 0.18, 0.12], [0, deckTop - 0.2, halfZ - 0.06], COLOR.pile);
+
+    // Railing on the land side and both ends; the water side stays open for boarding
+    const rail = rng() < 0.7 ? COLOR.white : COLOR.railBlue;
+    const railY = deckTop + 0.9;
+    for (const pz of [-halfZ + 0.05, halfZ - 0.05]) {
+      for (const px of [-halfX + 0.05, -halfX / 2, 0, halfX / 2]) {
+        p.dockPosts.add(parent, [0.09, 0.9, 0.09], [px, deckTop + 0.45, pz], rail);
+      }
+      p.dockPosts.add(parent, [halfX * 1.5, 0.08, 0.08], [-halfX * 0.25, railY, pz], rail);
+      p.dockPosts.add(parent, [halfX * 1.5, 0.06, 0.06], [-halfX * 0.25, deckTop + 0.45, pz], rail);
+    }
+    for (const pz of [-halfZ / 2, 0, halfZ / 2]) {
+      p.dockPosts.add(parent, [0.09, 0.9, 0.09], [-halfX + 0.05, deckTop + 0.45, pz], rail);
+    }
+    p.dockPosts.add(parent, [0.08, 0.08, halfZ * 2], [-halfX + 0.05, railY, 0], rail);
+
+    // Quincho: four posts and a gable roof of corrugated sheet metal
+    const roof = ROOF_SHEET_COLORS[Math.floor(rng() * ROOF_SHEET_COLORS.length)];
+    const postTop = deckTop + 2.0;
+    for (const px of [-1.3, 1.3]) {
+      for (const pz of [-1.1, 1.1]) {
+        p.dockPosts.add(parent, [0.12, 2.0, 0.12], [px, deckTop + 1.0, pz], rail);
+      }
+    }
+    const slope = 0.45;
+    const slab = 1.45;
+    for (const side of [-1, 1]) {
+      p.roofs.add(
+        parent,
+        [3.3, 0.07, slab],
+        [0, postTop + (Math.sin(slope) * slab) / 2, side * (Math.cos(slope) * slab) / 2],
+        roof,
+        [side * slope, 0, 0]
+      );
+    }
+    p.roofs.add(parent, [3.4, 0.1, 0.12], [0, postTop + Math.sin(slope) * slab, 0], roof);
+
+    // Stop sign hanging under the eave on the water side
+    p.signs.add(parent, [0.08, 0.35, 1.3], [1.32, postTop - 0.25, 0], COLOR.sign);
+
+    // Stairs from the deck down into the water at one end
+    const stairZ = halfZ + 0.45;
+    for (let k = 0; k < 5; k++) {
+      p.dockPlatforms.add(parent, [0.8, 0.07, 0.28], [halfX - 0.55, deckTop - 0.25 - k * 0.3, stairZ + k * 0.22], COLOR.deck);
+    }
+    for (const sx of [halfX - 0.98, halfX - 0.12]) {
+      p.dockPosts.add(parent, [0.07, 0.12, 1.8], [sx, deckTop - 0.85, stairZ + 0.45], COLOR.pile, [0.94, 0, 0]);
+    }
+  }
+
+  /**
+   * Where the boat must stop for each dock: on the water just off the
+   * muelle's open side (docks are moved from the channel to the bank).
+   */
+  public getBerths(): ReadonlyMap<string, { x: number; z: number }> {
+    return this.berths;
   }
 
   /** Static meshes worth showing in the water reflection/refraction passes. */
@@ -563,13 +558,130 @@ export class Environment {
 const COLOR = {
   wood: hexToColor3(COLORS.wood),
   woodDark: hexToColor3(COLORS.woodDark),
-  dock: hexToColor3(COLORS.dock),
-  roofBlue: hexToColor3(COLORS.roofBlue),
-  signPost: hexToColor3("#666666"),
-  shelterPost: hexToColor3("#888888"),
-  sign: new Color3(0.9, 0.85, 0.7),
+  sign: new Color3(0.12, 0.12, 0.14),
+  pile: new Color3(0.33, 0.25, 0.17),
+  deck: new Color3(0.55, 0.4, 0.26),
+  white: new Color3(0.9, 0.9, 0.86),
+  railBlue: new Color3(0.35, 0.55, 0.75),
 };
-const WALL_COLORS = ["#d4c5a0", "#c9b896", "#b8a882", "#e0d5b8"].map(hexToColor3);
+/** Corrugated roofs of Delta quinchos: galvanized grey, green and oxide red. */
+const ROOF_SHEET_COLORS = [new Color3(0.62, 0.64, 0.66), new Color3(0.27, 0.4, 0.3), new Color3(0.55, 0.22, 0.18)];
+
+const DOCK_HALF_X = 2.0;
+/** How far from the World Doc point a dock may move to reach the bank. */
+const MAX_BANK_SEARCH = 40;
+
+interface DockSite {
+  x: number;
+  z: number;
+  /** Y rotation that makes local +x (the open, boarding side) face the water. */
+  rotation: number;
+  berth: { x: number; z: number };
+}
+
+/**
+ * Puts a dock at the water's edge. Junction stops sit mid-channel, so they
+ * move sideways (perpendicular to the river) to the nearest bank; stops on
+ * land move to the nearest water. The deck hangs over the water with its
+ * land edge on the bank, and the berth is just off its open side.
+ */
+function placeOnBank(dock: Dock, waterSystem: WaterSystem, halfX: number): DockSite {
+  const wet = (x: number, z: number) => waterSystem.isWater(x, z);
+  let dir: [number, number] | null = null; // unit vector from the bank towards the water
+  let edge: [number, number] = [dock.x, dock.z]; // last water point before the bank
+
+  if (wet(dock.x, dock.z)) {
+    // Walk both ways across the river; the closer bank wins
+    const a = degToRad(dock.rotationDeg);
+    const across: [number, number] = [Math.cos(a), -Math.sin(a)];
+    let best = Infinity;
+    for (const s of [1, -1]) {
+      for (let t = 0.5; t <= MAX_BANK_SEARCH; t += 0.5) {
+        const x = dock.x + s * across[0] * t;
+        const z = dock.z + s * across[1] * t;
+        if (!wet(x, z)) {
+          if (t < best) {
+            best = t;
+            dir = [-s * across[0], -s * across[1]];
+            edge = [x - s * across[0] * 0.5, z - s * across[1] * 0.5];
+          }
+          break;
+        }
+      }
+    }
+  } else {
+    // On land: find the nearest water around it
+    let best = Infinity;
+    for (let k = 0; k < 24; k++) {
+      const ang = (k / 24) * Math.PI * 2;
+      const d: [number, number] = [Math.cos(ang), Math.sin(ang)];
+      for (let t = 0.5; t <= MAX_BANK_SEARCH && t < best; t += 0.5) {
+        if (wet(dock.x + d[0] * t, dock.z + d[1] * t)) {
+          best = t;
+          dir = d;
+          edge = [dock.x + d[0] * t, dock.z + d[1] * t];
+          break;
+        }
+      }
+    }
+  }
+
+  if (!dir) {
+    // Open water everywhere (or nowhere): keep the authored placement
+    const rotation = degToRad(dock.rotationDeg);
+    return { x: dock.x, z: dock.z, rotation, berth: { x: dock.x + Math.cos(rotation) * (halfX + 1.5), z: dock.z - Math.sin(rotation) * (halfX + 1.5) } };
+  }
+
+  // Deck center: over the water, its land edge 0.5 units onto the bank
+  const inset = halfX - 0.5;
+  const x = edge[0] + dir[0] * inset;
+  const z = edge[1] + dir[1] * inset;
+  // RotationY(r) maps local +x to (cos r, -sin r): solve for +x = dir
+  const rotation = Math.atan2(-dir[1], dir[0]);
+  const reach = halfX + 1.5;
+  return { x, z, rotation, berth: { x: x + dir[0] * reach, z: z + dir[1] * reach } };
+}
+
+/** Stable small hash so each dock gets the same look on every load. */
+function hashString(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return (h >>> 0) % 2147483646 + 1;
+}
+/**
+ * Fills a square DynamicTexture in one upload. `shade` writes RGB in 0..1
+ * into `out` for pixel (x, y); writing an ImageData is orders of magnitude
+ * faster than one fillRect per pixel.
+ */
+function paintPixels(
+  tex: DynamicTexture,
+  size: number,
+  shade: (x: number, y: number, out: [number, number, number]) => void
+): void {
+  const ctx = tex.getContext();
+  const img = ctx.getImageData(0, 0, size, size);
+  const data = img.data;
+  const rgb: [number, number, number] = [0, 0, 0];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      shade(x, y, rgb);
+      const k = (y * size + x) * 4;
+      data[k] = clamp(rgb[0], 0, 1) * 255;
+      data[k + 1] = clamp(rgb[1], 0, 1) * 255;
+      data[k + 2] = clamp(rgb[2], 0, 1) * 255;
+      data[k + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  tex.update(true);
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+const WALL_COLORS =["#d4c5a0", "#c9b896", "#b8a882", "#e0d5b8"].map(hexToColor3);
 const ROOF_COLORS = [COLORS.roof, COLORS.roofBlue, "#8b4513", "#2a6a3a"].map(hexToColor3);
 
 /** One draw call per kind of prop part, shared by every instance in the world. */
@@ -585,7 +697,7 @@ function createPropBatches(scene: Scene) {
     doors: new InstancedBoxBatch("doors", scene),
     dockPlatforms: new InstancedBoxBatch("dockPlatforms", scene),
     dockPosts: new InstancedBoxBatch("dockPosts", scene),
-    signs: new InstancedBoxBatch("signs", scene, { emissive: new Color3(0.15, 0.12, 0.08) }),
+    signs: new InstancedBoxBatch("signs", scene, { emissive: new Color3(0.05, 0.05, 0.05) }),
   };
 }
 type PropBatches = ReturnType<typeof createPropBatches>;

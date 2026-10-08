@@ -118,12 +118,21 @@ export class GameEngine {
     this.updateLoadingBar(70, "Preparando la lancha colectiva...");
 
     // Create boat at the world's spawn dock
-    const startDock = findDock(this.world, this.world.spawn.dock);
+    // Start alongside the spawn dock's muelle (docks are moved to the bank);
+    // the authored offset is the fallback when no berth was computed
+    // `?spawn=<dock-id>`: start at another stop (handy to review docks)
+    const spawnParam = new URLSearchParams(window.location.search).get("spawn");
+    const startDock = findDock(
+      this.world,
+      spawnParam && this.world.docks.some((d) => d.id === spawnParam) ? spawnParam : this.world.spawn.dock
+    );
     const [offsetX, offsetZ] = this.world.spawn.offset;
+    const berth = this.environment.getBerths().get(startDock.id);
+    const start = berth ?? { x: startDock.x + offsetX, z: startDock.z + offsetZ };
     this.boat = new LanchaColectiva(
       this.scene,
-      startDock.x + offsetX,
-      startDock.z + offsetZ,
+      start.x,
+      start.z,
       this.world.rules.boatCapacity
     );
 
@@ -195,6 +204,11 @@ export class GameEngine {
     if (loadText) loadText.textContent = text;
   }
 
+  /** Where the boat has to be to serve a dock: alongside the muelle, on the water. */
+  private stopPoint(dock: Dock): { x: number; z: number } {
+    return this.environment.getBerths().get(dock.id) ?? dock;
+  }
+
   private randomizeDockPassengers(): void {
     for (const dock of this.world.docks) {
       this.dockPassengers.set(
@@ -217,13 +231,25 @@ export class GameEngine {
     this.pickNextTarget();
   }
 
+  /**
+   * Next stop: one of the few closest docks to the boat (not the one it is at
+   * now, nor the current target), so every trip fits the clock even on the
+   * 22 km real map instead of sending the player across the whole Delta.
+   */
   private pickNextTarget(): void {
-    // Pick a random dock that has passengers or is different from current
-    const available = this.world.docks.filter((d, i) => {
-      return i !== this.currentTargetDock;
-    });
-    const idx = Math.floor(Math.random() * available.length);
-    this.currentTargetDock = this.world.docks.indexOf(available[idx]);
+    const { x, z } = this.boat.position;
+    const candidates = this.world.docks
+      .map((dock, index) => {
+        const stop = this.stopPoint(dock);
+        return { index, dist: distance2D(x, z, stop.x, stop.z) };
+      })
+      .filter(({ index, dist }) =>
+        index !== this.currentTargetDock && dist > this.world.rules.pickupRadius * 2
+      )
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, NEXT_STOP_CHOICES);
+    if (candidates.length === 0) return;
+    this.currentTargetDock = candidates[Math.floor(Math.random() * candidates.length)].index;
   }
 
   private gameLoop(): void {
@@ -285,11 +311,12 @@ export class GameEngine {
 
       // Update next stop indicator
       const targetDock = this.world.docks[this.currentTargetDock];
+      const targetStop = this.stopPoint(targetDock);
       const dist = distance2D(
         this.boat.position.x,
         this.boat.position.z,
-        targetDock.x,
-        targetDock.z
+        targetStop.x,
+        targetStop.z
       );
       this.ui.updateNextStop(targetDock.name, dist);
     } else {
@@ -304,11 +331,12 @@ export class GameEngine {
     this.nearDock = null;
 
     for (const dock of this.world.docks) {
+      const stop = this.stopPoint(dock);
       const dist = distance2D(
         this.boat.position.x,
         this.boat.position.z,
-        dock.x,
-        dock.z
+        stop.x,
+        stop.z
       );
 
       if (dist < this.world.rules.pickupRadius) {
@@ -385,9 +413,11 @@ export class GameEngine {
     // `?view=aerial`: high bird's-eye camera to review the map (e.g. after a map update)
     const dist = this.aerialView ? 300 : CAMERA_DISTANCE * 0.6;
     const height = this.aerialView ? 450 : CAMERA_HEIGHT + this.boat.speed * 3 + pitchOffset;
-    // Snapping (lerp factor 1) jumps straight to the boat, e.g. at spawn
-    const follow = snap ? 1 : CAMERA_LERP;
-    const look = snap ? 1 : CAMERA_LERP * 2;
+    // Snapping (lerp factor 1) jumps straight to the boat, e.g. at spawn.
+    // CAMERA_LERP is per 60 fps frame; convert so smoothing feels the same at any FPS.
+    const frames = Math.min(dt, 0.1) * 60;
+    const follow = snap ? 1 : 1 - Math.pow(1 - CAMERA_LERP, frames);
+    const look = snap ? 1 : 1 - Math.pow(1 - CAMERA_LERP * 2, frames);
 
     const targetX = this.boat.position.x + Math.sin(cameraAngle) * dist;
     const targetZ = this.boat.position.z + Math.cos(cameraAngle) * dist;
@@ -471,6 +501,9 @@ export class GameEngine {
     this.ui.showEndScreen(this.score, this.totalDelivered);
   }
 }
+
+/** How many of the nearest docks the next stop is drawn from. */
+const NEXT_STOP_CHOICES = 3;
 
 function ringBounds(ring: [number, number][]): [number, number, number, number] {
   let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;

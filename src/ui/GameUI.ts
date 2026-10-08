@@ -263,6 +263,11 @@ export class GameUI {
           flex-direction: column;
           align-items: center;
           justify-content: center;
+          /* If it still doesn't fit, scroll instead of pushing JUGAR off-screen */
+          justify-content: safe center;
+          overflow-y: auto;
+          padding: 12px 16px;
+          box-sizing: border-box;
           z-index: 200;
           color: #e8d5a3;
           font-family: 'Segoe UI', Tahoma, sans-serif;
@@ -303,8 +308,22 @@ export class GameUI {
           transform: scale(1.05);
           background: linear-gradient(135deg, #5aaa8a, #3d8a6f);
         }
+        /* Last so it overrides the rules above. Landscape phones (~360-430 px tall): compact layout so JUGAR is visible */
+        @media (max-height: 520px) {
+          #startScreen .boat-icon { display: none; }
+          #startScreen h1 { font-size: 1.6em; margin: 0 0 2px; }
+          #startScreen h2 { font-size: 0.95em; margin: 0 0 10px; }
+          #startScreen .instructions {
+            max-width: 620px;
+            padding: 8px 16px;
+            margin-bottom: 12px;
+            line-height: 1.45;
+            font-size: 0.8em;
+          }
+          #startScreen .play-btn { padding: 10px 40px; font-size: 1.15em; }
+        }
       </style>
-      <div style="font-size:4em;margin-bottom:15px;">🚢</div>
+      <div class="boat-icon" style="font-size:4em;margin-bottom:15px;">🚢</div>
       <h1>Delta de Tigre</h1>
       <h2>Lancha Colectiva Simulator</h2>
       <div class="instructions">
@@ -408,6 +427,8 @@ export class GameUI {
           flex-direction: column;
           align-items: center;
           justify-content: center;
+          justify-content: safe center;
+          overflow-y: auto;
           z-index: 200;
           color: #e8d5a3;
         }
@@ -428,6 +449,11 @@ export class GameUI {
           cursor: pointer;
           font-weight: bold;
           margin-top: 15px;
+        }
+        @media (max-height: 520px) {
+          #endScreen h1 { font-size: 1.5em; margin: 0; }
+          #endScreen .stats { margin: 8px 0; line-height: 1.6; }
+          #endScreen .replay-btn { margin-top: 4px; }
         }
       </style>
       <div id="endScreen">

@@ -43,17 +43,20 @@ export class InstancedBoxBatch {
 
   /**
    * Adds a box of the given size, centered at `localPos` inside a parent
-   * transform (`parent` = rotation + translation of the prop it belongs to).
+   * transform (`parent` = rotation + translation of the prop it belongs to),
+   * optionally tilted by `rotation` (Euler x, y, z in radians, e.g. roof slopes).
    */
   add(
     parent: Matrix,
     size: [number, number, number],
     localPos: [number, number, number],
-    color: Color3
+    color: Color3,
+    rotation?: [number, number, number]
   ): void {
     this.tmpScale.set(size[0], size[1], size[2]);
     this.tmpPos.set(localPos[0], localPos[1], localPos[2]);
-    const local = Matrix.Compose(this.tmpScale, Quaternion.Identity(), this.tmpPos);
+    const tilt = rotation ? Quaternion.FromEulerAngles(rotation[0], rotation[1], rotation[2]) : Quaternion.Identity();
+    const local = Matrix.Compose(this.tmpScale, tilt, this.tmpPos);
     local.multiply(parent).toArray(this.matrices, this.matrices.length);
     this.colors.push(color.r, color.g, color.b, 1);
   }

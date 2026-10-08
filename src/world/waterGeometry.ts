@@ -110,3 +110,32 @@ export function triangulateAreas(areas: WaterArea[]): Triangulation {
   }
   return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices) };
 }
+
+/**
+ * Pieces of a river center line that the grid's water does NOT cover, as
+ * polylines resampled every `step` units. Each piece reaches one sample into
+ * the covered water on both ends so the drawn strip joins the area seamlessly.
+ */
+export function uncoveredRuns(river: River, grid: WaterGrid, step = 4): Vec2[][] {
+  const samples: Vec2[] = [];
+  for (let i = 1; i < river.points.length; i++) {
+    const [ax, az] = river.points[i - 1];
+    const [bx, bz] = river.points[i];
+    const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / step));
+    for (let s = 0; s < n; s++) samples.push([ax + ((bx - ax) * s) / n, az + ((bz - az) * s) / n]);
+  }
+  samples.push(river.points[river.points.length - 1]);
+
+  const runs: Vec2[][] = [];
+  let start = -1;
+  for (let k = 0; k <= samples.length; k++) {
+    const dry = k < samples.length && !isSet(grid, samples[k][0], samples[k][1]);
+    if (dry && start === -1) start = k;
+    if (!dry && start !== -1) {
+      const run = samples.slice(Math.max(0, start - 1), Math.min(samples.length, k + 1));
+      if (run.length >= 2) runs.push(run);
+      start = -1;
+    }
+  }
+  return runs;
+}
