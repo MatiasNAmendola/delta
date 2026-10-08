@@ -26,6 +26,7 @@ import { compassName, fetchLiveConditions, isSudestada, levelOffset, SAN_FERNAND
 import { handlingInput, handlingKeys, handlingMode, touchLabels } from "./controls/handlingInput";
 import { controlScheme } from "./controls/MobileControls";
 import { NO_WAKE_M, realWidthM, ROWING_ZONE_WAKE_M } from "./game/waterwayRules";
+import { RiverLocator } from "./game/riverLocator";
 import { froude, wakeAmplitude } from "./world/wakePhysics";
 import { createMode, type GameMode } from "./game/modes";
 import { probeChannel, RuleBook, ZONE_SPEED, type RuleEvent } from "./game/navigationRules";
@@ -697,27 +698,14 @@ ${this.spec.mission}`, 2800);
 
   private updateLocationName(): void {
     // Inside a named water area (real OSM shape)? That name wins
-    const area = this.namedAreaAt(this.boat.position.x, this.boat.position.z);
-    let nearestRiver = area ?? this.zoneName;
-    let minDist = area === null ? Infinity : -1;
-    let onRiver: string | null = area;
-
-    for (const river of this.world.rivers) {
-      for (const point of river.points) {
-        const dist = distance2D(
-          this.boat.position.x,
-          this.boat.position.z,
-          point[0],
-          point[1]
-        );
-        if (dist < minDist) {
-          minDist = dist;
-          nearestRiver = river.name;
-          onRiver = dist < river.width ? river.name : null;
-        }
-      }
-    }
-
+    const { x, z } = this.boat.position;
+    // Inside a named water area (real OSM shape)? That name wins
+    const area = this.namedAreaAt(x, z);
+    // Else the channel the boat is in, by distance to each stretch (riverLocator.ts)
+    this.riverLocator ??= new RiverLocator(this.world.rivers);
+    const hit = area === null ? this.riverLocator.at(x, z) : null;
+    const nearestRiver = area ?? hit?.name ?? this.zoneName;
+    const onRiver: string | null = area ?? (hit?.inside ? hit.name : null);
     this.currentVia = onRiver ? { name: onRiver, width: realWidthM(onRiver) } : null;
     this.ui.updateLocation(nearestRiver, this.mode?.hint() ?? null);
   }
@@ -734,6 +722,7 @@ ${this.spec.mission}`, 2800);
     return 1;
   }
 
+  private riverLocator: RiverLocator | null = null;
   /** The river or arroyo the boat is on (for its rules). */
   private currentVia: { name: string; width: number } | null = null;
   private readonly aerialView = new URLSearchParams(window.location.search).get("view") === "aerial";

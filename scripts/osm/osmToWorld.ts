@@ -84,7 +84,9 @@ export function setNameFixes(fixes: NameFixes): void {
 export function fixName(name: string | undefined): string | undefined {
   if (!name) return name;
   if (name in nameFixes.drop) return undefined;
-  return nameFixes.rename[name]?.to ?? name;
+  const fixed = nameFixes.rename[name]?.to ?? name;
+  // Abbreviations used on some OSM names: "Ayo." / "Ayo" = Arroyo, "Cnl." = Canal
+  return fixed.replace(/^Ayo\.?\s+/i, "Arroyo ").replace(/^Cnl\.?\s+/i, "Canal ");
 }
 
 /** Typical widths (meters) when OSM has no `width` tag. */
@@ -546,7 +548,7 @@ export function extractWaterAreas(
       const outer = prepare(poly[0]);
       if (!outer) continue;
       const holes = poly.slice(1).map(prepare).filter((h): h is Vec2[] => h !== null);
-      const name = el.tags.name?.trim();
+      const name = fixName(el.tags.name?.trim());
       const id = uniqueId(name ? `agua-${slugify(name)}` : `agua-${el.type}-${el.id}`, ids);
       areas.push({ id, ...(name ? { name } : {}), outer, holes });
     }
