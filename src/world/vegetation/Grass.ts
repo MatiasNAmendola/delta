@@ -10,9 +10,9 @@ import "@babylonjs/core/Shaders/ShadersInclude/instancesVertex";
 import { mulberry32 } from "./treeGenerator";
 
 /** Grass is drawn as real blades within this radius of the camera. */
-const RADIUS = 30;
+const RADIUS = 11;
 /** Side of one grass patch (one thin instance). */
-const CELL = 2.5;
+const CELL = 0.9;
 const BLADES = 64;
 
 const VERTEX = `
@@ -27,26 +27,27 @@ uniform float uTime;
 uniform vec3 uCameraPos;
 uniform float uRadius;
 uniform float uWorldSize;
-uniform sampler2D landMask;
+uniform sampler2D shoreDistance;
+uniform float uShoreRange;
 varying vec2 vUV;
 varying float vDist;
 void main(void) {
   #include<instancesVertex>
   vec4 wp = finalWorld * vec4(position, 1.0);
-  // Blades rooted on the water are collapsed to nothing: grass stops at the bank
+  // Blades rooted on (or right at) the water are collapsed: grass stops at the bank
   vec4 root = finalWorld * vec4(uv2.x, 0.0, uv2.y, 1.0);
-  float land = texture2D(landMask, root.xz / uWorldSize + 0.5).r;
-  // High threshold = ~0.6 units of margin from the edge (the mask is soft across a texel)
-  if (land < 0.97) wp = root;
+  float toShore = (texture2D(shoreDistance, root.xz / uWorldSize + 0.5).r - 0.5) * 2.0 * uShoreRange;
+  // 0.5 units (~4 m): bilinear distance errs up to half a texel at bank corners
+  if (toShore < 0.5) wp = root;
   // Blades shrink into the ground towards the edge of the grass radius
   float base = finalWorld[3].y;
   float fade = 1.0 - smoothstep(uRadius * 0.65, uRadius, distance(wp.xz, uCameraPos.xz));
   wp.y = base + (wp.y - base) * fade;
   // Wind: slow gusts rolling across the field plus a quick flutter, tips move most
   float w = uv.y * uv.y;
-  float gust = sin(uTime * 1.6 + wp.x * 0.3 + wp.z * 0.18) * 0.5 + 0.5;
-  wp.x += (gust * 0.16 + sin(uTime * 4.0 + wp.z * 1.7) * 0.03) * w;
-  wp.z += (gust * 0.08 + cos(uTime * 3.3 + wp.x * 1.3) * 0.03) * w;
+  float gust = sin(uTime * 1.6 + wp.x * 1.0 + wp.z * 0.6) * 0.5 + 0.5;
+  wp.x += (gust * 0.05 + sin(uTime * 4.0 + wp.z * 5.0) * 0.01) * w;
+  wp.z += (gust * 0.025 + cos(uTime * 3.3 + wp.x * 4.0) * 0.01) * w;
   gl_Position = viewProjection * wp;
   vUV = uv;
   vDist = distance(wp.xyz, uCameraPos);
@@ -85,7 +86,9 @@ export class Grass {
     /** Where grass may grow (dry land, not under docks or houses). */
     private plantable: (x: number, z: number) => boolean,
     private groundY: number,
-    landMask: BaseTexture,
+    /** Signed distance to the shore (see WaterSystem.createShoreDistanceTexture). */
+    shoreDistance: BaseTexture,
+    shoreRange: number,
     worldSize: number
   ) {
     this.mesh = new Mesh("pasto", scene);
@@ -96,11 +99,12 @@ export class Grass {
       { vertexSource: VERTEX, fragmentSource: FRAGMENT },
       {
         attributes: ["position", "uv", "uv2"],
-        uniforms: ["world", "viewProjection", "uTime", "uCameraPos", "uRadius", "uWorldSize", "uFogColor", "uFogDensity"],
-        samplers: ["landMask"],
+        uniforms: ["world", "viewProjection", "uTime", "uCameraPos", "uRadius", "uWorldSize", "uShoreRange", "uFogColor", "uFogDensity"],
+        samplers: ["shoreDistance"],
       }
     );
-    this.material.setTexture("landMask", landMask);
+    this.material.setTexture("shoreDistance", shoreDistance);
+    this.material.setFloat("uShoreRange", shoreRange);
     this.material.setFloat("uWorldSize", worldSize);
     this.material.backFaceCulling = false;
     this.material.setFloat("uRadius", RADIUS);
@@ -108,7 +112,7 @@ export class Grass {
     this.mesh.isPickable = false;
     this.mesh.alwaysSelectAsActiveMesh = true;
     this.mesh.thinInstanceSetBuffer("matrix", new Float32Array(16), 16, false);
-    this.mesh.thinInstanceCount = 0;
+    this.mesh.setEnabled(false);
   }
 
   update(dt: number, camera: Vector3): void {
@@ -146,7 +150,8 @@ export class Grass {
         m.toArray(out, out.length);
       }
     }
-    this.mesh.thinInstanceSetBuffer("matrix", new Float32Array(out), 16, false);
+    this.mesh.setEnabled(out.length > 0);
+    if (out.length > 0) this.mesh.thinInstanceSetBuffer("matrix", new Float32Array(out), 16, false);
   }
 }
 
@@ -165,13 +170,14 @@ function buildPatch(): VertexData {
   for (let b = 0; b < BLADES; b++) {
     const x = (rng() - 0.5) * CELL * 1.1;
     const z = (rng() - 0.5) * CELL * 1.1;
-    const h = 0.16 + rng() * 0.26;
-    const w = 0.025 + rng() * 0.02;
+    // ~0.5-1 m tall at the world's 8 m per unit: taller than a lawn so it reads at boat scale
+    const h = 0.06 + rng() * 0.08;
+    const w = 0.01 + rng() * 0.006;
     const yaw = rng() * Math.PI * 2;
     const ax = Math.cos(yaw);
     const az = Math.sin(yaw);
     // Blades arch over to one side
-    const lean = 0.08 + rng() * 0.18;
+    const lean = 0.02 + rng() * 0.05;
     const lx = -az * lean;
     const lz = ax * lean;
     const tone = rng();

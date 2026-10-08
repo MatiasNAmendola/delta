@@ -9,7 +9,21 @@ import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { TrailMesh } from "@babylonjs/core/Meshes/trailMesh";
-import { WATER_LEVEL, BOAT_LENGTH } from "../utils/constants";
+import { WATER_LEVEL, BOAT_LENGTH, BOAT_MAX_SPEED, PROP_SCALE } from "../utils/constants";
+
+/** The wake was designed for props 3.5x bigger: its sizes are scaled by this. */
+const S = PROP_SCALE;
+
+/** Brings a particle system designed at the old size down to the boat's scale. */
+function scaleParticles(ps: ParticleSystem): void {
+  ps.minEmitBox.scaleInPlace(S);
+  ps.maxEmitBox.scaleInPlace(S);
+  ps.minSize *= S;
+  ps.maxSize *= S;
+  ps.minEmitPower *= S;
+  ps.maxEmitPower *= S;
+  ps.gravity.scaleInPlace(S);
+}
 
 /** Stored boat position for wake ribbon generation */
 interface WakePoint {
@@ -70,11 +84,11 @@ export class WakeEffect {
     this.sprayTexture = this.createSprayTexture();
 
     // Create emitter positions
-    this.sternEmitter = new Vector3(0, WATER_LEVEL + 0.15, 0);
-    this.bowEmitter = new Vector3(0, WATER_LEVEL + 0.1, 0);
-    this.portEmitter = new Vector3(0, WATER_LEVEL + 0.1, 0);
-    this.starboardEmitter = new Vector3(0, WATER_LEVEL + 0.1, 0);
-    this.surfaceFoamEmitter = new Vector3(0, WATER_LEVEL + 0.08, 0);
+    this.sternEmitter = new Vector3(0, WATER_LEVEL + 0.15 * S, 0);
+    this.bowEmitter = new Vector3(0, WATER_LEVEL + 0.1 * S, 0);
+    this.portEmitter = new Vector3(0, WATER_LEVEL + 0.1 * S, 0);
+    this.starboardEmitter = new Vector3(0, WATER_LEVEL + 0.1 * S, 0);
+    this.surfaceFoamEmitter = new Vector3(0, WATER_LEVEL + 0.08 * S, 0);
 
     // Create V-wake trails (Kelvin angle ~19.47 degrees)
     this.trailMat = this.createTrailMaterial();
@@ -82,7 +96,7 @@ export class WakeEffect {
 
     // Port trail node
     this.portTrailNode = new TransformNode("portTrailNode", scene);
-    this.portTrailNode.position.set(0, WATER_LEVEL + 0.06, 0);
+    this.portTrailNode.position.set(0, WATER_LEVEL + 0.06 * S, 0);
     this.portTrail = new TrailMesh("portTrail", this.portTrailNode, scene, {
       diameter: 0.3,
       length: 80,
@@ -93,7 +107,7 @@ export class WakeEffect {
 
     // Starboard trail node
     this.starboardTrailNode = new TransformNode("starboardTrailNode", scene);
-    this.starboardTrailNode.position.set(0, WATER_LEVEL + 0.06, 0);
+    this.starboardTrailNode.position.set(0, WATER_LEVEL + 0.06 * S, 0);
     this.starboardTrail = new TrailMesh(
       "starboardTrail",
       this.starboardTrailNode,
@@ -104,7 +118,7 @@ export class WakeEffect {
 
     // Center foam trail
     this.centerTrailNode = new TransformNode("centerTrailNode", scene);
-    this.centerTrailNode.position.set(0, WATER_LEVEL + 0.07, 0);
+    this.centerTrailNode.position.set(0, WATER_LEVEL + 0.07 * S, 0);
     this.centerTrail = new TrailMesh(
       "centerTrail",
       this.centerTrailNode,
@@ -223,12 +237,12 @@ export class WakeEffect {
   private createBowWaveMesh(): Mesh {
     const mesh = MeshBuilder.CreateDisc(
       "bowWave",
-      { radius: 2.5, tessellation: 12, arc: 0.5 },
+      { radius: 2.5 * S, tessellation: 12, arc: 0.5 },
       this.scene
     );
     mesh.material = this.bowWaveMat;
     mesh.rotation.x = Math.PI / 2; // Lay flat on water
-    mesh.position.y = WATER_LEVEL + 0.08;
+    mesh.position.y = WATER_LEVEL + 0.08 * S;
     mesh.isVisible = false; // Hidden until boat moves
     return mesh;
   }
@@ -270,6 +284,7 @@ export class WakeEffect {
     // Billboard Y - particles lie flat on water surface
     ps.billboardMode = ParticleSystem.BILLBOARDMODE_Y;
 
+    scaleParticles(ps);
     ps.start();
     return ps;
   }
@@ -304,6 +319,7 @@ export class WakeEffect {
     ps.gravity = new Vector3(0, -6, 0); // Falls back quickly
     ps.blendMode = ParticleSystem.BLENDMODE_ADD;
 
+    scaleParticles(ps);
     ps.start();
     return ps;
   }
@@ -337,6 +353,7 @@ export class WakeEffect {
     ps.gravity = new Vector3(0, -3, 0);
     ps.blendMode = ParticleSystem.BLENDMODE_ADD;
 
+    scaleParticles(ps);
     ps.start();
     return ps;
   }
@@ -377,6 +394,7 @@ export class WakeEffect {
     // Y-billboard: particles lie flat on water
     ps.billboardMode = ParticleSystem.BILLBOARDMODE_Y;
 
+    scaleParticles(ps);
     ps.start();
     return ps;
   }
@@ -388,7 +406,8 @@ export class WakeEffect {
     boatRotation: number,
     speed: number
   ): void {
-    const absSpeed = Math.abs(speed);
+    // The effects were tuned for the old boat (top speed 0.35): keep that feel
+    const absSpeed = (Math.abs(speed) / BOAT_MAX_SPEED) * 0.35;
     const sinR = Math.sin(boatRotation);
     const cosR = Math.cos(boatRotation);
     const halfBoat = BOAT_LENGTH / 2;
@@ -398,72 +417,72 @@ export class WakeEffect {
     // Stern (back of boat)
     this.sternEmitter.copyFromFloats(
       boatX - sinR * halfBoat,
-      WATER_LEVEL + 0.15,
+      WATER_LEVEL + 0.15 * S,
       boatZ - cosR * halfBoat
     );
 
     // Bow (front of boat)
     this.bowEmitter.copyFromFloats(
-      boatX + sinR * (halfBoat + 0.5),
-      WATER_LEVEL + 0.1,
-      boatZ + cosR * (halfBoat + 0.5)
+      boatX + sinR * (halfBoat + 0.5 * S),
+      WATER_LEVEL + 0.1 * S,
+      boatZ + cosR * (halfBoat + 0.5 * S)
     );
 
     // Sides (offset perpendicular to heading)
-    const sideOffX = cosR * 1.3;
-    const sideOffZ = -sinR * 1.3;
+    const sideOffX = cosR * 1.3 * S;
+    const sideOffZ = -sinR * 1.3 * S;
     this.portEmitter.copyFromFloats(
       boatX - sideOffX,
-      WATER_LEVEL + 0.1,
+      WATER_LEVEL + 0.1 * S,
       boatZ - sideOffZ
     );
     this.starboardEmitter.copyFromFloats(
       boatX + sideOffX,
-      WATER_LEVEL + 0.1,
+      WATER_LEVEL + 0.1 * S,
       boatZ + sideOffZ
     );
 
     // Surface foam emitter (behind stern)
     this.surfaceFoamEmitter.copyFromFloats(
-      boatX - sinR * (halfBoat + 1),
-      WATER_LEVEL + 0.08,
-      boatZ - cosR * (halfBoat + 1)
+      boatX - sinR * (halfBoat + S),
+      WATER_LEVEL + 0.08 * S,
+      boatZ - cosR * (halfBoat + S)
     );
 
     // --- Update V-wake trail nodes ---
     // Kelvin wake angle: ~19.47 degrees from path
     const kelvinAngle = 0.34; // ~19.47 degrees in radians
-    const trailOffset = halfBoat + 0.5; // Start behind stern
+    const trailOffset = halfBoat + 0.5 * S; // Start behind stern
 
     if (absSpeed > 0.03) {
       // Port trail: offset to the left at Kelvin angle
       const portAngle = boatRotation + Math.PI + kelvinAngle;
       this.portTrailNode.position.copyFromFloats(
-        boatX + Math.sin(portAngle) * trailOffset - cosR * 1.0,
-        WATER_LEVEL + 0.06,
-        boatZ + Math.cos(portAngle) * trailOffset + sinR * 1.0
+        boatX + Math.sin(portAngle) * trailOffset - cosR * S,
+        WATER_LEVEL + 0.06 * S,
+        boatZ + Math.cos(portAngle) * trailOffset + sinR * S
       );
 
       // Starboard trail: offset to the right at Kelvin angle
       const stbdAngle = boatRotation + Math.PI - kelvinAngle;
       this.starboardTrailNode.position.copyFromFloats(
-        boatX + Math.sin(stbdAngle) * trailOffset + cosR * 1.0,
-        WATER_LEVEL + 0.06,
-        boatZ + Math.cos(stbdAngle) * trailOffset - sinR * 1.0
+        boatX + Math.sin(stbdAngle) * trailOffset + cosR * S,
+        WATER_LEVEL + 0.06 * S,
+        boatZ + Math.cos(stbdAngle) * trailOffset - sinR * S
       );
 
       // Center foam trail node
       this.centerTrailNode.position.copyFromFloats(
-        boatX - sinR * (halfBoat + 0.3),
-        WATER_LEVEL + 0.07,
-        boatZ - cosR * (halfBoat + 0.3)
+        boatX - sinR * (halfBoat + 0.3 * S),
+        WATER_LEVEL + 0.07 * S,
+        boatZ - cosR * (halfBoat + 0.3 * S)
       );
 
       // Scale trail width with speed
-      const trailScale = 0.3 + absSpeed * 4;
+      const trailScale = (0.3 + absSpeed * 4) * S;
       this.portTrail.diameter = trailScale;
       this.starboardTrail.diameter = trailScale;
-      this.centerTrail.diameter = 0.8 + absSpeed * 3;
+      this.centerTrail.diameter = (0.8 + absSpeed * 3) * S;
 
       // Faint: solid sheets read as plastic, not foam
       this.trailMat.alpha = Math.min(0.1, absSpeed * 0.4);
@@ -481,11 +500,11 @@ export class WakeEffect {
     if (absSpeed > 0.08) {
       this.bowWaveMesh.isVisible = true;
       const bowScale = 0.5 + absSpeed * 6;
-      this.bowWaveMesh.scaling.set(bowScale, 1, bowScale * 1.2);
+      this.bowWaveMesh.scaling.set(bowScale * S, 1, bowScale * 1.2 * S);
       this.bowWaveMesh.position.copyFromFloats(
-        boatX + sinR * (halfBoat + 1),
-        WATER_LEVEL + 0.08,
-        boatZ + cosR * (halfBoat + 1)
+        boatX + sinR * (halfBoat + S),
+        WATER_LEVEL + 0.08 * S,
+        boatZ + cosR * (halfBoat + S)
       );
       this.bowWaveMesh.rotation.y = boatRotation;
       this.bowWaveMat.alpha = Math.min(0.6, (absSpeed - 0.08) * 3);
@@ -498,10 +517,10 @@ export class WakeEffect {
     // Stern foam: heavy churning behind the boat
     if (absSpeed > 0.03) {
       this.sternFoam.emitRate = Math.floor(absSpeed * 500);
-      this.sternFoam.minEmitPower = absSpeed * 1.5;
-      this.sternFoam.maxEmitPower = absSpeed * 4.0;
-      this.sternFoam.minSize = 0.25 + absSpeed * 0.6;
-      this.sternFoam.maxSize = 0.7 + absSpeed * 1.2;
+      this.sternFoam.minEmitPower = (absSpeed * 1.5) * S;
+      this.sternFoam.maxEmitPower = (absSpeed * 4.0) * S;
+      this.sternFoam.minSize = (0.25 + absSpeed * 0.6) * S;
+      this.sternFoam.maxSize = (0.7 + absSpeed * 1.2) * S;
     } else {
       this.sternFoam.emitRate = 0;
     }
@@ -509,8 +528,8 @@ export class WakeEffect {
     // Surface foam: flat foam patches on water
     if (absSpeed > 0.05) {
       this.surfaceFoam.emitRate = Math.floor(absSpeed * 300);
-      this.surfaceFoam.minEmitPower = 0.2 + absSpeed * 0.8;
-      this.surfaceFoam.maxEmitPower = 0.8 + absSpeed * 2.0;
+      this.surfaceFoam.minEmitPower = (0.2 + absSpeed * 0.8) * S;
+      this.surfaceFoam.maxEmitPower = (0.8 + absSpeed * 2.0) * S;
     } else {
       this.surfaceFoam.emitRate = 0;
     }
@@ -519,8 +538,8 @@ export class WakeEffect {
     if (absSpeed > 0.12) {
       const sprayIntensity = (absSpeed - 0.12) / 0.23;
       this.bowSpray.emitRate = Math.floor(sprayIntensity * 120);
-      this.bowSpray.minEmitPower = 0.4 + sprayIntensity * 0.8;
-      this.bowSpray.maxEmitPower = 0.8 + sprayIntensity * 1.6;
+      this.bowSpray.minEmitPower = (0.4 + sprayIntensity * 0.8) * S;
+      this.bowSpray.maxEmitPower = (0.8 + sprayIntensity * 1.6) * S;
     } else {
       this.bowSpray.emitRate = 0;
     }
@@ -572,8 +591,8 @@ export class WakeEffect {
     const ring = MeshBuilder.CreateTorus(
       "ripple",
       {
-        diameter: 2.0 + speed * 3,
-        thickness: 0.08 + speed * 0.12,
+        diameter: (2.0 + speed * 3) * S,
+        thickness: (0.08 + speed * 0.12) * S,
         tessellation: 24,
       },
       this.scene
@@ -582,7 +601,7 @@ export class WakeEffect {
     const mat = this.rippleMat.clone("rippleMat_" + Date.now());
     mat.alpha = 0.25;
     ring.material = mat;
-    ring.position.set(x, WATER_LEVEL + 0.06, z);
+    ring.position.set(x, WATER_LEVEL + 0.06 * S, z);
 
     const maxLife = 2.5 + speed * 2.5;
     this.ripples.push({ mesh: ring, life: maxLife, maxLife });

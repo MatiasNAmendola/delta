@@ -9,7 +9,7 @@
   "rules": {
     "durationSec": 300,
     "boatCapacity": 20,
-    "pickupRadius": 8,
+    "pickupRadius": 3,
     "scorePerPassenger": 100,
     "timeBonusPerPassenger": 50
   },
@@ -261,10 +261,10 @@
       "id": "arboles",
       "prefab": "tree",
       "seed": 42,
-      "attempts": 600,
+      "attempts": 1800,
       "spread": 0.9,
-      "nearWaterDistance": 10,
-      "inlandChance": 0.3,
+      "nearWaterDistance": 3,
+      "inlandChance": 0.85,
       "instanceSeed": {
         "stride": 7,
         "offset": 13
@@ -276,7 +276,7 @@
       "seed": 123,
       "attempts": 80,
       "spread": 0.85,
-      "nearWaterDistance": 12,
+      "nearWaterDistance": 3.5,
       "inlandChance": 0.15,
       "instanceSeed": {
         "stride": 13,

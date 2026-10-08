@@ -8,7 +8,7 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
-import { WATER_LEVEL, COLORS } from "../utils/constants";
+import { WATER_LEVEL, COLORS, PROP_SCALE } from "../utils/constants";
 import type { River, Vec2, WorldDoc } from "./WorldDoc";
 import {
   createGrid,
@@ -21,7 +21,7 @@ import {
 import { getPointOnPath, hexToColor3, seededRandom } from "../utils/helpers";
 import { DeltaWaterMaterial } from "./DeltaWaterMaterial";
 import { WaterDistanceField } from "./WaterDistanceField";
-import { buildRegions, ShoreIndex, shorelineRings, triangulate, type Polygon } from "./shoreline";
+import { buildRegions, roughenRing, ShoreIndex, shorelineRings, triangulate, type Polygon } from "./shoreline";
 
 export interface Shore {
   /** Closed shoreline rings, water on the left of their direction. */
@@ -37,6 +37,11 @@ const STRIP_SKIP_COVERAGE = 0.7;
  * (2 units wide, collision tested at its center) never sails over visible land.
  */
 const STRIP_COLLISION_MARGIN = 0.5;
+/** Spacing of shoreline points and how far (world units, 8 m each) banks wander in and out. */
+const SHORE_STEP = 0.8;
+const SHORE_ROUGHNESS = 0.7;
+/** Signed shore distance range (world units) of createShoreDistanceTexture. */
+export const SHORE_SDF_RANGE = 2;
 /** Shore distance (world units) encoded by the brightest shore map value. */
 const SHORE_RANGE = 16;
 
@@ -102,7 +107,16 @@ export class WaterSystem {
     // One outline for everything: the water surface, the islands and the
     // river banks are built from these rings, and navigation is re-derived
     // from them so what you see is exactly what you can sail on
-    const rings = shorelineRings({ res, size, wet: (i, j) => this.waterGrid.cells[i * res + j] === 1 });
+    const grid = this.waterGrid;
+    // Natural banks: coves and points of a few meters instead of smooth curves
+    const room = (x: number, z: number, nx: number, nz: number) => {
+      const into = isSet(grid, x + nx * 0.6, z + nz * 0.6);
+      for (let t = 0.6; t < 5; t += 0.3) if (isSet(grid, x + nx * t, z + nz * t) !== into) return t;
+      return 5;
+    };
+    const rings = shorelineRings({ res, size, wet: (i, j) => grid.cells[i * res + j] === 1 }).map((r) =>
+      roughenRing(r, SHORE_STEP, SHORE_ROUGHNESS, room)
+    );
     const regions = buildRegions(rings, size);
     this.shore = { rings, water: regions.water, land: regions.land };
     this.waterGrid = createGrid(size, res);
@@ -138,36 +152,48 @@ export class WaterSystem {
     return strips;
   }
 
+  /**
+   * Fast approximate test (2-unit grid rasterized from the same shoreline),
+   * for shading and texturing; use isWater for collisions and placement.
+   */
+  public isWaterCoarse(worldX: number, worldZ: number): boolean {
+    return isSet(this.waterGrid, worldX, worldZ);
+  }
+
   /** Exact: true when the point is inside the drawn water (same shoreline as the banks). */
   public isWater(worldX: number, worldZ: number): boolean {
     return this.shoreIndex.isWater(worldX, worldZ);
   }
 
   /**
-   * Land (white) / water (black) mask of the whole world, painted from the
-   * shoreline polygons, for shaders that must keep things off the water.
+   * Signed distance to the shore for the whole world, as a texture: red
+   * 0.5 at the shore, above on land, below on water, spanning
+   * +-SHORE_SDF_RANGE units. Bilinear filtering of a distance field keeps
+   * the edge accurate well below the texel size (2048 texels over the
+   * world), so shaders can stop things right at the bank.
    * Texel (u, v) = world (x, z) mapped from -size/2..size/2.
    */
-  public createLandMask(): DynamicTexture {
+  public createShoreDistanceTexture(): DynamicTexture {
     const res = 2048;
     const size = this.world.world.size;
-    const tex = new DynamicTexture("mascaraTierra", res, this.scene, false);
+    const tex = new DynamicTexture("distanciaCosta", res, this.scene, false);
     const ctx = tex.getContext();
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, res, res);
-    ctx.fillStyle = "#000";
-    const px = (x: number) => ((x + size / 2) / size) * res;
-    // Canvas row 0 ends up at v = 1 (the +z edge) once uploaded
-    const py = (z: number) => (1 - (z + size / 2) / size) * res;
-    for (const poly of this.shore.water) {
-      ctx.beginPath();
-      for (const ring of [poly.outer, ...poly.holes]) {
-        ring.forEach(([x, z], i) => (i === 0 ? ctx.moveTo(px(x), py(z)) : ctx.lineTo(px(x), py(z))));
-        ctx.closePath();
+    const img = ctx.getImageData(0, 0, res, res);
+    const data = img.data;
+    const texel = size / res;
+    for (let py = 0; py < res; py++) {
+      // Canvas row 0 ends up at v = 1 (the +z edge) once uploaded with invertY
+      const z = size / 2 - (py + 0.5) * texel;
+      for (let px = 0; px < res; px++) {
+        const x = -size / 2 + (px + 0.5) * texel;
+        const d = this.shoreIndex.signedDistance(x, z, SHORE_SDF_RANGE);
+        const k = (py * res + px) * 4;
+        data[k] = Math.round((0.5 + d / (2 * SHORE_SDF_RANGE)) * 255);
+        data[k + 3] = 255;
       }
-      (ctx.fill as (rule?: string) => void).call(ctx, "evenodd");
     }
-    tex.update(false);
+    ctx.putImageData(img, 0, 0);
+    tex.update(true);
     tex.wrapU = Texture.CLAMP_ADDRESSMODE;
     tex.wrapV = Texture.CLAMP_ADDRESSMODE;
     return tex;
@@ -198,7 +224,7 @@ export class WaterSystem {
   private createShoreMap(): DynamicTexture {
     const size = this.world.world.size;
     const res = size <= 800 ? 512 : 1024;
-    const field = new WaterDistanceField(size, res, (x, z) => !this.isWater(x, z));
+    const field = new WaterDistanceField(size, res, (x, z) => !this.isWaterCoarse(x, z));
     const tex = new DynamicTexture("shoreMap", res, this.scene, true);
     const ctx = tex.getContext();
     const img = ctx.getImageData(0, 0, res, res);
@@ -328,9 +354,10 @@ export class WaterSystem {
   /** Get wave height at a position for boat bobbing */
   public getWaveHeight(x: number, z: number, time: number): number {
     return (
-      Math.sin(x * 0.1 + time * 1.5) * 0.15 +
-      Math.sin(z * 0.08 + time * 1.2) * 0.1 +
-      Math.sin((x + z) * 0.05 + time * 0.8) * 0.08
+      (Math.sin(x * 0.35 + time * 1.5) * 0.15 +
+        Math.sin(z * 0.28 + time * 1.2) * 0.1 +
+        Math.sin((x + z) * 0.18 + time * 0.8) * 0.08) *
+      PROP_SCALE
     );
   }
 }

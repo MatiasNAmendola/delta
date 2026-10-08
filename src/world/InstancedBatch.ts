@@ -100,7 +100,7 @@ function crossedQuads(name: string, scene: Scene): Mesh {
   return merged;
 }
 
-/** Parent transform for a prop: rotation around Y, then translation. */
-export function propTransform(x: number, y: number, z: number, rotationY: number): Matrix {
-  return Matrix.RotationY(rotationY).multiply(Matrix.Translation(x, y, z));
+/** Parent transform for a prop: uniform scale, rotation around Y, then translation. */
+export function propTransform(x: number, y: number, z: number, rotationY: number, scale = 1): Matrix {
+  return Matrix.Scaling(scale, scale, scale).multiply(Matrix.RotationY(rotationY)).multiply(Matrix.Translation(x, y, z));
 }

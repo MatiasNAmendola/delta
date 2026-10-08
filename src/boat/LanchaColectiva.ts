@@ -15,7 +15,7 @@ import {
   BOAT_DECELERATION,
   BOAT_TURN_SPEED,
   BOAT_LENGTH,
-  BOAT_WIDTH,
+  PROP_SCALE,
   WATER_LEVEL,
   COLORS,
 } from "../utils/constants";
@@ -24,9 +24,12 @@ import { WaterSystem } from "../world/WaterSystem";
 import { findFloatingPose, moveHull } from "./hullCollision";
 
 /** The boat's root rides this far above the water (the fallback blocks are built around it). */
-const HULL_RIDE_HEIGHT = 0.6;
+const HULL_RIDE_HEIGHT = 0.6 * PROP_SCALE;
+/** Design size of the blocky stand-in boat (before PROP_SCALE). */
+const FALLBACK_LENGTH = 7;
+const FALLBACK_WIDTH = 2.2;
 /** How deep the model's keel sits under the water. */
-const MODEL_DRAFT = 0.25;
+const MODEL_DRAFT = 0.25 * PROP_SCALE;
 
 export class LanchaColectiva {
   public rootNode: TransformNode;
@@ -114,15 +117,19 @@ export class LanchaColectiva {
     return mat;
   }
 
+  /** Blocky stand-in shown until the GLB loads, built at design size and scaled down. */
   private buildFallbackBoat(): void {
+    const fallback = new TransformNode("lanchaProvisoria", this.scene);
+    fallback.parent = this.rootNode;
+    fallback.scaling.setAll(PROP_SCALE);
     // Hull
     const hull = MeshBuilder.CreateBox(
       "hull",
-      { width: BOAT_WIDTH + 0.4, height: 0.8, depth: BOAT_LENGTH },
+      { width: FALLBACK_WIDTH + 0.4, height: 0.8, depth: FALLBACK_LENGTH },
       this.scene
     );
     hull.material = this.createMat("hullMat", COLORS.boatHull);
-    hull.parent = this.rootNode;
+    hull.parent = fallback;
     hull.position.y = 0;
     this.meshes.push(hull);
 
@@ -130,68 +137,68 @@ export class LanchaColectiva {
     for (const side of [-1, 1]) {
       const s = MeshBuilder.CreateBox(
         `side_${side}`,
-        { width: 0.2, height: 0.6, depth: BOAT_LENGTH - 0.5 },
+        { width: 0.2, height: 0.6, depth: FALLBACK_LENGTH - 0.5 },
         this.scene
       );
       s.material = this.createMat(`sideMat_${side}`, COLORS.woodDark);
-      s.parent = this.rootNode;
-      s.position.set(side * (BOAT_WIDTH / 2 + 0.1), 0.5, 0);
+      s.parent = fallback;
+      s.position.set(side * (FALLBACK_WIDTH / 2 + 0.1), 0.5, 0);
       this.meshes.push(s);
     }
 
     // Deck
     const deck = MeshBuilder.CreateBox(
       "deck",
-      { width: BOAT_WIDTH + 0.2, height: 0.1, depth: BOAT_LENGTH - 0.4 },
+      { width: FALLBACK_WIDTH + 0.2, height: 0.1, depth: FALLBACK_LENGTH - 0.4 },
       this.scene
     );
     deck.material = this.createMat("deckMat", COLORS.boatDeck);
-    deck.parent = this.rootNode;
+    deck.parent = fallback;
     deck.position.y = 0.45;
     this.meshes.push(deck);
 
     // Cabin
     const cabin = MeshBuilder.CreateBox(
       "cabin",
-      { width: BOAT_WIDTH - 0.2, height: 1.2, depth: BOAT_LENGTH * 0.5 },
+      { width: FALLBACK_WIDTH - 0.2, height: 1.2, depth: FALLBACK_LENGTH * 0.5 },
       this.scene
     );
     cabin.material = this.createMat("cabinMat", COLORS.boatCabin);
-    cabin.parent = this.rootNode;
+    cabin.parent = fallback;
     cabin.position.set(0, 1.1, -0.3);
     this.meshes.push(cabin);
 
     // Roof
     const roof = MeshBuilder.CreateBox(
       "roof",
-      { width: BOAT_WIDTH + 0.3, height: 0.15, depth: BOAT_LENGTH * 0.5 + 0.6 },
+      { width: FALLBACK_WIDTH + 0.3, height: 0.15, depth: FALLBACK_LENGTH * 0.5 + 0.6 },
       this.scene
     );
     roof.material = this.createMat("roofMat", COLORS.boatRoof);
-    roof.parent = this.rootNode;
+    roof.parent = fallback;
     roof.position.set(0, 1.8, -0.3);
     this.meshes.push(roof);
 
     // Bow
     const bow = MeshBuilder.CreateBox(
       "bow",
-      { width: BOAT_WIDTH * 0.5, height: 0.5, depth: 1.0 },
+      { width: FALLBACK_WIDTH * 0.5, height: 0.5, depth: 1.0 },
       this.scene
     );
     bow.material = this.createMat("bowMat", COLORS.boatHull);
-    bow.parent = this.rootNode;
-    bow.position.set(0, 0.1, BOAT_LENGTH / 2);
+    bow.parent = fallback;
+    bow.position.set(0, 0.1, FALLBACK_LENGTH / 2);
     this.meshes.push(bow);
 
     // Pilot house
     const pilot = MeshBuilder.CreateBox(
       "pilot",
-      { width: BOAT_WIDTH - 0.4, height: 1.0, depth: 1.2 },
+      { width: FALLBACK_WIDTH - 0.4, height: 1.0, depth: 1.2 },
       this.scene
     );
     pilot.material = this.createMat("pilotMat", COLORS.woodLight);
-    pilot.parent = this.rootNode;
-    pilot.position.set(0, 1.0, BOAT_LENGTH / 2 - 1.2);
+    pilot.parent = fallback;
+    pilot.position.set(0, 1.0, FALLBACK_LENGTH / 2 - 1.2);
     this.meshes.push(pilot);
   }
 

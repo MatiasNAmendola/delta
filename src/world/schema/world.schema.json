@@ -240,7 +240,7 @@
           "attempts": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 5000,
+            "maximum": 20000,
             "description": "Posiciones candidatas a probar; solo se colocan en tierra."
           },
           "spread": {

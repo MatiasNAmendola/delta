@@ -91,7 +91,8 @@ export function estimateWidthM(type: string, name: string): number {
 const WATERWAY_TYPES = new Set(Object.keys(DEFAULT_WIDTH_M));
 
 /** Upper bound of placement attempts per prefab for big imported worlds. */
-const MAX_SCATTER_ATTEMPTS: Record<string, number> = { tree: 3000, house: 600 };
+// Trees are streamed around the camera, so many more can be placed than are drawn
+const MAX_SCATTER_ATTEMPTS: Record<string, number> = { tree: 9000, house: 600 };
 
 const M_PER_DEG_LAT = 110_540;
 const M_PER_DEG_LON_EQUATOR = 111_320;

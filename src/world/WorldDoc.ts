@@ -201,7 +201,7 @@ export function parseWorld(input: unknown): WorldDoc {
       issues.push(`${p}.prefab: expected one of ${SCATTER_PREFABS.join(", ")}`);
     }
     v.number(rule.seed, `${p}.seed`, { integer: true });
-    v.number(rule.attempts, `${p}.attempts`, { min: 0, max: 5000, integer: true });
+    v.number(rule.attempts, `${p}.attempts`, { min: 0, max: 20000, integer: true });
     v.number(rule.spread, `${p}.spread`, { exclusiveMin: 0, max: 1 });
     v.number(rule.nearWaterDistance, `${p}.nearWaterDistance`, { min: 0 });
     v.number(rule.inlandChance, `${p}.inlandChance`, { min: 0, max: 1 });

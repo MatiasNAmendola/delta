@@ -319,6 +319,31 @@ export class ShoreIndex {
     }
   }
 
+  /**
+   * Signed distance to the shore: positive on land, negative on water,
+   * exact within about one index cell of the shore and clamped to
+   * +-maxDistance beyond.
+   */
+  signedDistance(x: number, z: number, maxDistance: number): number {
+    const half = this.size / 2;
+    const i = Math.floor((x + half) / this.cell);
+    const j = Math.floor((z + half) / this.cell);
+    if (i < 0 || j < 0 || i >= this.res || j >= this.res) return maxDistance;
+    const list = this.cells[j * this.res + i];
+    if (!list) return this.solid[j * this.res + i] === 1 ? -maxDistance : maxDistance;
+    let best = Infinity;
+    for (const s of list) {
+      const ax = this.ax[s], az = this.az[s];
+      const dx = this.bx[s] - ax, dz = this.bz[s] - az;
+      const l2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
+      const px = ax + dx * t - x, pz = az + dz * t - z;
+      best = Math.min(best, px * px + pz * pz);
+    }
+    const d = Math.min(Math.sqrt(best), maxDistance);
+    return this.isWater(x, z) ? -d : d;
+  }
+
   isWater(x: number, z: number): boolean {
     const half = this.size / 2;
     const i = Math.floor((x + half) / this.cell);
@@ -347,4 +372,80 @@ export class ShoreIndex {
     }
     return side > 0;
   }
+}
+
+/**
+ * Natural, irregular banks: resamples a smooth ring every `step` and pushes
+ * each point in or out along its normal with fractal noise (a few meters of
+ * coves and points, like eroded mud banks). Noise is sampled at world
+ * positions, so it is stable and continuous. `room(x, z, nx, nz)` tells how
+ * far the shore may move towards (nx, nz) without crossing another shore;
+ * displacement is kept to a fraction of it so channels never close.
+ */
+export function roughenRing(
+  ring: Vec2[],
+  step: number,
+  amplitude: number,
+  room: (x: number, z: number, nx: number, nz: number) => number
+): Vec2[] {
+  // Resample at a fixed spacing
+  const pts: Vec2[] = [];
+  for (let i = 0; i < ring.length; i++) {
+    const [ax, az] = ring[i];
+    const [bx, bz] = ring[(i + 1) % ring.length];
+    const len = Math.hypot(bx - ax, bz - az);
+    const n = Math.max(1, Math.round(len / step));
+    for (let k = 0; k < n; k++) pts.push([ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n]);
+  }
+  if (pts.length < 8) return ring;
+  const out: Vec2[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const [px, pz] = pts[(i - 1 + pts.length) % pts.length];
+    const [nx0, nz0] = pts[(i + 1) % pts.length];
+    const [x, z] = pts[i];
+    const dx = nx0 - px;
+    const dz = nz0 - pz;
+    const len = Math.hypot(dx, dz) || 1;
+    // Water is on the left of the ring direction
+    const wx = -dz / len;
+    const wz = dx / len;
+    const n = fractalNoise(x, z) * amplitude;
+    const limit = n > 0 ? room(x, z, wx, wz) : room(x, z, -wx, -wz);
+    const d = Math.sign(n) * Math.min(Math.abs(n), limit * 0.3);
+    out.push([x + wx * d, z + wz * d]);
+  }
+  return out;
+}
+
+/**
+ * Smooth 2D value noise, two octaves: coves and points every ~4-11 units
+ * (30-90 m). Finer detail would be smaller than the shore distance
+ * texture's texels and grass could no longer follow the bank exactly.
+ */
+function fractalNoise(x: number, z: number): number {
+  let v = 0;
+  let amp = 0.75;
+  let f = 0.09;
+  for (let o = 0; o < 2; o++) {
+    v += valueNoise(x * f + o * 17.3, z * f - o * 9.1) * amp;
+    amp *= 0.45;
+    f *= 2.6;
+  }
+  return v;
+}
+
+function valueNoise(x: number, z: number): number {
+  const ix = Math.floor(x);
+  const iz = Math.floor(z);
+  const fx = x - ix;
+  const fz = z - iz;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sz = fz * fz * (3 - 2 * fz);
+  const h = (a: number, b: number) => {
+    const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+    return (s - Math.floor(s)) * 2 - 1;
+  };
+  const a = h(ix, iz) + (h(ix + 1, iz) - h(ix, iz)) * sx;
+  const b = h(ix, iz + 1) + (h(ix + 1, iz + 1) - h(ix, iz + 1)) * sx;
+  return a + (b - a) * sz;
 }
