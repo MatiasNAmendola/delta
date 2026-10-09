@@ -1,20 +1,21 @@
 import { Scene } from "@babylonjs/core/scene";
 import { ThrottleLever } from "./throttleLever";
-import { LeverWidget, WheelWidget } from "./widgets";
+import { LeverWidget, StickWidget, WheelWidget } from "./widgets";
 
 /**
  * How the player drives (chosen in the menu):
  * - "botones": ▲▼ move the throttle lever a notch, ◀▶ the rudder;
  * - "flechas": hold ▲ to go, release to slow down (classic arcade);
- * - "palanca": an on-screen palanca de mando to drag and a rueda de timón to turn.
+ * - "palanca": an on-screen palanca de mando to drag and a rueda de timón to turn;
+ * - "ruedita": one on-screen joystick for the thumb (up/down throttle, left/right helm).
  */
-export type ControlScheme = "botones" | "flechas" | "palanca";
+export type ControlScheme = "botones" | "flechas" | "palanca" | "ruedita";
 const SCHEME_KEY = "delta.controles";
 
 export function controlScheme(): ControlScheme {
   try {
     const v = localStorage.getItem(SCHEME_KEY);
-    return v === "flechas" || v === "palanca" ? v : "botones";
+    return v === "flechas" || v === "palanca" || v === "ruedita" ? v : "botones";
   } catch {
     return "botones";
   }
@@ -62,6 +63,7 @@ export class MobileControls {
   private scheme: ControlScheme = controlScheme();
   private leverWidget: LeverWidget | null = null;
   private wheelWidget: WheelWidget | null = null;
+  private stickWidget: StickWidget | null = null;
 
   private isMobile: boolean;
   private gyroEnabled = false;
@@ -548,10 +550,16 @@ export class MobileControls {
   public setScheme(scheme: ControlScheme, options: { telegraph?: boolean; wheelStays?: boolean } = {}): void {
     this.scheme = scheme;
     const palanca = scheme === "palanca";
+    const ruedita = scheme === "ruedita";
     for (const id of ["btnForward", "btnReverse", "btnLeft", "btnRight"]) {
       const el = document.getElementById(id);
-      if (el) el.style.display = palanca ? "none" : "";
+      if (el) el.style.display = palanca || ruedita ? "none" : "";
     }
+    if (ruedita && !this.stickWidget && this.isMobile) {
+      this.stickWidget = new StickWidget(document.body, (v) => this.lever.set(v));
+    }
+    this.stickWidget?.setVisible(ruedita);
+    if (this.stickWidget) this.stickWidget.telegraph = !!options.telegraph;
     if (palanca && !this.leverWidget) {
       this.leverWidget = new LeverWidget(document.body, (v) => this.lever.set(v));
       this.wheelWidget = new WheelWidget(document.body);
@@ -570,6 +578,10 @@ export class MobileControls {
 
   /** The on-screen lever shows the lever, the speed and the slow-zone limit. */
   public showLever(value: number, speed: number, limit: number | null, label: string): boolean {
+    if (this.scheme === "ruedita" && this.stickWidget) {
+      this.stickWidget.show(value);
+      return false; // the speed gauge of the HUD stays
+    }
     if (this.scheme !== "palanca" || !this.leverWidget) return false;
     this.leverWidget.show(value, speed, limit, label);
     return true;
@@ -580,6 +592,7 @@ export class MobileControls {
     const on = !hidden && this.scheme === "palanca";
     this.leverWidget?.setVisible(on);
     this.wheelWidget?.setVisible(on);
+    this.stickWidget?.setVisible(!hidden && this.scheme === "ruedita");
   }
 
   /** The desktop key reminder (it changes with the realistic handling). */
@@ -627,6 +640,9 @@ export class MobileControls {
     else if (this.wheelWidget && this.scheme === "palanca") {
       this.controlState.steering = this.wheelWidget.update(dt);
       this.controlState.helmIsPosition = true;
+    } else if (this.stickWidget && this.scheme === "ruedita") {
+      // Turn while you push; the stick returns to zero when released
+      this.controlState.steering = this.stickWidget.steering;
     } else if (!this.isMobile) this.controlState.steering = 0;
     if (!this.isMobile) {
       // Q/E for camera rotation on desktop

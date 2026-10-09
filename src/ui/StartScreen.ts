@@ -59,6 +59,7 @@ export class StartScreen {
           ${TABS.map(({ tab, label }) => `<button type="button" role="tab" class="ss-boat" data-tab="${tab}" aria-selected="${tab === tabOf(selected)}">${label}</button>`).join("")}
         </div>
         <div class="ss-boat-detail" aria-live="polite"></div>
+        ${touch ? `<div class="ss-controls"></div>` : ""}
         <div class="ss-actions">
           <button id="playBtn" class="ss-play" type="button">
             <span class="ss-play-label">Zarpar</span>
@@ -83,6 +84,7 @@ export class StartScreen {
         <h2>Cómo se juega</h2>
         <ol>
           <li><p><b>El acelerador queda donde lo dejás,</b> como una palanca: ${touch ? "▲▼" : "W/S"} lo mueven un punto por toque, o suave si los mantenés${touch ? "" : " (X: punto muerto)"}. ${touch ? "◀▶ o inclinar el celular" : "A/D"} mueven el timón; ${touch ? "PARADA" : "ESPACIO"} para en los muelles.</p></li>
+          ${touch ? `<li><p><b>Con la Ruedita</b> (elegila en «Controles»), arrastrá el pulgar: arriba acelera, abajo va marcha atrás y a los costados girás. Al soltar, el timón vuelve al medio pero el acelerador queda donde estaba; el anillo marca dónde está. PARADA lo lleva a neutro.</p></li>` : ""}
           <li><p><b>Por la derecha:</b> como en la ruta, en el río se navega por la mano derecha.</p></li>
           <li><p><b>Despacio</b> en los arroyos, frente a los muelles y cerca de remeros y kayaks: tu ola los moja. La línea punteada junto al acelerador marca el límite; primero te avisan y si seguís rápido, te multan.</p></li>
           <li><p><b>Limpiá el río:</b> ${touch ? "tocá" : "hacé clic en"} la basura que flota cerca tuyo y ganás créditos.</p></li>
@@ -117,13 +119,15 @@ export class StartScreen {
       })
     );
     // Ajustes: handling and control scheme chips
-    this.root.querySelector(".ss-settings")!.addEventListener("click", (e) => {
+    const onChip = (e: Event) => {
       const schemeChip = (e.target as HTMLElement).closest<HTMLElement>(".ss-scheme");
       if (schemeChip) setControlScheme(schemeChip.dataset.scheme as ControlScheme);
       const modeChip = (e.target as HTMLElement).closest<HTMLElement>(".ss-mode");
       if (modeChip) setHandlingMode(modeChip.dataset.mode as HandlingMode);
       if (schemeChip || modeChip) this.renderSettings();
-    });
+    };
+    this.root.querySelector(".ss-settings")!.addEventListener("click", onChip);
+    this.root.querySelector(".ss-controls")?.addEventListener("click", onChip);
     // Variant chips of the private launches (re-rendered with the detail)
     this.root.querySelector(".ss-boat-detail")!.addEventListener("click", (e) => {
       const chip = (e.target as HTMLElement).closest<HTMLElement>(".ss-variant");
@@ -185,20 +189,27 @@ export class StartScreen {
         <button type="button" role="radio" class="ss-variant ss-mode" data-mode="clasico" aria-checked="${mode === "clasico"}">Clásico</button>
         <button type="button" role="radio" class="ss-variant ss-mode" data-mode="realista" aria-checked="${mode === "realista"}">Realista</button>
       </div>
-      <div class="ss-variants ss-handling" role="radiogroup" aria-label="Controles">
-        <span class="ss-handling-label">Controles</span>
-        ${(
-          [
-            ["botones", "Botones"],
-            ["flechas", "Flechas"],
-            ["palanca", "Palanca y timón"],
-          ] as Array<[ControlScheme, string]>
-        )
-          .map(([id, name]) => `<button type="button" role="radio" class="ss-variant ss-scheme" data-scheme="${id}" aria-checked="${controlScheme() === id}">${name}</button>`)
-          .join("")}
-      </div>
+      ${touch ? "" : this.controlsRow()}
       ${mode === "realista" ? `<p class="ss-handling-help">${handlingHelp(handlingKind(b), touch)} <b>Rigen las reglas de Prefectura por río:</b> sin ola en el Luján, Sarmiento y otros; despacio en las zonas de remo.</p>` : ""}`;
     this.root.querySelector<HTMLElement>(".ss-settings-body")!.innerHTML = handling;
+    // On touch screens the controls are chosen on the title itself, before "Zarpar"
+    const row = this.root.querySelector<HTMLElement>(".ss-controls");
+    if (row) row.innerHTML = this.controlsRow();
+  }
+
+  /** The "Controles" chips: Botones, Flechas, Palanca y timón, Ruedita. */
+  private controlsRow(): string {
+    const current = controlScheme();
+    const schemes: Array<[ControlScheme, string]> = [
+      ["botones", "Botones"],
+      ["flechas", "Flechas"],
+      ["palanca", "Palanca y timón"],
+      ["ruedita", "Ruedita"],
+    ];
+    return `<div class="ss-variants ss-handling" role="radiogroup" aria-label="Controles">
+        <span class="ss-handling-label">Controles</span>
+        ${schemes.map(([id, name]) => `<button type="button" role="radio" class="ss-variant ss-scheme" data-scheme="${id}" aria-checked="${current === id}">${name}</button>`).join("")}
+      </div>`;
   }
 
   /** Slides the amber highlight under the selected tab. */
@@ -480,6 +491,7 @@ export function injectStyles(): void {
     .ss-screen .ss-how b { color: var(--ink); font-weight: 600; }
     .ss-screen .ss-settings { max-height: calc(100% - 32px); overflow-y: auto; }
     .ss-screen .ss-settings .ss-handling { margin-top: 4px; margin-bottom: 10px; }
+    .ss-screen .ss-controls .ss-handling { margin-top: 12px; }
     body.menu-open #mobileControls, body.menu-open #desktopHint, body.menu-open #minimap { visibility: hidden; }
     .ss-screen .ss-credit { position: absolute; left: clamp(20px, 7vw, 96px); bottom: 14px; font-size: 11px; color: rgba(244, 239, 227, 0.5); }
     /* Short desktop windows: drop the numbers, they are the least needed */
@@ -492,7 +504,10 @@ export function injectStyles(): void {
       .ss-screen .ss-title { font-size: clamp(52px, 17vh, 88px); margin-top: 6px; }
       .ss-screen .ss-sub { font-size: 20px; }
       .ss-screen .ss-lede { margin-top: 8px; font-size: 13px; }
-      .ss-screen .ss-actions { margin-top: 14px; }
+      .ss-screen .ss-actions { margin-top: 12px; }
+      .ss-screen .ss-controls .ss-handling { margin-top: 6px; gap: 4px; }
+      .ss-screen .ss-controls .ss-handling-label { font-size: 10px; }
+      .ss-screen .ss-controls .ss-variant { padding: 5px 9px; font-size: 11px; }
       .ss-screen .ss-play { padding: 7px 7px 7px 20px; font-size: 15px; }
       .ss-screen .ss-play-icon { width: 34px; height: 34px; }
       .ss-screen .ss-ghost { padding: 11px 16px; font-size: 13px; }
