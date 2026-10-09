@@ -17,3 +17,7 @@ impresion-3d/modelos/
 .env
 .env.*
 !.env.example
+
+# Sol agents: logs and results stay local
+encargos/*.log
+encargos/*.resultado.md
