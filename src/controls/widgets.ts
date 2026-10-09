@@ -10,7 +10,7 @@
  *   when you let go, a ring marks it), left/right the helm (it returns to
  *   the middle). The maths lives in joystick.ts.
  */
-import { readStick, releaseStick } from "./joystick";
+import { engagesThrottle, readStick, releaseStick } from "./joystick";
 
 const TURN = (135 * Math.PI) / 180; // wheel lock: ±135° = full rudder
 
@@ -200,6 +200,8 @@ export class StickWidget {
   private ring: HTMLDivElement;
   private dragging = false;
   private pointerId = -1;
+  /** This touch has taken the throttle (see engagesThrottle). */
+  private engaged = false;
   private throttle = 0;
   /** Helm, -1..1: zero when the finger is up. */
   steering = 0;
@@ -225,8 +227,12 @@ export class StickWidget {
       const r = this.base.getBoundingClientRect();
       const s = readStick(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2), STICK_RADIUS);
       this.steering = s.steering;
-      this.throttle = s.throttle;
-      this.onThrottle(s.throttle);
+      // A sideways touch only steers; the throttle moves once the thumb clearly goes up or down
+      this.engaged = engagesThrottle(this.engaged, s);
+      if (this.engaged) {
+        this.throttle = s.throttle;
+        this.onThrottle(s.throttle);
+      }
       this.placeKnob(s.knobX, s.knobY);
     };
     this.base.addEventListener("pointerdown", (e) => {
@@ -237,6 +243,7 @@ export class StickWidget {
       this.pointerId = e.pointerId;
       this.base.setPointerCapture(e.pointerId);
       this.knob.style.transition = "none";
+      this.engaged = false;
       move(e);
     });
     this.base.addEventListener("pointermove", (e) => {
@@ -267,6 +274,8 @@ export class StickWidget {
 
   /** The ring marks the actual throttle (-1..1), whoever moved it (keys, PARADA, telegraph). */
   show(value: number): void {
+    // The lever may move without the stick (PARADA, keys): release keeps the real value
+    if (!this.dragging) this.throttle = value;
     this.ring.style.transform = `translate(0px, ${-value * STICK_RADIUS}px)`;
     this.ring.classList.toggle("reverse", value < 0);
   }

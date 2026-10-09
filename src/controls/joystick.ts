@@ -55,3 +55,15 @@ export function snapToTelegraph(v: number, positions: number[] = TELEGRAPH): num
 export function releaseStick(throttle: number, telegraph: boolean): { throttle: number; steering: number } {
   return { throttle: telegraph ? snapToTelegraph(throttle) : throttle, steering: 0 };
 }
+
+/**
+ * A touch only takes the throttle once the thumb has clearly gone up or down
+ * (|throttle| past `gate`): a sideways touch to steer keeps the cruise speed.
+ * Once taken, the throttle follows the stick for the rest of that touch, so
+ * bringing the thumb back to the middle still reaches slow speeds or neutral.
+ */
+export const THROTTLE_GATE = 0.25;
+
+export function engagesThrottle(engaged: boolean, reading: StickReading, gate = THROTTLE_GATE): boolean {
+  return engaged || Math.abs(reading.throttle) >= gate;
+}

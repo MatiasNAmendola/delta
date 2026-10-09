@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEAD_ZONE, readStick, releaseStick, snapToTelegraph } from "../src/controls/joystick";
+import { DEAD_ZONE, engagesThrottle, readStick, releaseStick, snapToTelegraph } from "../src/controls/joystick";
 
 const R = 65;
 
@@ -64,5 +64,16 @@ describe("releaseStick", () => {
   it("settles on a telegraph position when there is one", () => {
     expect(releaseStick(0.37, true)).toEqual({ throttle: 0.5, steering: 0 });
     expect(releaseStick(-0.1, true).throttle).toBe(0);
+  });
+});
+
+describe("engagesThrottle", () => {
+  it("a sideways touch only steers; a clear push up or down takes the throttle", () => {
+    expect(engagesThrottle(false, readStick(50, -5, 65))).toBe(false);
+    expect(engagesThrottle(false, readStick(0, -40, 65))).toBe(true);
+    expect(engagesThrottle(false, readStick(0, 40, 65))).toBe(true);
+  });
+  it("once taken, it stays taken for the touch (back to the middle reaches neutral)", () => {
+    expect(engagesThrottle(true, readStick(0, 0, 65))).toBe(true);
   });
 });
