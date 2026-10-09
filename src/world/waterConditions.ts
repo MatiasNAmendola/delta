@@ -165,6 +165,12 @@ export class WaterConditions {
     h += (0.004 + 0.035 * w * w) * Math.sin(along * 1.6 - t * 2.1);
     h += (0.003 + 0.02 * w * w) * Math.sin(along * 2.7 + across * 0.9 - t * 3.0);
     h += 0.002 * Math.sin(across * 3.3 + t * 1.3);
+    // Short chop, a few metres long (~1 unit), that a hull feels: what makes a
+    // boat pitch and roll even at rest. About 10 cm on a calm day, 40 cm or
+    // so with a stiff wind; one train runs with the wind, one across it so
+    // the hull also rolls (docs/adr/0009)
+    h += (0.005 + 0.036 * w) * Math.sin(along * 5.8 - t * 3.6 + 0.8 * Math.sin(across * 1.3 + t * 0.4));
+    h += (0.002 + 0.014 * w) * Math.sin(across * 6.7 + along * 2.1 - t * 4.1);
     if (this.wakes.length) {
       // Each wake, plus its reflection off a wall nearby (image method)
       const wall = this.wall?.(x, z) ?? null;

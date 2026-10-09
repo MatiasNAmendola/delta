@@ -61,7 +61,7 @@ export class Buoyancy {
     const k = 26 / Math.max(0.4, p.length);
     this.heave = new Spring(k, 2 * Math.sqrt(k) * 0.55);
     this.pitch = new Spring(k * 0.8, 2 * Math.sqrt(k * 0.8) * 0.6);
-    this.roll = new Spring(k * 1.2, 2 * Math.sqrt(k * 1.2) * 0.45);
+    this.roll = new Spring(k * 1.2, 2 * Math.sqrt(k * 1.2) * 0.7);
   }
 
   /** Targets from the water under the hull and the boat's motion. */

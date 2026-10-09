@@ -13,6 +13,9 @@ En el Delta la corriente cambia de sentido con la marea: con la creciente el agu
   - **Inercia en neutro o al aflojar:** el barco conserva su arrancada, hacia adelante o hacia atrás. La resistencia del casco crece con la velocidad, así que la constante de tiempo es `coastTime · (0,15 + 0,85 · (1 − v/vmáx))`: a toda máquina pierde la mayor parte en un par de segundos y después sigue deslizándose despacio.
   - **Frenado fuerte:** solo cuando la palanca va contra la arrancada.
   - **Valores de juego `coastTime` (s):** colectiva 4 · bote de travesía 3,5 · single 4,5 · kayak 3 · lancha deportiva 2 · pesca 2,6 · clásica 2,8 · semirrígido 1,8 · moto de agua 1,2. Con eso, la colectiva a toda máquina se desliza unas 23 unidades (unos 180 m) y unos 20 s. **[sin fuente]:** son valores elegidos para que se jueguen bien, no medidos.
+- **Picado corto que siente el casco (2026-10-09):** además de las olas largas del viento, la altura del agua tiene dos trenes cortos, de unos 8 m de largo. Uno va con el viento y el otro lo cruza para que el casco también rolee. Miden unos 4 cm con calma, 10 a 15 cm con brisa y 30 cm o más con viento fuerte. Así el barco cabecea, rolea y sube y baja aunque esté parado. El amortiguamiento del rolido subió de 0,45 a 0,7 para evitar la resonancia con ese picado.
+  - **Ángulos medidos con la simulación:** con brisa, la colectiva rolea unos 4° y la lancha y el kayak unos 6°. Con viento fuerte, unos 9° y 14°.
+  - **[sin fuente]:** son valores de juego, elegidos a ojo.
 - **Sudestada:** un evento con viento del SE, nivel en subida, corriente río arriba, olas más altas en el shader del agua, cielo cubierto y aviso en el HUD. Ocurre al azar o con los datos reales (ADR 0008).
 - **Visual:** la espuma y las ondas del agua se desplazan en el sentido de la corriente, y en el mapa se ven flechas que la indican.
 
