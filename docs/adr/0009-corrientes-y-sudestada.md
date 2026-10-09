@@ -7,7 +7,12 @@ En el Delta la corriente cambia de sentido con la marea: con la creciente el agu
 
 ## Decisión
 - **Campo de corriente:** cada río tiene una dirección a lo largo de su cauce, que sale de su línea central en el World Doc. La corriente en un punto es esa dirección por una velocidad. La velocidad depende de la fase de la marea (creciente o vaciante), es mayor en el centro del cauce que cerca de la costa y mayor en ríos angostos.
-- **Efecto sobre el barco:** la corriente arrastra cada barco según su `currentDrift`: la lancha colectiva muy poco, las lanchas particulares poco, el bote de travesía bastante y el kayak mucho. El viento suma deriva en botes y kayaks.
+- **Efecto sobre el barco (revisado 2026-10-09, `src/boat/coasting.ts`):**
+  - **La corriente mueve a todos los barcos.** La velocidad de cada barco respecto del suelo es su marcha en el agua más el movimiento del agua. Así, en punto muerto y hasta parado, el barco se va con la marea que sube o baja, como en la realidad.
+  - **El peso pone la demora:** un casco pesado tarda en tomar la corriente, durante su `coastTime` (constante de tiempo). Esto reemplaza al `currentDrift` anterior, que arrastraba a la colectiva al 15 % y nunca la dejaba ir del todo con el agua.
+  - **Inercia en neutro o al aflojar:** el barco conserva su arrancada, hacia adelante o hacia atrás. La resistencia del casco crece con la velocidad, así que la constante de tiempo es `coastTime · (0,15 + 0,85 · (1 − v/vmáx))`: a toda máquina pierde la mayor parte en un par de segundos y después sigue deslizándose despacio.
+  - **Frenado fuerte:** solo cuando la palanca va contra la arrancada.
+  - **Valores de juego `coastTime` (s):** colectiva 4 · bote de travesía 3,5 · single 4,5 · kayak 3 · lancha deportiva 2 · pesca 2,6 · clásica 2,8 · semirrígido 1,8 · moto de agua 1,2. Con eso, la colectiva a toda máquina se desliza unas 23 unidades (unos 180 m) y unos 20 s. **[sin fuente]:** son valores elegidos para que se jueguen bien, no medidos.
 - **Sudestada:** un evento con viento del SE, nivel en subida, corriente río arriba, olas más altas en el shader del agua, cielo cubierto y aviso en el HUD. Ocurre al azar o con los datos reales (ADR 0008).
 - **Visual:** la espuma y las ondas del agua se desplazan en el sentido de la corriente, y en el mapa se ven flechas que la indican.
 

@@ -24,6 +24,7 @@
  * (positive = to starboard, as headings grow clockwise).
  */
 import type { BoatSpec } from "./boatTypes";
+import { coastToward } from "./coasting";
 
 export type HandlingKind = "rueda" | "volante" | "cana" | "moto" | "kayak" | "single" | "timonel";
 
@@ -209,10 +210,15 @@ export class Handling {
 
     // Speed: thrust against drag; astern tops at the boat's reverse fraction
     const limit = this.thrust >= 0 ? this.thrust * top : this.thrust * top * this.spec.reverse;
-    const k = (Math.abs(this.thrust) > 0.02 ? this.spec.acceleration : this.spec.deceleration) * 60 / Math.max(1e-6, this.spec.maxSpeed);
     // Pushing against the way (astern while going ahead) brakes harder
-    const against = Math.sign(this.thrust) !== Math.sign(this.v) && Math.abs(this.v) > 0.01 && Math.abs(this.thrust) > 0.02 ? 1.8 : 1;
-    this.v += (limit - this.v) * Math.min(1, k * against * dt);
+    const against = Math.sign(this.thrust) !== Math.sign(this.v) && Math.abs(this.v) > 0.01 && Math.abs(this.thrust) > 0.02;
+    if (!against && Math.abs(limit) <= Math.abs(this.v)) {
+      // Neutral or easing off: the hull keeps its way (coasting.ts)
+      this.v = coastToward(this.v, limit, dt, this.spec.coastTime, top * 0.004, top);
+    } else {
+      const k = (Math.abs(this.thrust) > 0.02 ? this.spec.acceleration : this.spec.deceleration) * 60 / Math.max(1e-6, this.spec.maxSpeed);
+      this.v += (limit - this.v) * Math.min(1, k * (against ? 1.8 : 1) * dt);
+    }
 
     // Steering needs water past the rudder: way on, or the propeller's wash
     const wash = this.kind === "moto" ? Math.abs(this.thrust) * top * 0.9 : Math.abs(this.thrust) * top * (this.kind === "rueda" ? 0.3 : 0.45);

@@ -17,6 +17,7 @@ import type { BoatSpec, BoatTypeId } from "./boatTypes";
 import { Buoyancy, type BuoyancyParams } from "./buoyancy";
 import { NO_INPUT, type Handling, type HandlingInput } from "./handling";
 import { buildClasica, buildSingle, buildKayak, buildMoto, buildPesca, buildRunabout, buildSemirrigido, buildTravesia, type BoatModel } from "./boatModels";
+import { coastToward, driftToward, isBraking } from "./coasting";
 
 /** Turn rates in the specs were tuned for twitchy arcade turns; real boats turn slower. */
 const TURN_SCALE = 0.6;
@@ -41,6 +42,8 @@ export class Boat {
   public position: Vector3;
   public rotation = 0; // Y-axis rotation, heading atan2(dx, dz)
   public speed = 0;
+  /** Motion the river has given the hull (world units/s), on top of its way through the water. */
+  private drift: [number, number] = [0, 0];
   public throttle = 0; // -1 to 1
   public steering = 0; // -1 to 1
   public passengers = 0;
@@ -195,8 +198,16 @@ export class Boat {
 
       // The throttle lever sets the speed to reach (a fraction of top speed, or of reverse)
       const target = this.throttle >= 0 ? this.throttle * topSpeed : this.throttle * spec.maxSpeed * spec.reverse;
-      if (this.speed < target) this.speed = Math.min(target, this.speed + spec.acceleration * frames);
-      else this.speed = Math.max(target, this.speed - spec.deceleration * (this.speed > 0 && target < 0 ? 2 : 1) * frames);
+      // Easing off or in neutral the hull keeps its way (coasting.ts); only the
+      // lever against the way brakes hard
+      const dtc = Math.min(deltaTime, 0.1);
+      if (isBraking(this.speed, target)) {
+        this.speed += Math.sign(target - this.speed) * Math.min(Math.abs(target - this.speed), spec.deceleration * 2 * frames);
+      } else if (Math.abs(target) > Math.abs(this.speed)) {
+        this.speed += Math.sign(target - this.speed) * Math.min(Math.abs(target - this.speed), spec.acceleration * frames);
+      } else {
+        this.speed = coastToward(this.speed, target, dtc, spec.coastTime, spec.maxSpeed * 0.004, spec.maxSpeed);
+      }
 
       // The rudder (or paddle stroke) takes time to come over: taps are small corrections
       const rudderRate = (Math.abs(steering) > Math.abs(this.rudder) && Math.sign(steering) !== -Math.sign(this.rudder) ? 2.2 : 4) * Math.min(deltaTime, 0.1);
@@ -210,11 +221,12 @@ export class Boat {
     }
 
     const heading = this.rotation + turn;
-    // The river carries the boat: barely a heavy lancha, fully a kayak
-    const [cx, cz] = waterSystem.conditions.current(this.position.x, this.position.z);
-    const carry = spec.currentDrift * Math.min(deltaTime, 0.1);
-    const dx = Math.sin(heading) * this.speed * frames + cx * carry;
-    const dz = Math.cos(heading) * this.speed * frames + cz * carry;
+    // The river carries every boat (the flood or the ebb, even stopped): a
+    // heavy hull takes longer to pick the water's motion up (coasting.ts)
+    const dtd = Math.min(deltaTime, 0.1);
+    this.drift = driftToward(this.drift, waterSystem.conditions.current(this.position.x, this.position.z), dtd, spec.coastTime);
+    const dx = Math.sin(heading) * this.speed * frames + this.drift[0] * dtd;
+    const dz = Math.cos(heading) * this.speed * frames + this.drift[1] * dtd;
     const result = moveHull(
       { x: this.position.x, z: this.position.z, rotation: this.rotation },
       turn,
@@ -276,6 +288,7 @@ export class Boat {
     this.position.z = pose.z;
     this.rotation = pose.rotation;
     this.speed = 0;
+    this.drift = [0, 0];
     this.handling?.reset();
     this.buoyancy.reset(this.floatTarget(waterSystem, 0, 0));
     this.rootNode.position.copyFrom(this.position);
