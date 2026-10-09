@@ -54,8 +54,13 @@ export interface BoatSpec {
   humanPowered: boolean;
   /** Displacement hulls push through the water; planing hulls ride on it at speed. */
   hull: HullType;
-  /** 0..1: how much the river's current carries it (a kayak drifts, a heavy lancha barely). */
-  currentDrift: number;
+  /**
+   * Seconds its weight keeps it gliding in neutral at low speed (drag grows
+   * with speed, so from full speed most of the way goes quickly, then it
+   * glides): a loaded lancha colectiva glides long, a jet ski stops short. It also sets how long it takes to pick up the
+   * river's current once the engine is off (Boat.ts, docs/adr/0009).
+   */
+  coastTime: number;
   /** Real top speed (m/s): sets the wake's wavelengths and Froude number (wakePhysics.ts). */
   realSpeed: number;
   /** What pushes it: the turbulent wake behind (white wash, jet, or paddle swirls). */
@@ -84,7 +89,7 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     reverse: 0.3,
     humanPowered: false,
     hull: "displacement",
-    currentDrift: 0.15,
+    coastTime: 4,
     realSpeed: 5.1,
     propulsion: "helice",
     wake: 1,
@@ -109,7 +114,7 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     reverse: 0.35,
     humanPowered: true,
     hull: "displacement",
-    currentDrift: 0.75,
+    coastTime: 3.5,
     realSpeed: 3.5,
     propulsion: "remo",
     wake: 0.15,
@@ -135,7 +140,7 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     reverse: 0.3,
     humanPowered: true,
     hull: "displacement",
-    currentDrift: 0.8,
+    coastTime: 4.5,
     realSpeed: 5.0,
     propulsion: "remo",
     wake: 0.04,
@@ -158,7 +163,7 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     reverse: 0.5,
     humanPowered: true,
     hull: "displacement",
-    currentDrift: 1,
+    coastTime: 3,
     realSpeed: 2.2,
     propulsion: "pala",
     wake: 0.05,
@@ -183,7 +188,7 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     reverse: 0.25,
     humanPowered: false,
     hull: "planing",
-    currentDrift: 0.3,
+    coastTime: 2,
     realSpeed: 15,
     propulsion: "helice",
     wake: 0.75,
@@ -208,7 +213,7 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     reverse: 0.35,
     humanPowered: false,
     hull: "displacement",
-    currentDrift: 0.55,
+    coastTime: 2.6,
     realSpeed: 8,
     propulsion: "helice",
     wake: 0.25,
@@ -233,7 +238,7 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     reverse: 0.2,
     humanPowered: false,
     hull: "planing",
-    currentDrift: 0.22,
+    coastTime: 2.8,
     realSpeed: 13,
     propulsion: "helice",
     wake: 0.9,
@@ -258,7 +263,7 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     reverse: 0.25,
     humanPowered: false,
     hull: "planing",
-    currentDrift: 0.3,
+    coastTime: 1.8,
     realSpeed: 16,
     propulsion: "helice",
     wake: 0.6,
@@ -283,7 +288,7 @@ export const BOAT_TYPES: Record<BoatTypeId, BoatSpec> = {
     reverse: 0.15,
     humanPowered: false,
     hull: "planing",
-    currentDrift: 0.4,
+    coastTime: 1.2,
     realSpeed: 22,
     propulsion: "turbina",
     wake: 0.6,
