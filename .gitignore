@@ -21,3 +21,6 @@ impresion-3d/modelos/
 # Sol agents: logs and results stay local
 encargos/*.log
 encargos/*.resultado.md
+
+# Local agent worktrees
+.claude/worktrees/
