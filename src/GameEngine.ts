@@ -324,11 +324,12 @@ export class GameEngine {
     this.boat.setHandling(realistic);
     this.controls.lever.notch = realistic?.kind === "rueda" ? 0.5 : 0.25;
     this.controls.setLabels(touchLabels(realistic?.kind ?? null));
-    // Buttons, arrows, or the on-screen palanca de mando and rueda de timón
+    // Buttons, arrows, the ruedita joystick, or the on-screen palanca de mando and rueda de timón
     // (paddles and oars are stroked: they keep the buttons)
     const stroked = realistic?.kind === "kayak" || realistic?.kind === "single";
     const scheme = stroked ? "botones" : controlScheme();
     this.controls.setScheme(scheme, { telegraph: realistic?.kind === "rueda", wheelStays: realistic?.kind === "rueda" });
+    // The palanca carries its own gauge; the ruedita only has the ring, so it keeps the HUD speed gauge
     this.ui.setGaugeVisible(scheme !== "palanca");
     this.controls.setKeysHint(handlingKeys(realistic?.kind ?? null));
     this.mode = createMode(this.spec.id, {
