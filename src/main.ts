@@ -13,6 +13,7 @@ import { mark } from "./utils/perf";
 // Import side-effects needed by BabylonJS
 import "@babylonjs/core/Meshes/meshBuilder";
 import "@babylonjs/core/Materials/standardMaterial";
+import { keepUpToDate } from "./pwa/updates";
 
 window.addEventListener("DOMContentLoaded", () => {
   const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
@@ -59,13 +60,6 @@ window.addEventListener("DOMContentLoaded", () => {
       if (text) text.textContent = "No se pudo cargar el mundo 😕";
     });
 
-  // Register service worker for PWA
-  if ("serviceWorker" in navigator) {
-    // Served from the site's folder (/delta/ on GitHub Pages), not the domain root
-    navigator.serviceWorker
-      .register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })
-      .catch(() => {
-        // Service worker registration failed - game still works
-      });
-  }
+  // Service worker (offline) and staying on the latest deploy
+  keepUpToDate(import.meta.env.BASE_URL);
 });
