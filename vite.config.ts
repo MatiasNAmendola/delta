@@ -12,6 +12,15 @@ const sha = (process.env.GITHUB_SHA ?? (() => {
 
 export default defineConfig({
   base: "/delta/",
+  plugins: [
+    {
+      // version.json: the deployed build, polled by src/pwa/updates.ts
+      name: "delta-version",
+      generateBundle() {
+        this.emitFile({ type: "asset", fileName: "version.json", source: JSON.stringify({ sha }) });
+      },
+    },
+  ],
   define: {
     __BUILD__: JSON.stringify({ sha, time: new Date().toISOString() }),
   },
