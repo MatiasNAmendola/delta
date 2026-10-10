@@ -93,7 +93,7 @@ export class StartScreen {
           <li><p><b>Regatas:</b> con el single, esperá el "¡Ya!" y no te salgas de tu andarivel.</p></li>
         </ol>
       </aside>
-      ${world.world.attribution ? `<footer class="ss-credit">Mapa: ${world.world.attribution}</footer>` : ""}
+      <footer class="ss-credit">${world.world.attribution ? `Mapa: ${world.world.attribution} · ` : ""}Versión ${buildLabel()}</footer>
     `;
     document.body.appendChild(this.root);
     // Game controls and HUD stay hidden while the title is up
@@ -532,4 +532,16 @@ export function injectStyles(): void {
     }
   `;
   document.head.appendChild(style);
+}
+
+/** "56070f3 · 10/10 21:41": which deploy this is (Argentina time). */
+function buildLabel(): string {
+  const when = new Date(__BUILD__.time).toLocaleString("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    day: "numeric",
+    month: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${__BUILD__.sha} · ${when}`;
 }

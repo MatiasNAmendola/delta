@@ -2,11 +2,12 @@
  * Offline support for the installed app. Scope: the folder this file is
  * served from (/delta/ on GitHub Pages).
  * - Page and data (index.html, worlds, live conditions): network first, so
- *   a new deploy shows up at once; the cache is the fallback offline.
+ *   a new deploy shows up at once (revalidated, skipping the browser's HTTP
+ *   cache); the cache is the fallback offline.
  * - Hashed build assets, models and icons: cache first (they never change
  *   under the same URL).
  */
-const VERSION = "delta-v2";
+const VERSION = "delta-v3";
 const SHELL = ["./", "./index.html", "./manifest.json", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -44,8 +45,10 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
+  // no-cache: revalidate with the server instead of the browser's HTTP cache
+  // (GitHub Pages lets it keep the page 10 minutes), so a deploy shows at once
   event.respondWith(
-    fetch(request)
+    fetch(request, { cache: "no-cache" })
       .then((response) => {
         if (response.ok) {
           const copy = response.clone();
