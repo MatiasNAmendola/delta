@@ -196,7 +196,11 @@ void main(void) {
   // differ from flat water from a phone's chase camera. Light them with the
   // slope tilted uSlopeGain times (WAKE_VISUAL_SLOPE_GAIN, ADR 0012); the
   // heights themselves (and what the boats feel) stay physical
-  g *= uSlopeGain;
+  // Soft limit: small slopes get the full gain, big ones (a planing launch at
+  // full throttle) level off near 20 degrees instead of turning into glossy bands
+  float s0 = length(g);
+  float sv = s0 * uSlopeGain / (1.0 + s0 * uSlopeGain / 0.36);
+  g *= sv / max(s0, 1e-5);
   vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
 
   // Turbulent wake: white wash behind the stern, widening as age^0.4, then a smooth slick
@@ -241,7 +245,7 @@ void main(void) {
   vec3 col = mix(uBody * (0.8 + 0.5 * dot(N, normalize(vec3(0.3, 1.0, -0.3))) - 0.45 * clamp(facing, 0.0, 1.0)), sky, clamp(fresnel * 0.9 + 0.35 * clamp(-facing, 0.0, 1.0), 0.0, 1.0));
   float glint = pow(max(dot(N, normalize(uSunDir + V)), 0.0), 220.0) * 1.4;
   col += vec3(1.0, 0.95, 0.82) * glint;
-  float alpha = clamp(length(g) * 3.0, 0.0, 0.85) + glint * 0.5;
+  float alpha = clamp(sv * 2.2, 0.0, 0.7) + glint * 0.5;
 
   // The slick: smoother, a touch darker than the ruffled river around it
   col = mix(col, uBody * 0.9, slick * 0.35 * (1.0 - alpha));
