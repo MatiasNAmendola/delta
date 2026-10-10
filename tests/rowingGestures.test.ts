@@ -83,15 +83,15 @@ describe("PaddleGesture (kayak pala)", () => {
     expect(p.ends().left).toBeCloseTo(0.9);
     expect(p.ends().right).toBe(0);
     p.up(1);
-    const o = p.take(0.31)!;
+    const o = p.take()!;
     expect(o.strokeLeft).toBe(true);
     expect(o.strokeRight || o.backLeft || o.backRight).toBe(false);
-    expect(p.take(0.32)).toBeNull();
+    expect(p.take()).toBeNull();
 
     p.down(2, 1, 1);
     drag((y, t) => p.move(2, y, t), 1, 0.9, 0.3);
     p.up(2);
-    expect(p.take(1.31)!.strokeRight).toBe(true);
+    expect(p.take()!.strokeRight).toBe(true);
   });
 
   it("pushing an end up is a back stroke on that side", () => {
@@ -99,25 +99,29 @@ describe("PaddleGesture (kayak pala)", () => {
     p.down(1, 1, 0);
     drag((y, t) => p.move(1, y, t), 0, -0.7, 0.3);
     p.up(1);
-    const o = p.take(0.3)!;
+    const o = p.take()!;
     expect(o.backRight).toBe(true);
     expect(o.strokeRight).toBe(false);
   });
 
-  it("strength follows the drag; stale strokes are dropped", () => {
+  it("strength follows the drag; a burst keeps only the two latest strokes, even after a slow frame", () => {
     const p = new PaddleGesture();
     p.down(1, -1, 0);
     drag((y, t) => p.move(1, y, t), 0, 0.35, 0.5);
     p.up(1);
-    const weak = p.take(0.5)!.strength;
+    const weak = p.take()!.strength;
     p.down(1, -1, 1);
     drag((y, t) => p.move(1, y, t), 1, 1, 0.35);
     p.up(1);
-    expect(p.take(1.35)!.strength).toBeGreaterThan(weak);
-    p.down(1, -1, 2);
-    drag((y, t) => p.move(1, y, t), 2, 1, 0.35);
-    p.up(1);
-    expect(p.take(5)).toBeNull();
+    expect(p.take()!.strength).toBeGreaterThan(weak);
+    for (let k = 0; k < 3; k++) {
+      p.down(1, k % 2 ? 1 : -1, 2 + k);
+      drag((y, t) => p.move(1, y, t), 2 + k, 1, 0.35);
+      p.up(1);
+    }
+    expect(p.take()!.strokeRight).toBe(true); // the first of the three was dropped
+    expect(p.take()!.strokeLeft).toBe(true);
+    expect(p.take()).toBeNull();
   });
 
   it("alternating strokes go straight, the same side turns (through the Handling model)", () => {
@@ -133,7 +137,7 @@ describe("PaddleGesture (kayak pala)", () => {
           t += 1 / 60;
           if (k <= 20) p.move(i, k / 20, t);
           if (k === 21) p.up(i);
-          out = h.update(1 / 60, applyRowing(NO_INPUT, p.take(t)));
+          out = h.update(1 / 60, applyRowing(NO_INPUT, p.take()));
           heading += out.yawRate / 60;
         }
       });
