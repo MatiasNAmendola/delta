@@ -13,10 +13,11 @@
  *   it to cross straight to the other side.
  */
 import type { BoatSpec, RuleId as BoatRuleId } from "../boat/boatTypes";
+import { CapybaraRespect, type FamilyView } from "./capybaraRespect";
 import { familyOf, NO_WAKE_M, ROWING_ZONE_WAKE_M, rulesAt, tooNarrow, type Family } from "./waterwayRules";
 
 /** The boat's own rules plus the ones that come from the river it is on. */
-export type RuleId = BoatRuleId | "sinOla" | "zonaRemo" | "prohibido" | "angosto";
+export type RuleId = BoatRuleId | "sinOla" | "zonaRemo" | "prohibido" | "angosto" | "carpinchos";
 
 export type WaterTest = (x: number, z: number) => boolean;
 
@@ -91,6 +92,8 @@ export interface RuleEvent {
   message: string;
   /** Points lost (or seconds added in time trials). */
   penalty: number;
+  /** Capybara rule: the family that must dive. */
+  scareFamily?: number;
 }
 
 export interface RuleInputs {
@@ -107,6 +110,8 @@ export interface RuleInputs {
   via?: { name: string; width: number } | null;
   /** Height (m) of the wave the boat is making now (wakePhysics.ts). */
   wakeHeight?: number;
+  /** Capybara families in view and the boat's real speed (m/s): ADR 0018. Applies to every boat. */
+  fauna?: { speedMps: number; families: FamilyView[] };
 }
 
 const WARN_AFTER: Partial<Record<RuleId, number>> = { keepRight: 3, hugTheBank: 7, speedZones: 0.4, sinOla: 0.4, zonaRemo: 0.4, prohibido: 0.2, angosto: 0.2 };
@@ -131,6 +136,8 @@ export class RuleBook {
   private warned = new Set<RuleId>();
 
   private family: Family;
+  /** Capybaras crossing: stopping for them scores (ADR 0018). */
+  readonly capybaras = new CapybaraRespect();
 
   /**
    * `strict`: also the Prefectura's per-river rules ("sin ola", rowing
@@ -221,6 +228,12 @@ export class RuleBook {
         events.push({ rule: "takeWakeBowFirst", kind: "warn", message: "Bien: ola recibida de proa", penalty: -20 });
       }
       this.rest("takeWakeBowFirst");
+    }
+
+    if (s.fauna) {
+      for (const c of this.capybaras.update(dt, { speedMps: s.fauna.speedMps, wakeHeight: s.wakeHeight ?? 0, families: s.fauna.families })) {
+        events.push({ rule: "carpinchos", kind: c.kind === "fine" ? "fine" : "warn", message: c.message, penalty: c.penalty, scareFamily: c.scare ? c.familyId : undefined });
+      }
     }
 
     return events;
