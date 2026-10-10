@@ -6,7 +6,7 @@
  * - Rueda de timón: a wheel you turn by dragging around it. With the
  *   simple controls it returns to the middle when released; with the
  *   realistic handling of the big launches it stays where you leave it.
- * - Ruedita: a joystick for the thumb. Up/down is the throttle (it stays
+ * - Ruedita: a joystick for the thumb (dark glass base, glowing cyan rim, teal knob). Up/down is the throttle (it stays
  *   when you let go, a ring marks it), left/right the helm (it returns to
  *   the middle). The maths lives in joystick.ts.
  */
@@ -187,10 +187,13 @@ export class WheelWidget {
   }
 }
 
-/** Base 130 px, knob 40 px: the knob centre travels 45 px so it never leaves the circle. */
-const STICK_BASE = 130;
-const STICK_KNOB = 40;
-const STICK_RADIUS = (STICK_BASE - STICK_KNOB) / 2;
+/**
+ * Base ~140 px (118 px on short screens), knob 45% of it: the knob centre
+ * travels to just past the inner edge, so the knob rides on the glowing rim
+ * at full deflection without leaving it. Measured live, so the CSS sets the size.
+ */
+const STICK_KNOB = 0.45;
+const stickRadius = (base: number) => base * ((1 - STICK_KNOB) / 2 + 0.06);
 
 /** The "Ruedita" joystick (see joystick.ts for the maths). */
 export class StickWidget {
@@ -214,9 +217,9 @@ export class StickWidget {
     this.el.className = "sw";
     this.el.innerHTML = `
       <div class="sw-base" aria-label="Ruedita">
-        <div class="sw-cross"></div>
-        <div class="sw-knob"></div>
+        <div class="sw-inner"></div>
         <div class="sw-ring"></div>
+        <div class="sw-knob"></div>
       </div>
       <div class="sw-caption">Ruedita</div>`;
     parent.appendChild(this.el);
@@ -225,7 +228,7 @@ export class StickWidget {
     this.ring = this.el.querySelector(".sw-ring")!;
     const move = (e: PointerEvent) => {
       const r = this.base.getBoundingClientRect();
-      const s = readStick(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2), STICK_RADIUS);
+      const s = readStick(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2), stickRadius(r.width));
       this.steering = s.steering;
       // A sideways touch only steers; the throttle moves once the thumb clearly goes up or down
       this.engaged = engagesThrottle(this.engaged, s);
@@ -243,6 +246,7 @@ export class StickWidget {
       this.pointerId = e.pointerId;
       this.base.setPointerCapture(e.pointerId);
       this.knob.style.transition = "none";
+      this.el.classList.add("active");
       this.engaged = false;
       move(e);
     });
@@ -262,6 +266,7 @@ export class StickWidget {
         this.onThrottle(out.throttle);
       }
       this.knob.style.transition = "transform 0.16s ease-out";
+      this.el.classList.remove("active");
       this.placeKnob(0, 0);
     };
     this.base.addEventListener("pointerup", end);
@@ -276,7 +281,7 @@ export class StickWidget {
   show(value: number): void {
     // The lever may move without the stick (PARADA, keys): release keeps the real value
     if (!this.dragging) this.throttle = value;
-    this.ring.style.transform = `translate(0px, ${-value * STICK_RADIUS}px)`;
+    this.ring.style.transform = `translate(0px, ${-value * stickRadius(this.base.offsetWidth || 140)}px)`;
     this.ring.classList.toggle("reverse", value < 0);
   }
 
@@ -285,6 +290,7 @@ export class StickWidget {
     if (!on) {
       this.dragging = false;
       this.steering = 0;
+      this.el.classList.remove("active");
       this.placeKnob(0, 0);
     }
   }
@@ -318,13 +324,23 @@ function injectStyles(): void {
     .ww-hub { fill: #c8a24a; stroke: #6b3e1c; stroke-width: 2; }
     .ww-top { fill: #e9b44c; }
     .sw { left: 18px; bottom: 22px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-    .sw-base { position: relative; width: 130px; height: 130px; border-radius: 50%; background: rgba(12, 26, 22, 0.55); border: 1px solid rgba(244, 239, 227, 0.3); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); touch-action: none; }
-    .sw-cross { position: absolute; inset: 0; border-radius: 50%; background: linear-gradient(rgba(244,239,227,0.22), rgba(244,239,227,0.22)) center / 1px 60% no-repeat, linear-gradient(rgba(244,239,227,0.22), rgba(244,239,227,0.22)) center / 60% 1px no-repeat; pointer-events: none; }
-    .sw-knob { position: absolute; left: 44px; top: 44px; width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f4efe3, #cfc6b2); box-shadow: 0 3px 10px rgba(0,0,0,0.45); pointer-events: none; }
-    .sw-ring { position: absolute; left: 42px; top: 42px; width: 44px; height: 44px; box-sizing: border-box; border-radius: 50%; border: 2px solid #e9b44c; pointer-events: none; transition: transform 0.12s linear; }
-    .sw-ring.reverse { border-color: #8fb3c9; }
+    /* Ruedita: dark glass base with a glowing cyan rim, a big teal knob that follows the thumb */
+    .sw-base { position: relative; width: 140px; height: 140px; border-radius: 50%; box-sizing: border-box; touch-action: none;
+      background: radial-gradient(circle at 50% 45%, rgba(10, 34, 46, 0.5) 0%, rgba(5, 20, 30, 0.66) 62%, rgba(2, 12, 20, 0.78) 100%);
+      border: 2px solid rgba(110, 225, 255, 0.9);
+      box-shadow: 0 0 10px 1px rgba(70, 205, 255, 0.65), 0 0 26px 6px rgba(40, 150, 255, 0.28), inset 0 0 22px rgba(0, 0, 0, 0.6), inset 0 0 5px rgba(90, 215, 255, 0.45);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: box-shadow 0.15s; }
+    .sw.active .sw-base { box-shadow: 0 0 14px 2px rgba(90, 220, 255, 0.85), 0 0 34px 9px rgba(40, 160, 255, 0.36), inset 0 0 22px rgba(0, 0, 0, 0.55), inset 0 0 7px rgba(110, 225, 255, 0.55); }
+    .sw-inner { position: absolute; inset: 17%; border-radius: 50%; border: 1px solid rgba(120, 220, 255, 0.14); pointer-events: none; }
+    .sw-knob { position: absolute; left: 27.5%; top: 27.5%; width: 45%; height: 45%; box-sizing: border-box; border-radius: 50%; pointer-events: none;
+      background: radial-gradient(circle at 38% 30%, rgba(170, 250, 240, 0.72) 0%, rgba(60, 190, 195, 0.56) 42%, rgba(14, 104, 122, 0.6) 100%);
+      border: 1.5px solid rgba(140, 238, 255, 0.85);
+      box-shadow: 0 0 12px rgba(80, 225, 255, 0.6), 0 4px 10px rgba(0, 0, 0, 0.35), inset 0 -5px 9px rgba(0, 40, 60, 0.45), inset 0 3px 6px rgba(255, 255, 255, 0.28); }
+    .sw.active .sw-knob { box-shadow: 0 0 18px rgba(100, 235, 255, 0.85), 0 4px 10px rgba(0, 0, 0, 0.35), inset 0 -5px 9px rgba(0, 40, 60, 0.45), inset 0 3px 6px rgba(255, 255, 255, 0.3); }
+    .sw-ring { position: absolute; left: 24.5%; top: 24.5%; width: 51%; height: 51%; box-sizing: border-box; border-radius: 50%; border: 2px solid #e9b44c; box-shadow: 0 0 6px rgba(233, 180, 76, 0.55); pointer-events: none; transition: transform 0.12s linear; }
+    .sw-ring.reverse { border-color: #8fd3ff; box-shadow: 0 0 6px rgba(143, 211, 255, 0.55); }
     body.menu-open .lw, body.menu-open .ww, body.menu-open .sw { visibility: hidden; }
-    @media (max-height: 420px) { .lw-track { height: 150px; } .ww-wheel { width: 128px; height: 128px; } }
+    @media (max-height: 420px) { .lw-track { height: 150px; } .ww-wheel { width: 128px; height: 128px; } .sw-base { width: 118px; height: 118px; } .sw { bottom: 16px; } }
   `;
   document.head.appendChild(style);
 }

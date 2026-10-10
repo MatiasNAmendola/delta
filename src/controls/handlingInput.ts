@@ -111,9 +111,9 @@ export function handlingHelp(kind: HandlingKind, touch: boolean): string {
     case "moto":
       return `Mantené ${t ? "Gas" : "W"} para acelerar, ${t ? "Freno" : "S"} frena y da reversa. Manubrio ${t ? "◀ ▶" : "A/D"}: sin gas casi no dobla.`;
     case "kayak":
-      return `Una palada por lado: ${t ? "Pala izq. / Pala der." : "Q / E (o ← →)"}. Alternando vas derecho; del mismo lado girás hacia el otro. ${t ? "Atrás" : "A / D"}: palada atrás, frena y gira hacia ese lado. Ritmo de crucero: unas 60 por minuto.`;
+      return `Una palada por lado: ${t ? "bajá la punta izquierda o la derecha de la pala" : "Q / E (o ← →)"}. Alternando vas derecho; del mismo lado girás hacia el otro. ${t ? "Subir una punta" : "A / D"}: palada atrás, frena y gira hacia ese lado. Ritmo de crucero: unas 60 por minuto.`;
     case "single":
-      return `${t ? "Palada" : "W o Espacio"} en cada palada, con ritmo: si apurás la recuperación, la palada sale débil. Mantené ${t ? "◀ / ▶" : "A / D"} para tirar más de un remo y girar. ${t ? "Ciar" : "S"}: ciar (remar al revés).`;
+      return `${t ? "Tirá los dos remos hacia vos" : "W o Espacio"} en cada palada, con ritmo: si apurás la recuperación${t ? " (el carro todavía no volvió)" : ""}, la palada sale débil. ${t ? "Tirá más de un remo" : "Mantené A / D para tirar más de un remo"} y girás. ${t ? "Los dos para arriba" : "S"}: ciar (remar al revés).`;
     case "timonel":
       return `Sos el timonel. ${t ? "Boga + / −" : "W / S"}: el ritmo de la tripulación (paladas por minuto); por debajo de cero, ¡ciar! Timón ${t ? "◀ ▶" : "A/D"}: solo gobierna con el bote andando.`;
   }
