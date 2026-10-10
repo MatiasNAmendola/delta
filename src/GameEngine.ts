@@ -31,6 +31,8 @@ import { froude, wakeAmplitude } from "./world/wakePhysics";
 import { createMode, type GameMode } from "./game/modes";
 import { probeChannel, RuleBook, ZONE_SPEED, type RuleEvent } from "./game/navigationRules";
 import { Traffic } from "./world/Traffic";
+import { Capybaras } from "./world/Capybaras";
+import { generateCrossingZones } from "./game/capybaraZones";
 import { Trash, TRASH_REACH } from "./world/Trash";
 import { MobileControls } from "./controls/MobileControls";
 import { GameUI } from "./ui/GameUI";
@@ -201,6 +203,7 @@ export class GameEngine {
     const berth = this.environment.getBerths().get(startDock.id);
     const start = berth ?? { x: startDock.x + offsetX, z: startDock.z + offsetZ };
     this.spawn = { x: start.x, z: start.z, heading: berth?.heading ?? 0 };
+    this.setupCapybaras(start, params.get("carpinchos") === "cerca"); // ADR 0018
 
     // `?boat=kayak` (or the last one chosen) preselects a boat
     const saved = params.get("boat") ?? safeStorage("delta.boat");
@@ -532,6 +535,7 @@ ${this.spec.mission}`, 2800);
     water.update(dt, this.boat.position);
     const level = water.level();
     this.yolas.update(dt, level);
+    this.capybaras?.update(dt, x, z, level);
     this.traffic.update(dt, level);
     // Passing lanchas rock the boat with their wake
     water.conditions.wakes = this.traffic.wakes(x, z, 20);
@@ -604,12 +608,20 @@ ${this.spec.mission}`, 2800);
       wakes: this.traffic.wakesNear(x, z),
       via: this.currentVia,
       wakeHeight: this.wakeNow(),
+      fauna: this.capybaras ? { speedMps: this.speedMps(), families: this.capybaras.views(x, z) } : undefined,
     });
-    for (const e of events) this.showRule(e);
+    for (const e of events) {
+      if (e.scareFamily !== undefined) this.capybaras?.scare(e.scareFamily, x, z);
+      this.showRule(e);
+    }
   }
 
   private showRule(e: RuleEvent): void {
-    if (e.penalty > 0) this.penalize(e.penalty, `${e.message}\n−${e.penalty} puntos`);
+    if (e.rule === "carpinchos" && e.penalty < 0) {
+      // «¡Respetaste a los carpinchos! +N» already says the points
+      this.score -= e.penalty;
+      this.ui.showNotification(e.message, 2800);
+    } else if (e.penalty > 0) this.penalize(e.penalty, `${e.message}\n−${e.penalty} puntos`);
     else if (e.penalty < 0) {
       this.score -= e.penalty;
       this.ui.showNotification(`${e.message}\n+${-e.penalty} puntos`, 1800);
@@ -721,6 +733,40 @@ ${this.spec.mission}`, 2800);
   private wakeSpeedLimit(limit: number): number {
     for (let r = 0.05; r <= 1; r += 0.01) if (this.wakeNow(r) > limit) return r;
     return 1;
+  }
+
+  // --- Capybara families crossing the arroyos (ADR 0018) ---
+  private capybaras: Capybaras | null = null;
+
+  /** Real speed of the boat (m/s). */
+  private speedMps(): number {
+    return (Math.abs(this.boat.speed) / this.spec.maxSpeed) * wakeOptions(this.spec).topSpeed;
+  }
+
+  /**
+   * Generates the crossing zones from the world (natural banks, narrow,
+   * away from docks and the zone's center) and puts the families there.
+   * `?carpinchos=cerca` starts the boat a short way upstream of the nearest one.
+   */
+  private setupCapybaras(start: { x: number; z: number }, near: boolean): void {
+    const banks = this.environment.banks;
+    const zones = generateCrossingZones({
+      rivers: this.world.rivers.map((r) => ({ name: r.name, points: r.points })),
+      isWater: (x, z) => this.waterSystem.isWater(x, z),
+      krAt: (x, z) => (banks ? banks.krAt(x, z) : 1),
+      avoid: [{ x: start.x, z: start.z, r: 40 }, ...this.world.docks.map((d) => ({ x: d.x, z: d.z, r: 14 }))],
+      seed: [...this.world.world.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7),
+    });
+    this.capybaras = new Capybaras(this.scene, zones);
+    if (!near || zones.length === 0) return;
+    const zone = zones.reduce((best, z) => (Math.hypot(z.x - start.x, z.z - start.z) < Math.hypot(best.x - start.x, best.z - start.z) ? z : best));
+    for (const sign of [-1, 1]) {
+      const x = zone.x - zone.along[0] * 26 * sign;
+      const z = zone.z - zone.along[1] * 26 * sign;
+      if (!this.waterSystem.isWater(x, z)) continue;
+      this.spawn = { x, z, heading: Math.atan2(zone.along[0] * sign, zone.along[1] * sign) };
+      return;
+    }
   }
 
   private riverLocator: RiverLocator | null = null;
