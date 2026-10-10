@@ -28,6 +28,15 @@ export const G = 9.81;
 export const KELVIN_ANGLE = Math.asin(1 / 3);
 export const KELVIN_TAN = 1 / Math.sqrt(8);
 
+/**
+ * Visual only (ADR 0012, "La V no se veía"): the wake shader lights the
+ * waves as if their slopes were this many times steeper. A real 35 cm
+ * Kelvin wave tilts the water a few degrees, which a chase camera on a
+ * phone cannot tell from flat water. Heights, the rocking and the "sin ola"
+ * rule keep using the physical values (kelvinElevation, wakeAmplitude).
+ */
+export const WAKE_VISUAL_SLOPE_GAIN = 6;
+
 export interface WakeSource {
   /** Speed (m/s, real scale). */
   U: number;
