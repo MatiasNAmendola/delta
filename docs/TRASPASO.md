@@ -1,4 +1,4 @@
-# Traspaso de la sesión (2026-10-08)
+# Traspaso de la sesión (actualizado 2026-10-10)
 
 Punto de partida para seguir Delta en otra sesión (local, en la nube o con agentes Sol). Si vas a seguir el trabajo, leé esto primero.
 
@@ -50,6 +50,13 @@ npx tsc --noEmit
   - troncos y juncos;
   - skyline de las ciudades.
 - **Folleto «Viví Tigre»** documentado como fuente en el doc 07, A10.
+- **2026-10-09/10:**
+  - **Inercia y deriva** (ADR 0009): en neutro el barco conserva la arrancada; la corriente y el viento, que lo empuja de costado, lo llevan aunque esté parado.
+  - **El barco nunca está quieto** (ADR 0009): picado corto, vaivén del oleaje, guiñada y desplazamiento lateral.
+  - **Estela visible en el celular** (ADR 0012): refuerzo visual de la pendiente, con límite suave a toda máquina.
+  - **Controles** (ADR 0013): para lanchas, Flechas, Ruedita y Timón; Pala para el kayak; Remos y carro para el single.
+  - **Carpinchos** (ADR 0018, doc 12): familias que cruzan arroyos de costa natural y suman puntos si frenás. El aspecto son bolitas provisorias hasta tener un GLB (`src/world/capybaraModel.ts`).
+  - **Botón «Menú»** durante el juego, y el juego que **toma cada deploy solo**, con la versión a la vista en la pantalla de inicio (ADR 0014).
 
 ## Pendiente (por prioridad sugerida)
 1. **Puntos de interés y recorridos reales de las colectivas** (Líneas Delta, Jilguero e Interisleña), tomados del folleto «Viví Tigre», transcriptos a mano y con la fuente.
@@ -64,10 +71,10 @@ npx tsc --noEmit
    - Guazú Nambí;
    - Bajos / Bajo del Temor.
 7. **Vista dron** (ADR 0006) y **clubes emblemáticos** (ADR 0007).
-8. **Archivos y repo:**
-   - LICENSE, README y CREDITS;
-   - `.env*` en `.gitignore`;
-   - decidir si se purga `public/models/lancha.zip` del historial. Para eso hay que reescribir la historia, y eso solo se hace con aprobación explícita.
+8. **Archivos y repo:** LICENSE, README y CREDITS. Ya resueltos: `.env*` en `.gitignore`, y `lancha.zip` se queda en el historial (ADR 0017).
+9. **Carpinchos:** el modelo GLB, y que aparezcan más al amanecer y al atardecer.
+10. **Remo en el celular:** ajustar con un celular real la fuerza de cada tirón, el alcance y el tiempo del carro. Además, el indicador del acelerador se superpone con la pala del kayak.
+11. **Estela:** la segunda V que sale de la popa, y que en las lanchas planeando la V nazca de la mitad del casco.
 
 ## Reglas de trabajo
 - **Git:**
