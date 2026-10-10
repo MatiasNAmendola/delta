@@ -83,3 +83,13 @@ Base: [docs/investigacion/04-olas-estelas-y-costas.md](../investigacion/04-olas-
   - Se calcula hasta ~16 m de la orilla, que es el alcance de la textura de distancia a la costa.
 - **El bote lo siente:** `waterConditions.height` suma la reflexión de las estelas del tráfico con la misma regla (función `wall` en `GameEngine.connectShoreReflections`).
 - **Pendiente:** reflexiones múltiples en canales angostos (Kr^n) y rotura de la ola en la barranca (espuma).
+
+## La V no se veía en el celular (2026-10-10)
+- **Síntoma:** la dueña lo vio en el celular. Detrás de la lancha solo se veía la espuma; la V de Kelvin no aparecía.
+- **Causa:** las olas tienen su altura física, unos 35 cm para la colectiva, y con esa altura inclinan el agua apenas unos grados. El shader ilumina cada cara según esa inclinación, así que desde la cámara de seguimiento de un celular las crestas y los valles quedaban casi del mismo color que el agua plana.
+- **Lo que se descartó antes:**
+  - los reflejos de árboles del agua: con el shader anterior tampoco se veía;
+  - subir solo la transparencia: el ribbon seguía pintado con el color del agua.
+- **Arreglo:** `WAKE_VISUAL_SLOPE_GAIN = 6` en `wakePhysics.ts`. Es solo visual: el shader de la estela ilumina las olas como si su pendiente fuera 6 veces mayor, y la transparencia sale de esa pendiente iluminada. Las alturas, el bamboleo de los barcos y la regla "sin ola" (0,25 m) siguen usando los valores físicos.
+- **Estado:** verificado con una captura en un celular emulado de 844×390, con la colectiva al 100 %.
+- **[sin fuente]:** el factor 6 se eligió a ojo.

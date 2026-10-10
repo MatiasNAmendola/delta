@@ -7,7 +7,7 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Constants } from "@babylonjs/core/Engines/constants";
 import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import { METERS_PER_UNIT, WATER_LEVEL } from "../utils/constants";
-import { froude, KELVIN_TAN, wakeAmplitude, type WakeSource } from "./wakePhysics";
+import { froude, KELVIN_TAN, WAKE_VISUAL_SLOPE_GAIN, wakeAmplitude, type WakeSource } from "./wakePhysics";
 import type { HullType } from "../boat/buoyancy";
 
 /**
@@ -65,6 +65,7 @@ uniform float uSpan;
 uniform float uAlternate;
 uniform float uBowFoam;
 uniform float uPixel;
+uniform float uSlopeGain;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDir;
 uniform vec3 uZenith;
@@ -190,8 +191,13 @@ void main(void) {
   float gx = (hx - h) / eps; // along x (backwards)
   float gy = (hy - h) / eps; // along y (to starboard)
   vec2 g = gx * back + gy * right;
-  vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
   float slope = length(g);
+  // Real wake slopes are a few degrees: lit as they are, the faces barely
+  // differ from flat water from a phone's chase camera. Light them with the
+  // slope tilted uSlopeGain times (WAKE_VISUAL_SLOPE_GAIN, ADR 0012); the
+  // heights themselves (and what the boats feel) stay physical
+  g *= uSlopeGain;
+  vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
 
   // Turbulent wake: white wash behind the stern, widening as age^0.4, then a smooth slick
   float behindStern = smoothstep(uL * 0.8, uL * 1.3, x);
@@ -232,10 +238,10 @@ void main(void) {
   vec3 sky = mix(uHorizon, uZenith, pow(clamp(R.y, 0.0, 1.0), 0.6));
   // Faces tilted towards the camera show the muddy water, away from it the sky
   float facing = dot(normalize(vec2(N.x, N.z) + 1e-5), normalize(vec2(V.x, V.z) + 1e-5)) * length(N.xz) * 6.0;
-  vec3 col = mix(uBody * (0.8 + 0.5 * dot(N, normalize(vec3(0.3, 1.0, -0.3))) - 0.25 * clamp(facing, 0.0, 1.0)), sky, clamp(fresnel * 0.9 + 0.35 * clamp(-facing, 0.0, 1.0), 0.0, 1.0));
+  vec3 col = mix(uBody * (0.8 + 0.5 * dot(N, normalize(vec3(0.3, 1.0, -0.3))) - 0.45 * clamp(facing, 0.0, 1.0)), sky, clamp(fresnel * 0.9 + 0.35 * clamp(-facing, 0.0, 1.0), 0.0, 1.0));
   float glint = pow(max(dot(N, normalize(uSunDir + V)), 0.0), 220.0) * 1.4;
   col += vec3(1.0, 0.95, 0.82) * glint;
-  float alpha = clamp(slope * 11.0, 0.0, 0.9) + glint * 0.5;
+  float alpha = clamp(length(g) * 3.0, 0.0, 0.85) + glint * 0.5;
 
   // The slick: smoother, a touch darker than the ruffled river around it
   col = mix(col, uBody * 0.9, slick * 0.35 * (1.0 - alpha));
@@ -321,7 +327,7 @@ export class WakeRibbon {
       {
         attributes: ["position", "wake", "aux"],
         uniforms: [
-          "viewProjection", "uL", "uBeam", "uTrail", "uWash", "uWashBeam", "uFoamLife", "uStroke", "uSpan", "uAlternate", "uBowFoam", "uPixel",
+          "viewProjection", "uL", "uBeam", "uTrail", "uWash", "uWashBeam", "uFoamLife", "uStroke", "uSpan", "uAlternate", "uBowFoam", "uPixel", "uSlopeGain",
           "uCameraPos", "uSunDir", "uZenith", "uHorizon", "uBody", "uFogColor", "uFogDensity",
           "uWorldSize", "uSdfRange", "uHasShore",
         ],
@@ -335,6 +341,7 @@ export class WakeRibbon {
     m.setFloat("uL", o.length);
     m.setFloat("uBeam", o.beam);
     m.setFloat("uTrail", this.trailLength);
+    m.setFloat("uSlopeGain", WAKE_VISUAL_SLOPE_GAIN);
     const motor = o.propulsion === "helice" || o.propulsion === "turbina";
     m.setFloat("uWash", o.propulsion === "turbina" ? 1.2 : motor ? (o.hull === "planing" ? 1 : 0.75) : 0);
     // A jet throws its wash wider than the hull; small hulls still churn a metre or more
