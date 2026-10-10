@@ -25,6 +25,7 @@ import { Handling } from "./boat/handling";
 import { compassName, fetchLiveConditions, isSudestada, levelOffset, SAN_FERNANDO_ALERT, windVector, type LiveConditions } from "./world/liveConditions";
 import { handlingInput, handlingKeys, handlingMode, touchLabels } from "./controls/handlingInput";
 import { controlScheme } from "./controls/MobileControls";
+import { applyRowing, rowingWidgetFor } from "./controls/rowingGestures";
 import { NO_WAKE_M, realWidthM, ROWING_ZONE_WAKE_M } from "./game/waterwayRules";
 import { RiverLocator } from "./game/riverLocator";
 import { froude, wakeAmplitude } from "./world/wakePhysics";
@@ -321,19 +322,23 @@ export class GameEngine {
     this.ui.hideStartScreen();
     // Optional realistic handling: wheel and telegraph, strokes, gears (ADR 0013),
     // with the Prefectura's per-river rules
-    const realistic = handlingMode() === "realista" ? new Handling(this.spec) : null;
-    this.rules = new RuleBook(this.spec, { strict: realistic !== null });
+    // --- Touch rowing (ADR 0013): the kayak's pala and the single's remos y carro
+    // are strokes, so on touch screens these boats use the stroke model even in Clásico
+    const rowing = this.controls.touch ? rowingWidgetFor(this.spec.id) : null;
+    const realistic = handlingMode() === "realista" || rowing ? new Handling(this.spec) : null;
+    this.rules = new RuleBook(this.spec, { strict: handlingMode() === "realista" });
     this.controls.lever.set(0);
     this.boat.setHandling(realistic);
     this.controls.lever.notch = realistic?.kind === "rueda" ? 0.5 : 0.25;
     this.controls.setLabels(touchLabels(realistic?.kind ?? null));
-    // Buttons, arrows, the ruedita joystick, or the on-screen palanca de mando and rueda de timón
-    // (paddles and oars are stroked: they keep the buttons)
+    // Flechas, the ruedita joystick, or the on-screen rueda de timón and palanca de mando;
+    // rowed boats: their touch widget, or the keys (no on-screen lever for strokes)
     const stroked = realistic?.kind === "kayak" || realistic?.kind === "single";
-    const scheme = stroked ? "botones" : controlScheme();
-    this.controls.setScheme(scheme, { telegraph: realistic?.kind === "rueda", wheelStays: realistic?.kind === "rueda" });
+    const scheme = stroked ? "flechas" : controlScheme();
+    this.controls.setScheme(scheme, { telegraph: realistic?.kind === "rueda", wheelStays: realistic?.kind === "rueda", rowing });
     // The palanca carries its own gauge; the ruedita only has the ring, so it keeps the HUD speed gauge
     this.ui.setGaugeVisible(scheme !== "palanca");
+    // --- end touch rowing
     this.controls.setKeysHint(handlingKeys(realistic?.kind ?? null));
     this.mode = createMode(this.spec.id, {
       scene: this.scene,
@@ -386,7 +391,8 @@ ${this.spec.mission}`, 2800);
       const realistic = this.boat.realistic;
       if (realistic) {
         const helm = controlState.gyroSteering ?? controlState.steering;
-        this.boat.handlingInput = handlingInput(realistic.kind, controlState.raw, controlState.throttle, helm, controlState.helmIsPosition);
+        // Touch rowing: the pala / remos strokes join the keys'
+        this.boat.handlingInput = applyRowing(handlingInput(realistic.kind, controlState.raw, controlState.throttle, helm, controlState.helmIsPosition), controlState.rowing);
       }
 
       // Update boat

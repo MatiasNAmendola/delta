@@ -1,33 +1,11 @@
 import { Scene } from "@babylonjs/core/scene";
 import { ThrottleLever } from "./throttleLever";
 import { LeverWidget, StickWidget, WheelWidget } from "./widgets";
+import type { RowingOrders, RowingWidgetKind } from "./rowingGestures";
+import { OarsWidget, PaddleWidget, type RowingWidget } from "./rowingWidgets";
 
-/**
- * How the player drives (chosen in the menu):
- * - "botones": ▲▼ move the throttle lever a notch, ◀▶ the rudder;
- * - "flechas": hold ▲ to go, release to slow down (classic arcade);
- * - "palanca": an on-screen palanca de mando to drag and a rueda de timón to turn;
- * - "ruedita": one on-screen joystick for the thumb (up/down throttle, left/right helm).
- */
-export type ControlScheme = "botones" | "flechas" | "palanca" | "ruedita";
-const SCHEME_KEY = "delta.controles";
-
-export function controlScheme(): ControlScheme {
-  try {
-    const v = localStorage.getItem(SCHEME_KEY);
-    return v === "flechas" || v === "palanca" || v === "ruedita" ? v : "botones";
-  } catch {
-    return "botones";
-  }
-}
-
-export function setControlScheme(scheme: ControlScheme): void {
-  try {
-    localStorage.setItem(SCHEME_KEY, scheme);
-  } catch {
-    // Only for this visit
-  }
-}
+import { controlScheme, type ControlScheme } from "./controlScheme";
+export { controlScheme, parseScheme, setControlScheme, type ControlScheme } from "./controlScheme";
 
 /** Buttons for the realistic handling: keys by name, touch buttons as "touch-up/down/left/right". */
 export interface RawInput {
@@ -47,6 +25,8 @@ export interface ControlState {
   helmIsPosition: boolean;
   cameraAngleOffset: number; // radians offset from behind-boat
   cameraPitchOffset: number; // up/down offset
+  /** This frame's strokes from the on-screen pala or remos (touch), or null. */
+  rowing: RowingOrders | null;
 }
 
 export class MobileControls {
@@ -59,11 +39,15 @@ export class MobileControls {
     cameraPitchOffset: 0,
     raw: { pressed: new Set(), held: new Set() },
     helmIsPosition: false,
+    rowing: null,
   };
   private scheme: ControlScheme = controlScheme();
   private leverWidget: LeverWidget | null = null;
   private wheelWidget: WheelWidget | null = null;
   private stickWidget: StickWidget | null = null;
+  /** The kayak's pala or the single's remos y carro, when rowing on a touch screen. */
+  private rowingWidgets: Partial<Record<RowingWidgetKind, RowingWidget>> = {};
+  private rowing: RowingWidgetKind | null = null;
 
   private isMobile: boolean;
   private gyroEnabled = false;
@@ -542,18 +526,36 @@ export class MobileControls {
     }
   }
 
+  /** A touch screen: the on-screen controls are in use. */
+  public get touch(): boolean {
+    return this.isMobile;
+  }
+
   /**
    * Switches the control scheme: the on-screen lever and wheel replace the
    * four buttons in "palanca". `telegraph` snaps the lever to its five
-   * positions; `wheelStays` keeps the wheel where it is left.
+   * positions; `wheelStays` keeps the wheel where it is left. `rowing`
+   * (touch only) puts the kayak's pala or the single's remos y carro in
+   * place of all of them, whatever the scheme.
    */
-  public setScheme(scheme: ControlScheme, options: { telegraph?: boolean; wheelStays?: boolean } = {}): void {
+  public setScheme(scheme: ControlScheme, options: { telegraph?: boolean; wheelStays?: boolean; rowing?: RowingWidgetKind | null } = {}): void {
+    const rowing = this.isMobile ? options.rowing ?? null : null;
+    this.rowing = rowing;
+    if (rowing && !this.rowingWidgets[rowing]) {
+      this.rowingWidgets[rowing] = rowing === "pala" ? new PaddleWidget(document.body) : new OarsWidget(document.body);
+    }
+    for (const [kind, widget] of Object.entries(this.rowingWidgets)) widget.setVisible(kind === rowing);
+    // Rowing boats have no dock stop nor helm to tilt
+    for (const id of ["btnAction", "gyroToggle"]) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = rowing ? "none" : "";
+    }
     this.scheme = scheme;
-    const palanca = scheme === "palanca";
-    const ruedita = scheme === "ruedita";
+    const palanca = !rowing && scheme === "palanca";
+    const ruedita = !rowing && scheme === "ruedita";
     for (const id of ["btnForward", "btnReverse", "btnLeft", "btnRight"]) {
       const el = document.getElementById(id);
-      if (el) el.style.display = palanca || ruedita ? "none" : "";
+      if (el) el.style.display = palanca || ruedita || rowing ? "none" : "";
     }
     if (ruedita && !this.stickWidget && this.isMobile) {
       this.stickWidget = new StickWidget(document.body, (v) => this.lever.set(v));
@@ -578,6 +580,7 @@ export class MobileControls {
 
   /** The on-screen lever shows the lever, the speed and the slow-zone limit. */
   public showLever(value: number, speed: number, limit: number | null, label: string): boolean {
+    if (this.rowing) return false;
     if (this.scheme === "ruedita" && this.stickWidget) {
       this.stickWidget.show(value);
       return false; // the speed gauge of the HUD stays
@@ -589,10 +592,11 @@ export class MobileControls {
 
   /** Hides the on-screen lever and wheel (menus). */
   public hideWidgets(hidden: boolean): void {
-    const on = !hidden && this.scheme === "palanca";
+    const on = !hidden && !this.rowing && this.scheme === "palanca";
     this.leverWidget?.setVisible(on);
     this.wheelWidget?.setVisible(on);
-    this.stickWidget?.setVisible(!hidden && this.scheme === "ruedita");
+    this.stickWidget?.setVisible(!hidden && !this.rowing && this.scheme === "ruedita");
+    for (const [kind, widget] of Object.entries(this.rowingWidgets)) widget.setVisible(!hidden && kind === this.rowing);
   }
 
   /** The desktop key reminder (it changes with the realistic handling). */
@@ -625,22 +629,16 @@ export class MobileControls {
 
   public update(dt: number): ControlState {
     // Keyboard controls (desktop)
-    const held = (...k: string[]) => k.some((x) => this.keysDown.has(x) || this.touchHeld.has(x));
-    if (this.scheme === "flechas") {
-      // Hold to go, release to slow down
-      this.controlState.throttle = held("w", "arrowup", "touch-up") ? 1 : held("s", "arrowdown", "touch-down") ? -1 : 0;
-    } else {
-      this.controlState.throttle = this.lever.update(dt);
-    }
+    this.controlState.throttle = this.lever.update(dt);
     // Keyboard steering works on any device (touch laptops too)
     const left = this.keysDown.has("a") || this.keysDown.has("arrowleft");
     const right = this.keysDown.has("d") || this.keysDown.has("arrowright");
     this.controlState.helmIsPosition = false;
     if (left || right) this.controlState.steering = (right ? 1 : 0) - (left ? 1 : 0);
-    else if (this.wheelWidget && this.scheme === "palanca") {
+    else if (this.wheelWidget && this.scheme === "palanca" && !this.rowing) {
       this.controlState.steering = this.wheelWidget.update(dt);
       this.controlState.helmIsPosition = true;
-    } else if (this.stickWidget && this.scheme === "ruedita") {
+    } else if (this.stickWidget && this.scheme === "ruedita" && !this.rowing) {
       // Turn while you push; the stick returns to zero when released
       this.controlState.steering = this.stickWidget.steering;
     } else if (!this.isMobile) this.controlState.steering = 0;
@@ -678,6 +676,9 @@ export class MobileControls {
     if (this.actionPressed) this.lever.set(0);
     this.controlState.action = this.actionPressed;
     this.actionPressed = false;
+
+    // Strokes from the on-screen pala or remos (they also redraw)
+    this.controlState.rowing = this.rowing ? this.rowingWidgets[this.rowing]?.take(dt) ?? null : null;
 
     const raw: RawInput = { pressed: this.pressed, held: new Set([...this.keysDown, ...this.touchHeld]) };
     this.pressed = new Set();

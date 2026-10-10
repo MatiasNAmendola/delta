@@ -5,6 +5,7 @@ import { enterPlayMode, mountInstallButton } from "./install";
 import { handlingHelp, handlingMode, setHandlingMode, type HandlingMode } from "../controls/handlingInput";
 import { handlingKind } from "../boat/handling";
 import { controlScheme, setControlScheme, type ControlScheme } from "../controls/MobileControls";
+import { rowingWidgetFor } from "../controls/rowingGestures";
 import { BOAT_TYPES, FAMILIES, type BoatFamily, type BoatTypeId } from "../boat/boatTypes";
 
 /** Start screen tabs: one per boat, or one per family of boats. */
@@ -83,8 +84,10 @@ export class StartScreen {
       <aside class="ss-how ss-howto" aria-hidden="true">
         <h2>Cómo se juega</h2>
         <ol>
-          <li><p><b>El acelerador queda donde lo dejás,</b> como una palanca: ${touch ? "▲▼" : "W/S"} lo mueven un punto por toque, o suave si los mantenés${touch ? "" : " (X: punto muerto)"}. ${touch ? "◀▶ o inclinar el celular" : "A/D"} mueven el timón; ${touch ? "PARADA" : "ESPACIO"} para en los muelles.</p></li>
-          ${touch ? `<li><p><b>Con la Ruedita</b> (elegila en «Controles»), arrastrá el pulgar: arriba acelera, abajo va marcha atrás y a los costados girás. Al soltar, el timón vuelve al medio pero el acelerador queda donde estaba; el anillo marca dónde está. PARADA lo lleva a neutro.</p></li>` : ""}
+          <li><p><b>El acelerador queda donde lo dejás,</b> como una palanca: ${touch ? "con las Flechas, ▲▼" : "W/S"} lo mueven un punto por toque, o suave si los mantenés${touch ? "" : " (X: punto muerto)"}. ${touch ? "◀▶ o inclinar el celular" : "A/D"} mueven el timón; ${touch ? "PARADA" : "ESPACIO"} para en los muelles.</p></li>
+          ${touch ? `<li><p><b>En «Controles» elegís cómo manejar las lanchas:</b> <b>Flechas</b>; <b>Ruedita</b>, un solo pulgar: arriba acelera, abajo va marcha atrás y a los costados girás (al soltar, el timón vuelve al medio y el acelerador queda; el anillo marca dónde está); o <b>Timón</b>: girás la rueda con el dedo y arrastrás la palanca de mando.</p></li>
+          <li><p><b>El kayak se rema con la pala:</b> bajá la punta izquierda y remás a la izquierda; la derecha, a la derecha. Alternando vas derecho; del mismo lado girás. Subí una punta para frenar o ir para atrás de ese lado.</p></li>
+          <li><p><b>El single, con los remos y el carro:</b> un pulgar en cada remo y tirá los dos para abajo, hacia vos: más largo y más rápido, más fuerte. Si tirás más de uno, girás; para arriba, ciás. Dejá que el carro vuelva antes de la próxima palada: si apurás, sale débil.</p></li>` : ""}
           <li><p><b>Por la derecha:</b> como en la ruta, en el río se navega por la mano derecha.</p></li>
           <li><p><b>Despacio</b> en los arroyos, frente a los muelles y cerca de remeros y kayaks: tu ola los moja. La línea punteada junto al acelerador marca el límite; primero te avisan y si seguís rápido, te multan.</p></li>
           <li><p><b>Limpiá el río:</b> ${touch ? "tocá" : "hacé clic en"} la basura que flota cerca tuyo y ganás créditos.</p></li>
@@ -197,18 +200,20 @@ export class StartScreen {
     if (row) row.innerHTML = this.controlsRow();
   }
 
-  /** The "Controles" chips: Botones, Flechas, Palanca y timón, Ruedita. */
+  /** The "Controles" chips of the motor boats: Flechas, Ruedita, Timón (the kayak and the single are rowed on screen). */
   private controlsRow(): string {
     const current = controlScheme();
     const schemes: Array<[ControlScheme, string]> = [
-      ["botones", "Botones"],
       ["flechas", "Flechas"],
-      ["palanca", "Palanca y timón"],
       ["ruedita", "Ruedita"],
+      ["palanca", "Timón"],
     ];
-    return `<div class="ss-variants ss-handling" role="radiogroup" aria-label="Controles">
+    const touch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    const rowing = touch ? rowingWidgetFor(this.selected) : null;
+    const note = rowing === "pala" ? "Kayak: pala" : rowing === "remos" ? "Remo: remos y carro" : "";
+    return `<div class="ss-variants ss-handling${rowing ? " ss-rowing" : ""}" role="radiogroup" aria-label="Controles">
         <span class="ss-handling-label">Controles</span>
-        ${schemes.map(([id, name]) => `<button type="button" role="radio" class="ss-variant ss-scheme" data-scheme="${id}" aria-checked="${current === id}">${name}</button>`).join("")}
+        ${rowing ? `<span class="ss-rowing-note">${note}</span>` : schemes.map(([id, name]) => `<button type="button" role="radio" class="ss-variant ss-scheme" data-scheme="${id}" aria-checked="${current === id}">${name}</button>`).join("")}
       </div>`;
   }
 
@@ -440,6 +445,7 @@ export function injectStyles(): void {
     .ss-screen .ss-install-hint b { color: var(--ink); font-weight: 600; }
     .ss-screen .ss-handling { margin-top: 10px; margin-bottom: 0; align-items: center; }
     .ss-screen .ss-handling-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+    .ss-screen .ss-rowing-note { font-size: 13px; color: var(--ink); padding: 6px 0; }
     .ss-screen .ss-handling-help { margin-top: 8px; font-size: 12.5px; line-height: 1.5; color: var(--muted); max-width: 52ch; }
     .ss-screen .ss-handling-help b { color: var(--ink); font-weight: 600; }
     .ss-screen .ss-variants { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
