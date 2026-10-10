@@ -9,6 +9,7 @@ import type { WorldLayout } from "../world/layout/worldLayout";
 import type { BoatTypeId } from "../boat/boatTypes";
 import type { Summary } from "../game/modes";
 import { showEndScreen } from "./EndScreen";
+import { mountMenuButton } from "./MenuButton";
 import { injectHudTheme } from "./hudTheme";
 
 export class GameUI {
@@ -168,6 +169,7 @@ export class GameUI {
   public hideStartScreen(): void {
     this.startScreen = null;
     this.hudDiv.style.display = "block";
+    mountMenuButton();
     gsap.from(this.hudDiv.querySelectorAll(".hud-bar > *"), {
       y: -24,
       opacity: 0,
