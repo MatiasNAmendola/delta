@@ -16,6 +16,16 @@ En el Delta la corriente cambia de sentido con la marea: con la creciente el agu
 - **Picado corto que siente el casco (2026-10-09):** además de las olas largas del viento, la altura del agua tiene dos trenes cortos, de unos 8 m de largo. Uno va con el viento y el otro lo cruza para que el casco también rolee. Miden unos 4 cm con calma, 10 a 15 cm con brisa y 30 cm o más con viento fuerte. Así el barco cabecea, rolea y sube y baja aunque esté parado. El amortiguamiento del rolido subió de 0,45 a 0,7 para evitar la resonancia con ese picado.
   - **Ángulos medidos con la simulación:** con brisa, la colectiva rolea unos 4° y la lancha y el kayak unos 6°. Con viento fuerte, unos 9° y 14°.
   - **[sin fuente]:** son valores de juego, elegidos a ojo.
+- **El barco nunca está quieto (2026-10-10, `src/boat/seaway.ts`).** La dueña lo veía "muy fijo". Encima del rolido y cabeceo que el casco toma del picado, se suman cuatro movimientos:
+  - el vaivén lento del oleaje en rolido y cabeceo;
+  - la guiñada, la proa que se va de un lado al otro;
+  - el desplazamiento de costado;
+  - el **abatimiento**: el viento empuja el barco de costado, con la deriva del río. Es un `leeway` por casco, mayor en los livianos y en la colectiva por su techo (obra muerta).
+
+  Todo crece con el viento y es mayor cuanto más chico el barco. La guiñada y el desplazamiento bajan con arrancada, porque el casco sostiene el rumbo.
+  - **Solo visual:** el vaivén no toca el rumbo que maneja el jugador ni la posición que ven las reglas. El abatimiento sí mueve el barco.
+  - **Amplitudes del vaivén:** con brisa, la colectiva rolea unos 1,6° y guiña unos 2,4°, y el kayak unos 3,6° y 5,7°. Con viento fuerte, hasta unos 9° y 11° en el kayak. A eso se suma el rolido del picado.
+  - **[sin fuente]:** son valores de juego.
 - **Sudestada:** un evento con viento del SE, nivel en subida, corriente río arriba, olas más altas en el shader del agua, cielo cubierto y aviso en el HUD. Ocurre al azar o con los datos reales (ADR 0008).
 - **Visual:** la espuma y las ondas del agua se desplazan en el sentido de la corriente, y en el mapa se ven flechas que la indican.
 
