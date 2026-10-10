@@ -13,6 +13,7 @@ import {
   strokeStrength,
   type RowingOrders,
 } from "../src/controls/rowingGestures";
+import { parseScheme } from "../src/controls/controlScheme";
 
 /** Drags a finger from 0 to `to` (reach units) in `seconds`, sampled at 60 Hz. */
 function drag(move: (y: number, t: number) => void, t0: number, to: number, seconds: number, from = 0): number {
@@ -282,5 +283,15 @@ describe("applyRowing and the boats", () => {
     const go = (strength: number) => new Handling(BOAT_TYPES.kayak).update(1 / 60, { ...NO_INPUT, strokeLeft: true, strength }).speed;
     expect(go(0.4)).toBeLessThan(go(1));
     expect(go(1)).toBe(new Handling(BOAT_TYPES.kayak).update(1 / 60, { ...NO_INPUT, strokeLeft: true }).speed);
+  });
+});
+
+describe("control schemes", () => {
+  it("the old Botones and Flechas are both today's Flechas; Ruedita and Timón (palanca) keep their ids", () => {
+    expect(parseScheme("botones")).toBe("flechas");
+    expect(parseScheme("flechas")).toBe("flechas");
+    expect(parseScheme(null)).toBe("flechas");
+    expect(parseScheme("ruedita")).toBe("ruedita");
+    expect(parseScheme("palanca")).toBe("palanca");
   });
 });
