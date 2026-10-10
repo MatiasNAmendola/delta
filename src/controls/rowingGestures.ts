@@ -29,8 +29,8 @@ export const REVERSE = 0.15;
 export const V_REF = 2.5;
 /** Both oars must finish their drive within this to count as one stroke. */
 export const PAIR_WINDOW = 0.35;
-/** A stroke not taken by the boat within this is dropped. */
-const STALE = 0.6;
+/** Strokes waiting for the boat (it takes one per frame); older ones are dropped. Counted, not timed, so a slow frame never eats a stroke. */
+const MAX_PENDING = 2;
 /** How long a stroke's turn (single) lasts after it, like the drive's pressure. */
 export const PRESSURE_HOLD = 0.8;
 /** The carro comes back to the stern in this time after the drive. */
@@ -176,14 +176,19 @@ export class PaddleGesture {
     const touch = this.touches.get(id);
     if (!touch) return;
     const s = touch.drag.move(y, t);
-    if (s) this.queue.push({ ...s, side: touch.side });
+    if (s) this.push({ ...s, side: touch.side });
+  }
+
+  private push(s: Stroke): void {
+    this.queue.push(s);
+    if (this.queue.length > MAX_PENDING) this.queue.shift();
   }
 
   up(id: number): void {
     const touch = this.touches.get(id);
     if (!touch) return;
     const s = touch.drag.end();
-    if (s) this.queue.push({ ...s, side: touch.side });
+    if (s) this.push({ ...s, side: touch.side });
     this.touches.delete(id);
   }
 
@@ -202,9 +207,8 @@ export class PaddleGesture {
     return { left: at(-1), right: at(1) };
   }
 
-  /** This frame's orders: the oldest pending stroke (stale ones are dropped). */
-  take(t: number): RowingOrders | null {
-    this.queue = this.queue.filter((s) => t - s.t <= STALE);
+  /** This frame's orders: the oldest pending stroke. */
+  take(): RowingOrders | null {
     const s = this.queue.shift();
     if (!s) return null;
     return {
@@ -361,7 +365,7 @@ export class OarsGesture {
     if (this.ready) {
       const r = this.ready;
       this.ready = null;
-      if (r.stroke && t - r.t <= STALE) {
+      if (r.stroke) {
         orders = { ...NO_ORDERS, strokeLeft: !r.stroke.back, backLeft: r.stroke.back, strength: r.stroke.strength, pressure: r.pressure };
       }
     }

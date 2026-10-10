@@ -131,7 +131,7 @@ export class PaddleWidget implements RowingWidget {
     this.shown.left = ease(this.shown.left, target.left, dt);
     this.shown.right = ease(this.shown.right, target.right, dt);
     this.draw();
-    return this.gesture.take(now());
+    return this.gesture.take();
   }
 
   private draw(): void {
