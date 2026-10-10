@@ -17,10 +17,10 @@ export const DEACTIVATE_UNITS = 95;
 /** At most this many families at once (7 animals each: 2 adults and up to 5 calves). */
 const MAX_FAMILIES = 3;
 /** Fade out before they vanish (units from the camera). */
-const FADE_START = 26;
-const FADE_END = 38;
-/** Game scale: a bit bigger than life (1.2 m) so they read from the boat. */
-const ADULT_M = 1.7;
+const FADE_START = 45;
+const FADE_END = 60;
+/** Game scale: well over life size (1.2 m) so they read from the chase camera on a phone. */
+const ADULT_M = 3.2;
 const CALF_RATIO = 0.55;
 /** Model height (m) that sinks under the water when swimming: only back and head show. */
 const SWIM_SINK = 0.46;
