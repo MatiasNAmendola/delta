@@ -21,6 +21,7 @@ Cada ADR registra una decisión: el contexto, qué decidimos, qué otras opcione
 | [0015](0015-reglas-por-via.md) | Reglas por río y arroyo (sin ola, remo, Gambado) | Implementada (v1) |
 | [0016](0016-nombres-del-mapa.md) | Nombres y precisión del mapa (cruce de fuentes) | En curso |
 | [0017](0017-origen-del-modelo-de-la-lancha.md) | Origen del modelo de la lancha (Tripo3D pago, iteraciones con agentes de IA) y no purgar `lancha.zip` | Aceptada |
+| [0018](0018-fauna-carpinchos.md) | Familias de carpinchos que cruzan los arroyos; frenar da puntos (modelo provisorio de bolitas) | Implementada |
 
 ## Cómo medimos
 

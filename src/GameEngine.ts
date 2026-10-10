@@ -760,8 +760,8 @@ ${this.spec.mission}`, 2800);
     if (!near || zones.length === 0) return;
     const zone = zones.reduce((best, z) => (Math.hypot(z.x - start.x, z.z - start.z) < Math.hypot(best.x - start.x, best.z - start.z) ? z : best));
     for (const sign of [-1, 1]) {
-      const x = zone.x - zone.along[0] * 36 * sign;
-      const z = zone.z - zone.along[1] * 36 * sign;
+      const x = zone.x - zone.along[0] * 26 * sign;
+      const z = zone.z - zone.along[1] * 26 * sign;
       if (!this.waterSystem.isWater(x, z)) continue;
       this.spawn = { x, z, heading: Math.atan2(zone.along[0] * sign, zone.along[1] * sign) };
       return;
