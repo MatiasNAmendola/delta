@@ -62,7 +62,15 @@ export interface HandlingInput {
   pressure: number;
   /** The helm is a wheel position (on-screen wheel), not "turn it while held". */
   helmIsPosition?: boolean;
+  /**
+   * How hard this frame's stroke is pulled (0..1, default 1): the touch pala
+   * and remos measure it from the length and speed of the drag (rowingGestures.ts).
+   */
+  strength?: number;
 }
+
+/** The fastest racing rate of a single scull (36 strokes/min): a quicker stroke comes out weak. */
+export const SCULL_MIN_INTERVAL = 60 / 36;
 
 export const NO_INPUT: HandlingInput = { lever: 0, helm: 0, strokeLeft: false, strokeRight: false, backLeft: false, backRight: false, pressure: 0 };
 
@@ -256,7 +264,8 @@ export class Handling {
     // Impulse that gives ~85% of top speed at 65 strokes/min
     const impulse = (drag * top * 0.85) / (65 / 60);
     const ready = this.time - this.lastStroke > 0.32;
-    const power = 0.4 + 0.6 * energy;
+    const pull = clamp(input.strength ?? 1, 0, 1);
+    const power = (0.4 + 0.6 * energy) * pull;
     // Slow, a stroke turns more (it becomes a sweep); fast, it mostly drives
     const sweep = 1.3 - 0.7 * Math.min(1, Math.abs(this.v) / top);
     // ~18° per stroke from rest, ~8° under way
@@ -264,13 +273,13 @@ export class Handling {
     if (ready && (input.strokeLeft || input.strokeRight)) {
       const side = input.strokeLeft ? -1 : 1;
       this.v += impulse * power;
-      this.yaw += -side * yawKick * sweep; // left stroke turns the bow to starboard
+      this.yaw += -side * yawKick * sweep * (0.5 + 0.5 * pull); // left stroke turns the bow to starboard
       this.nextSide = side > 0 ? -1 : 1;
       this.stroke();
     } else if (ready && (input.backLeft || input.backRight)) {
       const side = input.backLeft ? -1 : 1;
       this.v -= impulse * power * 0.7;
-      this.yaw += side * yawKick * 0.8 * sweep;
+      this.yaw += side * yawKick * 0.8 * sweep * (0.5 + 0.5 * pull);
       this.stroke();
     }
     this.v -= this.v * drag * dt;
@@ -285,17 +294,18 @@ export class Handling {
   private scull(dt: number, input: HandlingInput, energy: number): HandlingOutput {
     const top = this.top;
     const drag = 0.35;
-    const minInterval = 60 / 36; // the fastest racing rate
+    const minInterval = SCULL_MIN_INTERVAL;
+    const pull = clamp(input.strength ?? 1, 0, 1);
     const impulse = (drag * top) / (32 / 60);
     const since = this.time - this.lastStroke;
     const stroke = input.strokeLeft || input.strokeRight;
     if (stroke && since > 0.6) {
       // Rushing the recovery: a short, weak stroke
       const timing = Math.min(1, (since / minInterval) ** 2);
-      this.v += impulse * timing * (0.4 + 0.6 * energy);
+      this.v += impulse * timing * (0.4 + 0.6 * energy) * pull;
       this.stroke();
     } else if ((input.backLeft || input.backRight) && since > 0.6) {
-      this.v -= impulse * 0.6;
+      this.v -= impulse * 0.6 * pull;
       this.stroke();
     }
     // Pressure on one oar during the drive turns the shell
@@ -305,7 +315,8 @@ export class Handling {
     this.v -= this.v * drag * dt;
     this.v = clamp(this.v, -top * this.spec.reverse, top * 1.1);
     this.leverShown = Math.min(1, this.cadence() / 36);
-    return { speed: this.v, yawRate: this.yaw, rudder: input.pressure, effort: driving ? 1 : 0.2 };
+    // Sitting still before any stroke is no effort (the regatta's false start reads it)
+    return { speed: this.v, yawRate: this.yaw, rudder: input.pressure, effort: driving ? 1 : this.time - this.lastStroke < 4 ? 0.2 : 0 };
   }
 
   /** Coxswain of a touring four: rudder and the crew's rate; negative rate backs water. */
