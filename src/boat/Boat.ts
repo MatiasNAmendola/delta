@@ -18,6 +18,7 @@ import { Buoyancy, type BuoyancyParams } from "./buoyancy";
 import { NO_INPUT, type Handling, type HandlingInput } from "./handling";
 import { buildClasica, buildSingle, buildKayak, buildMoto, buildPesca, buildRunabout, buildSemirrigido, buildTravesia, type BoatModel } from "./boatModels";
 import { coastToward, driftToward, isBraking } from "./coasting";
+import { leeway, seaway } from "./seaway";
 
 /** Turn rates in the specs were tuned for twitchy arcade turns; real boats turn slower. */
 const TURN_SCALE = 0.6;
@@ -44,6 +45,9 @@ export class Boat {
   public speed = 0;
   /** Motion the river has given the hull (world units/s), on top of its way through the water. */
   private drift: [number, number] = [0, 0];
+  /** Clock of the swell's rocking (seaway.ts) and this boat's own phase in it. */
+  private seaTime = 0;
+  private readonly seaPhase = Math.random() * Math.PI * 2;
   public throttle = 0; // -1 to 1
   public steering = 0; // -1 to 1
   public passengers = 0;
@@ -224,7 +228,11 @@ export class Boat {
     // The river carries every boat (the flood or the ebb, even stopped): a
     // heavy hull takes longer to pick the water's motion up (coasting.ts)
     const dtd = Math.min(deltaTime, 0.1);
-    this.drift = driftToward(this.drift, waterSystem.conditions.current(this.position.x, this.position.z), dtd, spec.coastTime);
+    // ...and the wind pushes it sideways too (leeway), lighter and higher hulls more
+    const [cx, cz] = waterSystem.conditions.current(this.position.x, this.position.z);
+    const wind = waterSystem.conditions.wind;
+    const lee = leeway(spec.length, spec.id === "colectiva") * wind.strength;
+    this.drift = driftToward(this.drift, [cx + wind.x * lee, cz + wind.z * lee], dtd, spec.coastTime);
     const dx = Math.sin(heading) * this.speed * frames + this.drift[0] * dtd;
     const dz = Math.cos(heading) * this.speed * frames + this.drift[1] * dtd;
     const result = moveHull(
@@ -252,11 +260,16 @@ export class Boat {
     // and roll; springs give the hull its weight (see buoyancy.ts)
     const float = this.buoyancy.update(deltaTime, this.floatTarget(waterSystem, Math.sign(this.speed) * ratio, this.rudder * turnFactor));
     this.position.y = WATER_LEVEL + float.y;
+    // Never still: the swell rocks it, the bow wanders, the hull sways (seaway.ts, visual only)
+    this.seaTime += Math.min(deltaTime, 0.1);
+    const sea = seaway(this.seaTime, waterSystem.conditions.wind.strength, spec.length, ratio, this.seaPhase);
     this.rootNode.position.copyFrom(this.position);
-    this.rootNode.rotation.y = this.rotation;
+    this.rootNode.position.x += Math.cos(this.rotation) * sea.sway;
+    this.rootNode.position.z -= Math.sin(this.rotation) * sea.sway;
+    this.rootNode.rotation.y = this.rotation + sea.yaw;
     // Babylon: +x rotation dips the bow, +z rotation lifts starboard
-    this.rootNode.rotation.x = -float.pitch;
-    this.rootNode.rotation.z = -float.roll;
+    this.rootNode.rotation.x = -(float.pitch + sea.pitch);
+    this.rootNode.rotation.z = -(float.roll + sea.roll);
   }
 
   private floatTarget(waterSystem: WaterSystem, speedRatio: number, turn: number) {
